@@ -25,6 +25,8 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 - Filter the triage tab to repositories with non-zero PR or Issue counts and sort by `(PR, Issue, recent commit)` descending.
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.
 - Patch Glance `server-stats` to show only the root disk using `hide-mountpoints-by-default: true` plus `mountpoints: /`, so snap/loop mounts do not appear in the Disk popover.
+- Maintain a durable runtime with `runtime maintain`: atomic live-config update, backup, validation, and optional restart of a systemd user service only when the rendered config changed.
+- Render systemd user units: the main service still starts the upstream Glance Go binary directly; maintenance is an independent oneshot/timer, not a Python server wrapper.
 
 ## Quick start
 
@@ -63,6 +65,33 @@ chatglance disks root-only \
   --config /path/to/glance.yml \
   --output playground/glance.root-disk.yml
 ```
+
+Maintain a durable Glance runtime (default `~/.chatarch/glance`):
+
+```bash
+chatglance runtime maintain \
+  --runtime-home ~/.chatarch/glance \
+  --restart-service chatarch-glance.service
+```
+
+Render recommended systemd user units:
+
+```bash
+chatglance runtime render-systemd \
+  --runtime-home ~/.chatarch/glance \
+  --chatglance-bin ~/.chatarch/venv/bin/chatglance \
+  --output-dir playground/systemd
+```
+
+## Runtime boundary
+
+Recommended topology: **systemd runs Glance directly; chatglance performs maintenance only**.
+
+- Main service: `chatarch-glance.service` executes `~/.chatarch/glance/bin/glance -config ~/.chatarch/glance/config/glance.yml` directly.
+- Content data: repository inventory JSON, caches, and generated snapshots live under `~/.chatarch/glance/data/` or `~/.chatarch/glance/cache/`.
+- Live config: `~/.chatarch/glance/config/glance.yml`; backups go under `~/.chatarch/glance/config/backups/` before replacement.
+- Maintenance: `chatglance runtime maintain` is a oneshot command and can be scheduled by `chatarch-glance-maintenance.timer`.
+- A long-running Python wrapper is intentionally not recommended: it couples server lifecycle to content generation and makes systemd restarts, logs, health checks, and rollback worse.
 
 ## Safety boundaries
 

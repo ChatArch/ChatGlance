@@ -10,6 +10,8 @@ import click
 from chatglance import __version__
 from chatglance.glance_config import patch_disks_from_files, update_projects_page_from_files
 from chatglance.projects import PAGE_NAME, build_projects_page, dump_yaml, load_inventory
+from chatglance.runtime import maintain_config, runtime_path
+from chatglance.systemd import render_all_units, write_units
 
 
 def _purpose(command: click.Command) -> str:
@@ -140,6 +142,79 @@ def root_only_disk(config_path: Path, output_path: Path, mountpoint: str, mount_
     output_path.parent.mkdir(parents=True, exist_ok=True)
     patch_disks_from_files(config_path, output_path, mountpoint=mountpoint, name=mount_name)
     click.echo(f"wrote {output_path}")
+
+
+@main.group()
+def runtime() -> None:
+    """Maintain a durable Glance service runtime."""
+
+
+@runtime.command("maintain")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), default=Path("~/.chatarch/glance"), show_default=True, help="Durable Glance service home.")
+@click.option("--config", "config_path", type=click.Path(path_type=Path, dir_okay=False), default=Path("config/glance.yml"), show_default=True, help="Runtime-relative or absolute Glance YAML config.")
+@click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False), default=Path("data/chatarch-projects.json"), show_default=True, help="Runtime-relative or absolute repository inventory JSON.")
+@click.option("--backup-dir", type=click.Path(path_type=Path, file_okay=False), default=Path("config/backups"), show_default=True, help="Runtime-relative or absolute backup directory for in-place writes.")
+@click.option("--page-name", default=PAGE_NAME, show_default=True, help="Generated Glance page name.")
+@click.option("--validate/--no-validate", default=True, show_default=True, help="Validate the candidate config with the upstream Glance binary before replacing it.")
+@click.option("--glance-bin", type=click.Path(path_type=Path, dir_okay=False), default=Path("bin/glance"), show_default=True, help="Runtime-relative or absolute Glance binary used for config validation.")
+@click.option("--restart-service", default=None, help="systemd user service to restart only if the rendered config changed.")
+def maintain_runtime(runtime_home: Path, config_path: Path, data_path: Path, backup_dir: Path, page_name: str, validate: bool, glance_bin: Path, restart_service: str | None) -> None:
+    """Apply generated project content and root-only Disk config once."""
+
+    runtime_home = runtime_home.expanduser()
+    config = runtime_path(runtime_home, config_path)
+    data = runtime_path(runtime_home, data_path)
+    backups = runtime_path(runtime_home, backup_dir) if backup_dir else None
+    binary = runtime_path(runtime_home, glance_bin) if validate else None
+    result = maintain_config(
+        config_path=config,
+        data_path=data,
+        output_path=config,
+        backup_dir=backups,
+        validate_bin=binary,
+        page_name=page_name,
+        restart_service=restart_service,
+    )
+    click.echo(
+        " ".join(
+            [
+                f"output={result.output_path}",
+                f"changed={str(result.changed).lower()}",
+                f"validated={str(result.validated).lower()}",
+                f"restarted={str(result.restarted).lower()}",
+                f"backup={result.backup_path or '-'}",
+            ]
+        )
+    )
+
+
+@runtime.command("render-systemd")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), default=Path("~/.chatarch/glance"), show_default=True, help="Durable Glance service home.")
+@click.option("--chatglance-bin", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Absolute path to the chatglance executable used by the maintenance oneshot.")
+@click.option("--service-name", default="chatarch-glance.service", show_default=True, help="Main Glance user service name.")
+@click.option("--maintenance-service-name", default="chatarch-glance-maintenance.service", show_default=True, help="Generated oneshot maintenance service name.")
+@click.option("--timer-name", default="chatarch-glance-maintenance.timer", show_default=True, help="Generated maintenance timer name.")
+@click.option("--interval", default="30min", show_default=True, help="systemd OnUnitActiveSec interval for the maintenance timer.")
+@click.option("--output-dir", type=click.Path(path_type=Path, file_okay=False), help="Directory to write unit files. Omit to print them.")
+def render_systemd(runtime_home: Path, chatglance_bin: Path, service_name: str, maintenance_service_name: str, timer_name: str, interval: str, output_dir: Path | None) -> None:
+    """Render direct Glance service plus chatglance maintenance units."""
+
+    units = render_all_units(
+        runtime_home=runtime_home.expanduser(),
+        chatglance_bin=chatglance_bin.expanduser(),
+        service_name=service_name,
+        maintenance_service_name=maintenance_service_name,
+        timer_name=timer_name,
+        interval=interval,
+    )
+    if output_dir:
+        paths = write_units(output_dir.expanduser(), units)
+        for path in paths:
+            click.echo(f"wrote {path}")
+        return
+    click.echo(f"# {units.service_name}\n{units.service}")
+    click.echo(f"# {units.maintenance_service_name}\n{units.maintenance_service}")
+    click.echo(f"# {units.timer_name}\n{units.timer}")
 
 
 if __name__ == "__main__":
