@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chatglance"
+dynamic = ["version"]
+description = "ChatArch Glance dashboard generation CLI."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = ["click>=8.0", "PyYAML>=6.0,<7.0"]
+authors = [{name = "ChatArch", email = "1073853456@qq.com"}]
+keywords = ["chatglance", "chatarch", "cli"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/ChatArch/chatglance"
+Repository = "https://github.com/ChatArch/chatglance"
+
+[project.scripts]
+chatglance = "chatglance.cli:main"
+
+[project.optional-dependencies]
+dev = ["build", "pytest", "twine"]
+
+[tool.setuptools.dynamic]
+version = {attr = "chatglance.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools]
+include-package-data = true
