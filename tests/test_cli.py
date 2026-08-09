@@ -24,3 +24,6 @@ def test_tree_option_prints_registered_cli_tree():
     assert "runtime" in result.output
     assert "maintain" in result.output
     assert "render-systemd" in result.output
+    assert "install-systemd" in result.output
+    assert "start" in result.output
+    assert "status" in result.output

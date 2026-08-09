@@ -26,7 +26,8 @@
 - 生成 config 副本时清理 legacy generated pages：`Projects`、`ChatArch Projects`、`ChatArch Projects List`。
 - 为 Glance `server-stats` 写入 root-only Disk 配置：`hide-mountpoints-by-default: true` + `mountpoints: /`，避免 snap/loop mount 出现在 Disk popover。
 - 维护 durable runtime：一次性 `runtime maintain` 可原子更新 live config、备份、校验，并在内容变化时可选重启 systemd user service。
-- 渲染 systemd user units：主服务仍直接启动 upstream Glance Go binary；维护任务是独立 oneshot/timer，不是 Python wrapper。
+- 渲染并安装 user-level systemd units：主服务仍直接启动 upstream Glance Go binary；维护任务是独立 oneshot/timer，不是 Python wrapper。
+- 通过 CLI 安装、启用、启动和回读当前 Glance 页面对应的 user service/timer。
 
 ## 快速开始
 
@@ -83,6 +84,22 @@ chatglance runtime render-systemd \
   --output-dir playground/systemd
 ```
 
+安装并启用 user-level systemd units（写入 `~/.config/systemd/user`，不需要 sudo）：
+
+```bash
+chatglance runtime install-systemd \
+  --runtime-home ~/.chatarch/glance \
+  --chatglance-bin ~/.chatarch/venv/bin/chatglance \
+  --start
+```
+
+启动/回读当前页面对应的 user service/timer：
+
+```bash
+chatglance runtime start
+chatglance runtime status
+```
+
 ## 运行态边界
 
 推荐拓扑是 **systemd 直接运行 Glance，chatglance 只做维护**：
@@ -91,6 +108,7 @@ chatglance runtime render-systemd \
 - 内容数据：repository inventory JSON、缓存和生成快照放在 `~/.chatarch/glance/data/` 或 `~/.chatarch/glance/cache/`。
 - live config：`~/.chatarch/glance/config/glance.yml`；更新前写备份到 `~/.chatarch/glance/config/backups/`。
 - 维护：`chatglance runtime maintain` 是 oneshot，可由 `chatarch-glance-maintenance.timer` 周期触发。
+- 安装/启动：`chatglance runtime install-systemd --start` 与 `chatglance runtime start` 只使用 user-level systemd，不写 `/etc/systemd`。
 - 不建议加 Python 长驻 wrapper：wrapper 会把 server 生命周期和内容生成耦合，反而不利于 systemd 重启、日志、健康检查和回滚。
 
 ## 安全边界

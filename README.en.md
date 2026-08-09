@@ -26,7 +26,8 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.
 - Patch Glance `server-stats` to show only the root disk using `hide-mountpoints-by-default: true` plus `mountpoints: /`, so snap/loop mounts do not appear in the Disk popover.
 - Maintain a durable runtime with `runtime maintain`: atomic live-config update, backup, validation, and optional restart of a systemd user service only when the rendered config changed.
-- Render systemd user units: the main service still starts the upstream Glance Go binary directly; maintenance is an independent oneshot/timer, not a Python server wrapper.
+- Render and install user-level systemd units: the main service still starts the upstream Glance Go binary directly; maintenance is an independent oneshot/timer, not a Python server wrapper.
+- Install, enable, start, and read back the current Glance page user service/timer from the CLI.
 
 ## Quick start
 
@@ -83,6 +84,22 @@ chatglance runtime render-systemd \
   --output-dir playground/systemd
 ```
 
+Install and enable user-level systemd units (writes `~/.config/systemd/user`, no sudo):
+
+```bash
+chatglance runtime install-systemd \
+  --runtime-home ~/.chatarch/glance \
+  --chatglance-bin ~/.chatarch/venv/bin/chatglance \
+  --start
+```
+
+Start/read back the current page user service/timer:
+
+```bash
+chatglance runtime start
+chatglance runtime status
+```
+
 ## Runtime boundary
 
 Recommended topology: **systemd runs Glance directly; chatglance performs maintenance only**.
@@ -91,6 +108,7 @@ Recommended topology: **systemd runs Glance directly; chatglance performs mainte
 - Content data: repository inventory JSON, caches, and generated snapshots live under `~/.chatarch/glance/data/` or `~/.chatarch/glance/cache/`.
 - Live config: `~/.chatarch/glance/config/glance.yml`; backups go under `~/.chatarch/glance/config/backups/` before replacement.
 - Maintenance: `chatglance runtime maintain` is a oneshot command and can be scheduled by `chatarch-glance-maintenance.timer`.
+- Install/start: `chatglance runtime install-systemd --start` and `chatglance runtime start` use only user-level systemd and never write `/etc/systemd`.
 - A long-running Python wrapper is intentionally not recommended: it couples server lifecycle to content generation and makes systemd restarts, logs, health checks, and rollback worse.
 
 ## Safety boundaries
