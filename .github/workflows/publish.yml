@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -56,7 +55,7 @@ jobs:
       - name: Check PyPI version
         id: pypi
         env:
-          PACKAGE_NAME: "chatglance"
+          PACKAGE_NAME: "ChatGlance"
           PACKAGE_VERSION: ${{ steps.meta.outputs.version }}
         run: |
           python - <<'PY'
@@ -82,7 +81,7 @@ jobs:
           PY
       - name: Stop when version is already on PyPI
         if: steps.pypi.outputs.exists == 'true'
-        run: echo "chatglance ${{ steps.meta.outputs.version }} is already on PyPI; skipping publish."
+        run: echo "ChatGlance ${{ steps.meta.outputs.version }} is already on PyPI; skipping publish."
       - name: Build distribution
         if: steps.pypi.outputs.exists == 'false'
         run: |

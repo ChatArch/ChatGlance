@@ -13,4 +13,4 @@ First workflow-verified ChatArch release target.
 
 ## 0.0.1 - 2026-08-09
 
-Initial PyPI placeholder/name-claim target for `chatglance`.
+Initial PyPI placeholder/name-claim target for `ChatGlance` / `chatglance`.

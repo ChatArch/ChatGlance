@@ -1,9 +1,9 @@
 <div align="center">
-    <a href="https://pypi.python.org/pypi/chatglance">
-        <img src="https://img.shields.io/pypi/v/chatglance.svg" alt="PyPI version" />
+    <a href="https://pypi.python.org/pypi/ChatGlance">
+        <img src="https://img.shields.io/pypi/v/ChatGlance.svg" alt="PyPI version" />
     </a>
-    <a href="https://github.com/ChatArch/chatglance/actions/workflows/ci.yml">
-        <img src="https://github.com/ChatArch/chatglance/actions/workflows/ci.yml/badge.svg" alt="Tests" />
+    <a href="https://github.com/ChatArch/ChatGlance/actions/workflows/ci.yml">
+        <img src="https://github.com/ChatArch/ChatGlance/actions/workflows/ci.yml/badge.svg" alt="Tests" />
     </a>
 </div>
 
@@ -12,11 +12,11 @@
 [English](README.en.md) | [简体中文](README.md)
 </div>
 
-# chatglance
+# ChatGlance
 
-`chatglance` 是 ChatArch/WZHECNU Glance dashboard 的 Python 生成与运维 CLI。
+`ChatGlance` 是 ChatArch/WZHECNU Glance dashboard 的 Python 生成与运维包，提供 `chatglance` CLI。
 
-它不是 NPM 项目，也不是重新实现 Glance 后端：上游 Glance 仍然是 Go 单二进制 dashboard server；`chatglance` 负责把 ChatArch 项目清单、Glance YAML 页面、inline HTML 表格和安全运维补丁组织成可复用的 Python 包/CLI。
+它不是 NPM 项目，也不是重新实现 Glance 后端：上游 Glance 仍然是 Go 单二进制 dashboard server；`ChatGlance` 负责把 ChatArch 项目清单、Glance YAML 页面、inline HTML 表格和安全运维补丁组织成可复用的 Python 包/CLI。
 
 ## 当前能力
 
