@@ -15,7 +15,7 @@ import click
 from chatglance import __version__
 from chatglance.glance_config import patch_disks_from_files, update_projects_page_from_files
 from chatglance.projects import PAGE_NAME, build_projects_page, dump_yaml, load_inventory
-from chatglance.runtime import maintain_config, runtime_path
+from chatglance.runtime import discover_meaningful_mountpoints, maintain_config, runtime_path
 from chatglance.systemd import install_user_units, render_all_units, show_user_units, systemctl_user, write_units
 
 
@@ -192,6 +192,7 @@ def maintain_runtime(runtime_home: Path, config_path: Path, data_path: Path, bac
     data = runtime_path(runtime_home, data_path)
     backups = runtime_path(runtime_home, backup_dir) if backup_dir else None
     binary = runtime_path(runtime_home, glance_bin) if validate else None
+    mountpoints = discover_meaningful_mountpoints()
     result = maintain_config(
         config_path=config,
         data_path=data,
@@ -200,6 +201,7 @@ def maintain_runtime(runtime_home: Path, config_path: Path, data_path: Path, bac
         validate_bin=binary,
         page_name=page_name,
         restart_service=restart_service,
+        mountpoints=mountpoints,
     )
     click.echo(
         " ".join(
@@ -208,6 +210,7 @@ def maintain_runtime(runtime_home: Path, config_path: Path, data_path: Path, bac
                 f"changed={str(result.changed).lower()}",
                 f"validated={str(result.validated).lower()}",
                 f"restarted={str(result.restarted).lower()}",
+                f"mountpoints={','.join(mountpoints)}",
                 f"backup={result.backup_path or '-'}",
             ]
         )

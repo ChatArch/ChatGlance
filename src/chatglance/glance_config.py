@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping, cast
 
 from .projects import LEGACY_PAGE_NAMES, PAGE_NAME, build_projects_page, dump_yaml, load_inventory
 
@@ -55,6 +55,48 @@ def iter_widgets(value: Any) -> Iterator[dict[str, Any]]:
             yield from iter_widgets(item)
 
 
+def patch_server_stats_mountpoints(
+    config: dict[str, Any],
+    mountpoints: Mapping[str, str],
+    *,
+    hide_swap: bool = True,
+) -> dict[str, Any]:
+    """Return a config copy where server-stats shows only selected disks.
+
+    Glance's `mountpoints` entries can name configured mountpoints, but when
+    `hide-mountpoints-by-default: true` is set, each mountpoint that should be
+    visible must explicitly set `hide: false`. Without that, Glance hides even
+    the configured `/` entry and the Disk card renders `n/a`.
+    """
+
+    if not mountpoints:
+        raise ValueError("at least one mountpoint is required")
+
+    updated = deepcopy(config)
+    visible_mountpoints = {path: {"name": label, "hide": False} for path, label in mountpoints.items()}
+    for widget in iter_widgets(updated.get("pages", [])):
+        if widget.get("type") != "server-stats":
+            continue
+        # `hide-mountpoints-by-default` is a local-server property in Glance's
+        # schema. Keep it off the widget itself so the rendered YAML mirrors the
+        # upstream examples and avoids relying on ignored keys.
+        widget.pop("hide-mountpoints-by-default", None)
+        servers = widget.get("servers")
+        if not isinstance(servers, list):
+            # A bare local server-stats widget can exist; keep it safe by adding
+            # a local server entry rather than leaving defaults visible.
+            servers = [{"type": "local", "name": "local"}]
+            widget["servers"] = servers
+        for server_value in servers:
+            if not isinstance(server_value, dict):
+                continue
+            server = cast(dict[str, Any], server_value)
+            server["hide-swap"] = bool(hide_swap)
+            server["hide-mountpoints-by-default"] = True
+            server["mountpoints"] = deepcopy(visible_mountpoints)
+    return updated
+
+
 def patch_server_stats_root_only(
     config: dict[str, Any],
     *,
@@ -62,31 +104,9 @@ def patch_server_stats_root_only(
     name: str = "根分区",
     hide_swap: bool = True,
 ) -> dict[str, Any]:
-    """Return a config copy where all server-stats widgets show only one mountpoint.
+    """Return a config copy where server-stats shows only one mountpoint."""
 
-    Glance's `mountpoints` entries name configured mountpoints, but without
-    `hide-mountpoints-by-default: true` Glance can still render all default OS
-    mountpoints, including snap/loop mounts. This helper sets both fields.
-    """
-
-    updated = deepcopy(config)
-    for widget in iter_widgets(updated.get("pages", [])):
-        if widget.get("type") != "server-stats":
-            continue
-        widget["hide-mountpoints-by-default"] = True
-        servers = widget.get("servers")
-        if not isinstance(servers, list):
-            # A bare local server-stats widget can exist; keep it safe by adding
-            # a local server entry rather than leaving defaults visible.
-            servers = [{"type": "local", "name": "local"}]
-            widget["servers"] = servers
-        for server in servers:
-            if not isinstance(server, dict):
-                continue
-            server["hide-swap"] = bool(hide_swap)
-            server["hide-mountpoints-by-default"] = True
-            server["mountpoints"] = {mountpoint: {"name": name}}
-    return updated
+    return patch_server_stats_mountpoints(config, {mountpoint: name}, hide_swap=hide_swap)
 
 
 def update_projects_page_from_files(config_path: str | Path, data_path: str | Path, output_path: str | Path, *, page_name: str = PAGE_NAME) -> Path:

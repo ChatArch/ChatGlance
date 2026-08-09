@@ -9,7 +9,7 @@ import shutil
 import subprocess
 from typing import Any
 
-from .glance_config import load_yaml, patch_server_stats_root_only, replace_projects_page, write_yaml
+from .glance_config import load_yaml, patch_server_stats_mountpoints, replace_projects_page, write_yaml
 from .projects import PAGE_NAME, load_inventory
 
 
@@ -24,7 +24,33 @@ class MaintainResult:
     restarted: bool
 
 
-def build_maintained_config(config: dict[str, Any], inventory: dict[str, Any], *, page_name: str = PAGE_NAME) -> dict[str, Any]:
+def _is_mountpoint(path: str) -> bool:
+    try:
+        return subprocess.run(["findmnt", "--mountpoint", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    except FileNotFoundError:
+        return Path(path).is_mount()
+
+
+def discover_meaningful_mountpoints() -> dict[str, str]:
+    """Return meaningful local disk mountpoints for Glance server-stats.
+
+    The dashboard should not show snap/loop/tmp/docker overlays. Keep `/` and
+    include `/home` only when it is an actual separate mountpoint on this host.
+    """
+
+    mountpoints = {"/": "根分区"}
+    if _is_mountpoint("/home"):
+        mountpoints["/home"] = "Home"
+    return mountpoints
+
+
+def build_maintained_config(
+    config: dict[str, Any],
+    inventory: dict[str, Any],
+    *,
+    page_name: str = PAGE_NAME,
+    mountpoints: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Apply all chatglance-managed config transformations.
 
     The runtime boundary is deliberately narrow: this updates generated dashboard
@@ -33,7 +59,7 @@ def build_maintained_config(config: dict[str, Any], inventory: dict[str, Any], *
     """
 
     updated = replace_projects_page(config, inventory, page_name=page_name)
-    updated = patch_server_stats_root_only(updated)
+    updated = patch_server_stats_mountpoints(updated, mountpoints or {"/": "根分区"})
     return updated
 
 
@@ -68,6 +94,7 @@ def maintain_config(
     validate_bin: str | Path | None = None,
     page_name: str = PAGE_NAME,
     restart_service: str | None = None,
+    mountpoints: dict[str, str] | None = None,
 ) -> MaintainResult:
     """Maintain a Glance config using a repository-inventory snapshot.
 
@@ -81,7 +108,7 @@ def maintain_config(
     output = Path(output_path) if output_path is not None else source
     config = load_yaml(source)
     inventory = load_inventory(data_path)
-    updated = build_maintained_config(config, inventory, page_name=page_name)
+    updated = build_maintained_config(config, inventory, page_name=page_name, mountpoints=mountpoints)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     tmp = output.with_name(f".{output.name}.chatglance.tmp")

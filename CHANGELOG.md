@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 - 2026-08-09
+
+Disk mountpoint visibility hotfix and deployment-record reframing.
+
+- Fix Glance Disk `n/a` by writing `hide: false` for selected mountpoints when `hide-mountpoints-by-default: true` is enabled.
+- Keep `hide-mountpoints-by-default` on local server entries instead of the widget root, matching upstream Glance docs.
+- Let `runtime maintain` use meaningful local mountpoints: `/` always, `/home` only when it is an actual separate mountpoint.
+- Reframe the repository as Glance website deployment source/records first; `chatglance` CLI remains an auxiliary management helper.
+
 ## 0.1.1 - 2026-08-09
 
 User-level systemd service management release.
