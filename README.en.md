@@ -1,9 +1,9 @@
 <div align="center">
-    <a href="https://pypi.python.org/pypi/chatglance">
-        <img src="https://img.shields.io/pypi/v/chatglance.svg" alt="PyPI version" />
+    <a href="https://pypi.python.org/pypi/ChatGlance">
+        <img src="https://img.shields.io/pypi/v/ChatGlance.svg" alt="PyPI version" />
     </a>
-    <a href="https://github.com/ChatArch/chatglance/actions/workflows/ci.yml">
-        <img src="https://github.com/ChatArch/chatglance/actions/workflows/ci.yml/badge.svg" alt="Tests" />
+    <a href="https://github.com/ChatArch/ChatGlance/actions/workflows/ci.yml">
+        <img src="https://github.com/ChatArch/ChatGlance/actions/workflows/ci.yml/badge.svg" alt="Tests" />
     </a>
 </div>
 
@@ -12,11 +12,11 @@
 [English](README.en.md) | [简体中文](README.md)
 </div>
 
-# chatglance
+# ChatGlance
 
-`chatglance` is the Python generation and operations CLI for the ChatArch/WZHECNU Glance dashboard.
+`ChatGlance` is the ChatArch/WZHECNU Glance dashboard generation and operations package. It provides the `chatglance` CLI.
 
-It is not an npm project and does not reimplement the Glance backend. Upstream Glance remains a Go single-binary dashboard server; `chatglance` owns reusable Python code for repository inventory rendering, Glance YAML page generation, inline HTML table generation, and safe config transformations.
+It is not an npm project and does not reimplement the Glance backend. Upstream Glance remains a Go single-binary dashboard server; `ChatGlance` owns reusable Python code for repository inventory rendering, Glance YAML page generation, inline HTML table generation, and safe config transformations.
 
 ## Current capabilities
 

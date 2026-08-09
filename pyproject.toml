@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "chatglance"
+name = "ChatGlance"
 dynamic = ["version"]
 description = "ChatArch Glance dashboard generation CLI."
 readme = "README.md"
@@ -18,8 +18,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ChatArch/chatglance"
-Repository = "https://github.com/ChatArch/chatglance"
+Homepage = "https://github.com/ChatArch/ChatGlance"
+Repository = "https://github.com/ChatArch/ChatGlance"
 
 [project.scripts]
 chatglance = "chatglance.cli:main"
