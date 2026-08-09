@@ -5,7 +5,7 @@ import yaml
 from click.testing import CliRunner
 
 from chatglance.cli import main
-from chatglance.runtime import build_maintained_config, maintain_config
+from chatglance.runtime import build_maintained_config, discover_meaningful_mountpoints, maintain_config
 from chatglance.systemd import install_user_units, render_all_units, show_user_units
 from test_projects import sample_inventory
 
@@ -24,8 +24,26 @@ def test_build_maintained_config_applies_project_page_and_disk_patch():
     assert [page["name"] for page in updated["pages"]] == ["ChatArch", "项目"]
     assert "按名称" not in rendered
     widget = updated["pages"][0]["columns"][0]["widgets"][0]
-    assert widget["hide-mountpoints-by-default"] is True
-    assert widget["servers"][0]["mountpoints"] == {"/": {"name": "根分区"}}
+    assert "hide-mountpoints-by-default" not in widget
+    assert widget["servers"][0]["hide-mountpoints-by-default"] is True
+    assert widget["servers"][0]["mountpoints"] == {"/": {"name": "根分区", "hide": False}}
+
+
+def test_build_maintained_config_can_include_home_when_meaningful():
+    config = {"pages": [{"name": "ChatArch", "columns": [{"widgets": [{"type": "server-stats", "servers": [{"type": "local"}]}]}]}]}
+
+    updated = build_maintained_config(config, sample_inventory(), mountpoints={"/": "根分区", "/home": "Home"})
+
+    assert updated["pages"][0]["columns"][0]["widgets"][0]["servers"][0]["mountpoints"] == {
+        "/": {"name": "根分区", "hide": False},
+        "/home": {"name": "Home", "hide": False},
+    }
+
+
+def test_discover_meaningful_mountpoints_keeps_home_only_when_it_is_a_mountpoint(monkeypatch):
+    monkeypatch.setattr("chatglance.runtime._is_mountpoint", lambda path: path == "/home")
+
+    assert discover_meaningful_mountpoints() == {"/": "根分区", "/home": "Home"}
 
 
 def test_maintain_config_writes_backup_only_when_changed(tmp_path: Path):

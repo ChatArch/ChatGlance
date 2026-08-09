@@ -14,9 +14,16 @@
 
 # ChatGlance
 
-`ChatGlance` 是 ChatArch/WZHECNU Glance dashboard 的 Python 生成与运维包，提供 `chatglance` CLI。
+`ChatGlance` 是 ChatArch/WZHECNU Glance 网站部署相关源码与运维记录的 private repo。它沉淀当前站点的页面生成逻辑、配置转换规则、user-level service 模板、验收记录和安全边界；`chatglance` CLI 只是辅助执行这些记录和规则的管理入口。
 
-它不是 NPM 项目，也不是重新实现 Glance 后端：上游 Glance 仍然是 Go 单二进制 dashboard server；`ChatGlance` 负责把 ChatArch 项目清单、Glance YAML 页面、inline HTML 表格和安全运维补丁组织成可复用的 Python 包/CLI。
+它不是 NPM 项目，也不是重新实现 Glance 后端：上游 Glance 仍然是 Go 单二进制 dashboard server；`ChatGlance` 负责把 ChatArch 项目清单、Glance YAML 页面、inline HTML 表格、user-level systemd 单元和部署记录组织成可复用、可审查的源码与文档。
+
+## Repo 内容
+
+- `src/chatglance/`：页面生成、Glance YAML patch、runtime maintenance、user-level systemd unit 渲染/安装等辅助代码。
+- `tests/`：项目页、Disk root-only patch、runtime/systemd、workflow contract 的回归测试。
+- `docs/deployment/current-site.md`：当前线上 Glance 网站的私有部署记录，包括服务拓扑、路径、user service/timer、local/public entry、验收和安全边界。
+- `README.md` / `README.en.md` / `CHANGELOG.md`：对外/协作入口；避免写入 live auth、token、password hash 或代理凭据。
 
 ## 当前能力
 
@@ -24,7 +31,7 @@
 - 当前 page tabs 固定为：`最近提交`、`待处理 PR / Issue`、`分类`、`一览表`。
 - `待处理 PR / Issue` 只显示 PR/Issue 非 0 的仓库，并按 `(PR, Issue, 最近提交)` 降序。
 - 生成 config 副本时清理 legacy generated pages：`Projects`、`ChatArch Projects`、`ChatArch Projects List`。
-- 为 Glance `server-stats` 写入 root-only Disk 配置：`hide-mountpoints-by-default: true` + `mountpoints: /`，避免 snap/loop mount 出现在 Disk popover。
+- 为 Glance `server-stats` 写入“只显示有意义磁盘”的 Disk 配置：当前 live 策略始终保留 `/`，只有当 `/home` 是独立挂载点时才加 `/home`；每个可见 mountpoint 都显式写入 `hide: false`，避免 Disk 显示 `n/a`，同时继续隐藏 snap/loop/tmp/overlay。
 - 维护 durable runtime：一次性 `runtime maintain` 可原子更新 live config、备份、校验，并在内容变化时可选重启 systemd user service。
 - 渲染并安装 user-level systemd units：主服务仍直接启动 upstream Glance Go binary；维护任务是独立 oneshot/timer，不是 Python wrapper。
 - 通过 CLI 安装、启用、启动和回读当前 Glance 页面对应的 user service/timer。

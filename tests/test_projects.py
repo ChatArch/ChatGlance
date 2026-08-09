@@ -98,7 +98,7 @@ def test_patch_server_stats_root_only_hides_default_mountpoints():
     widget = updated["pages"][0]["columns"][0]["widgets"][0]
     server = widget["servers"][0]
 
-    assert widget["hide-mountpoints-by-default"] is True
+    assert "hide-mountpoints-by-default" not in widget
     assert server["hide-mountpoints-by-default"] is True
     assert server["hide-swap"] is True
-    assert server["mountpoints"] == {"/": {"name": "根分区"}}
+    assert server["mountpoints"] == {"/": {"name": "根分区", "hide": False}}

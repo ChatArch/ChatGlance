@@ -14,9 +14,16 @@
 
 # ChatGlance
 
-`ChatGlance` is the ChatArch/WZHECNU Glance dashboard generation and operations package. It provides the `chatglance` CLI.
+`ChatGlance` is the private ChatArch/WZHECNU repository for Glance website deployment source and operations records. It preserves the current site's page-generation logic, configuration transformations, user-level service templates, verification notes, and safety boundaries; the `chatglance` CLI is only the helper entrypoint for applying those rules.
 
-It is not an npm project and does not reimplement the Glance backend. Upstream Glance remains a Go single-binary dashboard server; `ChatGlance` owns reusable Python code for repository inventory rendering, Glance YAML page generation, inline HTML table generation, and safe config transformations.
+It is not an npm project and does not reimplement the Glance backend. Upstream Glance remains a Go single-binary dashboard server; `ChatGlance` owns reusable Python code and private deployment records for repository inventory rendering, Glance YAML page generation, inline HTML table generation, selected Disk mountpoint display, and user-level runtime maintenance.
+
+## Repository contents
+
+- `src/chatglance/`: helper code for page generation, Glance YAML patching, runtime maintenance, and user-level systemd unit rendering/installation.
+- `tests/`: regression tests for project pages, Disk mountpoint visibility, runtime/systemd helpers, and release workflow contracts.
+- `docs/deployment/current-site.md`: private repository-only deployment record for the current live Glance site. It is excluded from public package artifacts.
+- `README.md` / `README.en.md` / `CHANGELOG.md`: collaboration and package-facing entry points; do not include live auth, tokens, password hashes, proxy credentials, or secret-bearing files.
 
 ## Current capabilities
 
@@ -24,7 +31,7 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 - Keep the current tabs limited to `最近提交`, `待处理 PR / Issue`, `分类`, and `一览表`.
 - Filter the triage tab to repositories with non-zero PR or Issue counts and sort by `(PR, Issue, recent commit)` descending.
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.
-- Patch Glance `server-stats` to show only the root disk using `hide-mountpoints-by-default: true` plus `mountpoints: /`, so snap/loop mounts do not appear in the Disk popover.
+- Patch Glance `server-stats` to show only selected meaningful disks. The current live policy keeps `/` and adds `/home` only when it is a separate mountpoint; each visible entry is written with `hide: false` so the Disk card does not render `n/a`, while snap/loop/tmp overlays stay hidden.
 - Maintain a durable runtime with `runtime maintain`: atomic live-config update, backup, validation, and optional restart of a systemd user service only when the rendered config changed.
 - Render and install user-level systemd units: the main service still starts the upstream Glance Go binary directly; maintenance is an independent oneshot/timer, not a Python server wrapper.
 - Install, enable, start, and read back the current Glance page user service/timer from the CLI.

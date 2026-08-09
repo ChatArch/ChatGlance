@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ChatGlance"
 dynamic = ["version"]
-description = "ChatArch Glance dashboard generation CLI."
+description = "ChatArch Glance website deployment helpers and records."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
