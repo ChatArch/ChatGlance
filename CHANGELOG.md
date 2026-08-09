@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1 - 2026-08-09
+
+User-level systemd service management release.
+
+- Add `runtime install-systemd` to write, verify, daemon-reload, enable, and optionally start user-level Glance service/timer units.
+- Add `runtime start` to start the current page through `systemctl --user`.
+- Add `runtime status` for safe service/timer readback fields.
+- Keep the service topology user-level only: `~/.config/systemd/user`, `systemd-analyze --user verify`, and `systemctl --user`.
+
 ## 0.1.0 - 2026-08-09
 
 First workflow-verified ChatArch release target.

@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import inspect
+import json
+import shutil
+import subprocess
+import sys
 from pathlib import Path
+from typing import NoReturn
 
 import click
 
@@ -11,7 +16,7 @@ from chatglance import __version__
 from chatglance.glance_config import patch_disks_from_files, update_projects_page_from_files
 from chatglance.projects import PAGE_NAME, build_projects_page, dump_yaml, load_inventory
 from chatglance.runtime import maintain_config, runtime_path
-from chatglance.systemd import render_all_units, write_units
+from chatglance.systemd import install_user_units, render_all_units, show_user_units, systemctl_user, write_units
 
 
 def _purpose(command: click.Command) -> str:
@@ -80,6 +85,27 @@ def _render_cli_tree(root: click.Group) -> str:
     for index, (child_name, child) in enumerate(children):
         _render_command_tree(child, child_name, "", index == len(children) - 1, lines)
     return "\n".join(lines)
+
+
+def _resolve_chatglance_bin(explicit: Path | None) -> Path:
+    """Resolve the executable path that systemd should call for maintenance."""
+
+    if explicit is not None:
+        return explicit.expanduser()
+    found = shutil.which("chatglance")
+    if found:
+        return Path(found).expanduser()
+    argv0 = Path(sys.argv[0]).expanduser()
+    if argv0.name == "chatglance" and (argv0.is_absolute() or argv0.exists()):
+        return argv0.resolve()
+    raise click.ClickException("cannot resolve chatglance executable; pass --chatglance-bin explicitly")
+
+
+def _raise_systemd_error(exc: subprocess.CalledProcessError) -> NoReturn:
+    stderr = (exc.stderr or "").strip()
+    stdout = (exc.stdout or "").strip()
+    detail = stderr or stdout or f"exit status {exc.returncode}"
+    raise click.ClickException(detail) from exc
 
 
 @click.group(invoke_without_command=True, no_args_is_help=True)
@@ -215,6 +241,90 @@ def render_systemd(runtime_home: Path, chatglance_bin: Path, service_name: str, 
     click.echo(f"# {units.service_name}\n{units.service}")
     click.echo(f"# {units.maintenance_service_name}\n{units.maintenance_service}")
     click.echo(f"# {units.timer_name}\n{units.timer}")
+
+
+@runtime.command("install-systemd")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), default=Path("~/.chatarch/glance"), show_default=True, help="Durable Glance service home.")
+@click.option("--chatglance-bin", type=click.Path(path_type=Path, dir_okay=False), help="Absolute path to the chatglance executable used by the maintenance oneshot. Defaults to PATH lookup.")
+@click.option("--output-dir", type=click.Path(path_type=Path, file_okay=False), default=Path("~/.config/systemd/user"), show_default=True, help="User systemd unit directory.")
+@click.option("--service-name", default="chatarch-glance.service", show_default=True, help="Main Glance user service name.")
+@click.option("--maintenance-service-name", default="chatarch-glance-maintenance.service", show_default=True, help="Generated oneshot maintenance service name.")
+@click.option("--timer-name", default="chatarch-glance-maintenance.timer", show_default=True, help="Generated maintenance timer name.")
+@click.option("--interval", default="30min", show_default=True, help="systemd OnUnitActiveSec interval for the maintenance timer.")
+@click.option("--verify/--no-verify", default=True, show_default=True, help="Run systemd-analyze --user verify before daemon-reload.")
+@click.option("--enable/--no-enable", default=True, show_default=True, help="Enable the Glance service and maintenance timer for user login.")
+@click.option("--start/--no-start", default=False, show_default=True, help="Start the Glance service and maintenance timer after installation.")
+def install_systemd(
+    runtime_home: Path,
+    chatglance_bin: Path | None,
+    output_dir: Path,
+    service_name: str,
+    maintenance_service_name: str,
+    timer_name: str,
+    interval: str,
+    verify: bool,
+    enable: bool,
+    start: bool,
+) -> None:
+    """Install, verify, enable, and optionally start user-level systemd units."""
+
+    binary = _resolve_chatglance_bin(chatglance_bin)
+    try:
+        result = install_user_units(
+            runtime_home=runtime_home.expanduser(),
+            chatglance_bin=binary,
+            output_dir=output_dir.expanduser(),
+            service_name=service_name,
+            maintenance_service_name=maintenance_service_name,
+            timer_name=timer_name,
+            interval=interval,
+            verify=verify,
+            enable=enable,
+            start=start,
+        )
+    except subprocess.CalledProcessError as exc:
+        _raise_systemd_error(exc)
+    click.echo(
+        " ".join(
+            [
+                f"wrote={','.join(str(path) for path in result.paths)}",
+                f"verified={str(result.verified).lower()}",
+                f"daemon_reloaded={str(result.daemon_reloaded).lower()}",
+                f"enabled={','.join(result.enabled_units) or '-'}",
+                f"started={','.join(result.started_units) or '-'}",
+            ]
+        )
+    )
+
+
+@runtime.command("start")
+@click.option("--service-name", default="chatarch-glance.service", show_default=True, help="Main Glance user service name.")
+@click.option("--timer-name", default="chatarch-glance-maintenance.timer", show_default=True, help="Maintenance timer name.")
+@click.option("--timer/--no-timer", default=True, show_default=True, help="Start the maintenance timer together with the main service.")
+def start_runtime(service_name: str, timer_name: str, timer: bool) -> None:
+    """Start the current Glance page through systemd user units."""
+
+    units = [service_name]
+    if timer:
+        units.append(timer_name)
+    try:
+        systemctl_user("start", *units)
+    except subprocess.CalledProcessError as exc:
+        _raise_systemd_error(exc)
+    click.echo(f"started={','.join(units)}")
+
+
+@runtime.command("status")
+@click.option("--service-name", default="chatarch-glance.service", show_default=True, help="Main Glance user service name.")
+@click.option("--timer-name", default="chatarch-glance-maintenance.timer", show_default=True, help="Maintenance timer name.")
+def status_runtime(service_name: str, timer_name: str) -> None:
+    """Show safe systemd user status for the Glance service and timer."""
+
+    try:
+        status = show_user_units(service_name, timer_name)
+    except subprocess.CalledProcessError as exc:
+        _raise_systemd_error(exc)
+    click.echo(json.dumps(status, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
