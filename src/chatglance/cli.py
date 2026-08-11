@@ -13,9 +13,18 @@ from typing import NoReturn
 import click
 
 from chatglance import __version__
-from chatglance.glance_config import patch_disks_from_files, update_projects_page_from_files
+from chatglance.glance_config import load_yaml, patch_disks_from_files, update_projects_page_from_files, write_yaml
 from chatglance.projects import PAGE_NAME, build_projects_page, dump_yaml, load_inventory
 from chatglance.runtime import discover_meaningful_mountpoints, maintain_config, runtime_path
+from chatglance.servers import (
+    SERVER_PAGE_NAME,
+    build_servers_page,
+    collect_server_status,
+    default_candidate_aliases,
+    dump_json,
+    load_server_status,
+    replace_servers_page,
+)
 from chatglance.systemd import install_user_units, render_all_units, show_user_units, systemctl_user, write_units
 
 
@@ -167,6 +176,73 @@ def root_only_disk(config_path: Path, output_path: Path, mountpoint: str, mount_
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     patch_disks_from_files(config_path, output_path, mountpoint=mountpoint, name=mount_name)
+    click.echo(f"wrote {output_path}")
+
+
+@main.group()
+def servers() -> None:
+    """Collect and render the `服务器` Glance page."""
+
+
+@servers.command("candidates")
+@click.option("--config", "ssh_config", type=click.Path(path_type=Path, dir_okay=False), help="SSH config to scan. Defaults to ~/.ssh/config.")
+def server_candidates(ssh_config: Path | None) -> None:
+    """Print default server aliases after internal exclusions."""
+
+    from chatglance.servers import ssh_config_aliases
+
+    aliases = default_candidate_aliases(ssh_config_aliases(ssh_config) if ssh_config else None)
+    for alias in aliases:
+        click.echo(alias)
+
+
+@servers.command("collect")
+@click.option("--alias", "aliases", multiple=True, help="SSH alias to collect. Repeat for multiple servers.")
+@click.option("--default-candidates/--no-default-candidates", default=False, show_default=True, help="Use ChatGlance's default SSH-config candidate filter when --alias is omitted.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Output server-status JSON path.")
+@click.option("--timeout", default=18, show_default=True, type=int, help="Per-host SSH probe timeout in seconds.")
+@click.option("--workers", default=8, show_default=True, type=int, help="Parallel read-only SSH workers.")
+def collect_servers(aliases: tuple[str, ...], default_candidates: bool, output_path: Path, timeout: int, workers: int) -> None:
+    """Collect a read-only static server-status JSON snapshot."""
+
+    selected = list(aliases)
+    if not selected and default_candidates:
+        selected = default_candidate_aliases()
+    if not selected:
+        raise click.ClickException("pass --alias at least once or use --default-candidates")
+    data = collect_server_status(selected, timeout=timeout, workers=workers)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(dump_json(data), encoding="utf-8")
+    click.echo(f"wrote {output_path} count={data.get('count', 0)} online={data.get('online', 0)}")
+
+
+@servers.command("render-page")
+@click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Server-status JSON snapshot.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="YAML file to write the generated Glance page object to.")
+@click.option("--page-name", default=SERVER_PAGE_NAME, show_default=True, help="Generated Glance page name.")
+def render_servers_page(data_path: Path, output_path: Path, page_name: str) -> None:
+    """Render the `服务器` page YAML from server-status JSON."""
+
+    data = load_server_status(data_path)
+    page = build_servers_page(data, page_name=page_name)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(dump_yaml(page), encoding="utf-8")
+    click.echo(f"wrote {output_path}")
+
+
+@servers.command("update-config")
+@click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Server-status JSON snapshot.")
+@click.option("--config", "config_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Existing Glance YAML config.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Output path for the updated Glance YAML config.")
+@click.option("--page-name", default=SERVER_PAGE_NAME, show_default=True, help="Generated Glance page name.")
+def update_servers_config(data_path: Path, config_path: Path, output_path: Path, page_name: str) -> None:
+    """Write a config copy with the generated server page replaced."""
+
+    data = load_server_status(data_path)
+    config = load_yaml(config_path)
+    updated = replace_servers_page(config, data, page_name=page_name)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    write_yaml(output_path, updated)
     click.echo(f"wrote {output_path}")
 
 

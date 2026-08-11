@@ -1,6 +1,6 @@
 # Current Glance Site Deployment Record
 
-> Private repository-only record. This file documents the current live ChatArch/WZHECNU Glance site and is excluded from public PyPI artifacts by `MANIFEST.in`.
+> Private repository-only record. This file documents the current live ChatArch Glance site and is excluded from public PyPI artifacts by `MANIFEST.in`. `wzhecnu.cn` hostnames are routing labels for the current public/local entry, not the business scope of this dashboard.
 
 Date: 2026-08-09
 
@@ -24,6 +24,7 @@ The `chatglance` command is the helper used to apply these rules to the live run
 - Runtime home: `/home/zhihong/.chatarch/glance`
 - Runtime config: `/home/zhihong/.chatarch/glance/config/glance.yml`
 - Runtime inventory snapshot: `/home/zhihong/.chatarch/glance/data/chatarch-projects.json`
+- Runtime server-status snapshot: `/home/zhihong/.chatarch/glance/data/server-status.json`
 - Standard ChatArch Python venv for helper CLI: `/home/zhihong/.chatarch/venv`
 
 Live auth settings, password hashes, cookies, proxy credentials, and token-bearing files remain outside Git and are not copied into this repository.
@@ -93,6 +94,37 @@ Fix committed for `ChatGlance==0.1.2`:
 - `patch_server_stats_mountpoints()` writes `{name: <label>, hide: false}` for every selected mountpoint.
 - `runtime maintain` discovers meaningful mountpoints on the live host.
 - `/home` is not added on the current host because it is not a separate mountpoint from `/`.
+
+## Server page live note
+
+Date: 2026-08-11
+
+The live dashboard has three pages:
+
+1. `ChatArch` — ChatArch home / general entry page.
+2. `项目` — generated project dashboard.
+3. `服务器` — server-status cards generated from a static JSON snapshot.
+
+The `服务器` page is rendered from `/home/zhihong/.chatarch/glance/data/server-status.json` through an `html` widget. The snapshot was collected manually by read-only SSH probes. It records IP, CPU, memory, GPU, mounted filesystem capacity, `lsblk` devices, and a read-only equivalent of the cube `getdevices.sh` fields.
+
+Collection boundaries:
+
+- no package installation;
+- no `sudo` writes;
+- no server restart except the final Glance user service restart after config validation;
+- no token, private key, proxy, or full SSH config exposure;
+- common virtual VGA adapters on ordinary public VMs are not counted as GPUs, so those cards render `GPU: NULL`.
+
+Manual update flow for the static snapshot:
+
+```bash
+chatglance servers collect --default-candidates --output server-status.json
+chatglance servers render-page --data server-status.json --output server-page.yml
+chatglance servers update-config --data server-status.json --config glance.yml --output glance.yml.candidate
+/home/zhihong/.chatarch/glance/bin/glance -config glance.yml.candidate config:validate
+```
+
+For the first live install, the validated page was appended to the runtime config directly, because this was a live-page task and the formal PR/PyPI release was intentionally deferred.
 
 ## Verification checklist
 
