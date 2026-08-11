@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add `chatglance servers --inventory-config` support for Infra/server inventory YAML: alias selection, exclusions, labels, collection defaults, and page metadata.
+- Add `docs/infra.md`, `examples/server-inventory.example.yml`, and `scripts/refresh-server-status.sh` to document and automate the external static-data refresh path.
+- Document which Infra content is source/config versus generated runtime data, including `server-status.json`, `server-page.yml`, and candidate Glance config refreshes.
+- Render server collection timestamps, `Last Reboot`, generated snapshot times, and refresh-script backup names in Beijing time (`+08:00`).
+
 ## 0.1.2 - 2026-08-09
 
 Disk mountpoint visibility hotfix and deployment-record reframing.

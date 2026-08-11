@@ -105,7 +105,7 @@ The live dashboard has three pages:
 2. `项目` — generated project dashboard.
 3. `服务器` — server-status cards generated from a static JSON snapshot.
 
-The `服务器` page is rendered from `/home/zhihong/.chatarch/glance/data/server-status.json` through an `html` widget. The snapshot is collected manually by SSH probes and audited against the local SSH configuration. It records IP, CPU, memory, GPU, mounted filesystem capacity, filtered `lsblk` devices, and the cube `getdevices.sh` disk summary when it can run without installing packages.
+The `服务器` page is rendered from `/home/zhihong/.chatarch/glance/data/server-status.json` through an `html` widget. The snapshot is collected by read-only SSH probes using the runtime inventory config at `/home/zhihong/.chatarch/glance/config/server-inventory.yml`. It records IP, CPU, memory, GPU, mounted filesystem capacity, filtered `lsblk` devices, `Last Reboot`, raw uptime seconds, and the cube `getdevices.sh` disk summary when it can run without installing packages. Displayed collection and reboot timestamps use Beijing time (`+08:00`).
 
 Collection boundaries:
 
@@ -119,18 +119,20 @@ Collection boundaries:
 - GPU details are kept only in the card's expandable details section;
 - expanded system details include `Last Reboot` and raw `uptime_seconds` from the read-only Linux probe;
 - `lsblk` loop/rom/zram/snap/tmpfs/proc/sysfs noise is filtered;
-- `azure.cn`, `essay.newaliyun`, `rex.ctyun`, and `zhihong.tencent` are excluded from the default server page inventory.
+- retired, duplicate, local-only, and explicitly user-excluded SSH aliases are excluded from the server page inventory.
 
-Manual update flow for the static snapshot:
+Configured refresh flow for the static snapshot:
 
 ```bash
-chatglance servers collect --default-candidates --output server-status.json
-chatglance servers render-page --data server-status.json --output server-page.yml
-chatglance servers update-config --data server-status.json --config glance.yml --output glance.yml.candidate
-/home/zhihong/.chatarch/glance/bin/glance -config glance.yml.candidate config:validate
+CHATGLANCE_BIN=/home/zhihong/.chatarch/venv/bin/chatglance \
+CHATGLANCE_RUNTIME_HOME=/home/zhihong/.chatarch/glance \
+CHATGLANCE_INFRA_CONFIG=/home/zhihong/.chatarch/glance/config/server-inventory.yml \
+bash scripts/refresh-server-status.sh
 ```
 
-For the first live install, the validated page was appended to the runtime config directly, because this was a live-page task and the formal PR/PyPI release was intentionally deferred.
+Manual command equivalence is documented in `docs/infra.md`: `chatglance servers collect --inventory-config ...`, `render-page --inventory-config ...`, and `update-config --inventory-config ...`, followed by `glance -config ... config:validate`; service-manager actions stay outside the bundled refresh script and run only from the scheduler/operator boundary when needed.
+
+For the first live install, the validated page was appended to the runtime config directly, because this was a live-page task and the formal PR/PyPI release was intentionally deferred. The PR now records the repeatable inventory/config/refresh mechanism for future updates.
 
 ## Verification checklist
 

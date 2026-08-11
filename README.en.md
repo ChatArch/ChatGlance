@@ -22,7 +22,10 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 
 - `src/chatglance/`: helper code for page generation, Glance YAML patching, runtime maintenance, and user-level systemd unit rendering/installation.
 - `tests/`: regression tests for project pages, Disk mountpoint visibility, runtime/systemd helpers, and release workflow contracts.
+- `docs/infra.md`: configuration mechanism, external data-generation chain, refresh workflow, and cron/timer template for the Infra/`服务器` page.
 - `docs/deployment/current-site.md`: private repository-only deployment record for the current live Glance site. It is excluded from public package artifacts.
+- `examples/server-inventory.example.yml`: sanitized inventory config template. The real inventory belongs in the runtime config directory.
+- `scripts/refresh-server-status.sh`: external refresh script template for manual runs, cron, or a systemd user timer.
 - `README.md` / `README.en.md` / `CHANGELOG.md`: collaboration and package-facing entry points; do not include live auth, tokens, password hashes, proxy credentials, or secret-bearing files.
 
 ## Current capabilities
@@ -32,7 +35,9 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 - Filter the triage tab to repositories with non-zero PR or Issue counts and sort by `(PR, Issue, recent commit)` descending.
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.
 - Patch Glance `server-stats` to show only selected meaningful disks. The current live policy keeps `/` and adds `/home` only when it is a separate mountpoint; each visible entry is written with `hide: false` so the Disk card does not render `n/a`, while snap/loop/tmp overlays stay hidden.
-- Maintain a durable runtime with `runtime maintain`: atomic live-config update, backup, validation, and optional restart of a systemd user service only when the rendered config changed.
+- Select SSH aliases from an Infra inventory YAML, collect a read-only static `server-status.json`, and render the Glance `服务器`/Infra page from that snapshot.
+- Keep collapsed server cards limited to IP/CPU/memory/disk/status while GPU, mountpoints, filtered `lsblk`, safe `getdevices` summaries, and `Last Reboot` stay in expandable details.
+- Maintain a durable runtime with `runtime maintain`: atomic live-config update, backup, and validation; service lifecycle actions stay outside the default docs examples.
 - Render and install user-level systemd units: the main service still starts the upstream Glance Go binary directly; maintenance is an independent oneshot/timer, not a Python server wrapper.
 - Install, enable, start, and read back the current Glance page user service/timer from the CLI.
 
@@ -46,6 +51,20 @@ chatglance --version
 python -m pytest -q
 python -m build
 ```
+
+The recommended Infra/`服务器` refresh entry point is the external script, not hand-editing JSON:
+
+```bash
+cp examples/server-inventory.example.yml ~/.chatarch/glance/config/server-inventory.yml
+$EDITOR ~/.chatarch/glance/config/server-inventory.yml
+
+CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
+CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
+CHATGLANCE_INFRA_CONFIG=~/.chatarch/glance/config/server-inventory.yml \
+bash scripts/refresh-server-status.sh
+```
+
+The script calls `chatglance servers collect/render-page/update-config`, writes a candidate config, runs `glance config:validate`, then backs up/replaces the live config when content changed; service-manager actions stay in the outer cron/systemd wrapper or a manual operator step. See [`docs/infra.md`](docs/infra.md) for the full mechanism.
 
 ## CLI examples
 
@@ -74,12 +93,37 @@ chatglance disks root-only \
   --output playground/glance.root-disk.yml
 ```
 
+Inspect the aliases selected by the Infra config:
+
+```bash
+chatglance servers candidates \
+  --inventory-config ~/.chatarch/glance/config/server-inventory.yml
+```
+
+Manually refresh Infra static data and page YAML:
+
+```bash
+chatglance servers collect \
+  --inventory-config ~/.chatarch/glance/config/server-inventory.yml \
+  --output ~/.chatarch/glance/data/server-status.json
+
+chatglance servers render-page \
+  --inventory-config ~/.chatarch/glance/config/server-inventory.yml \
+  --data ~/.chatarch/glance/data/server-status.json \
+  --output ~/.chatarch/glance/data/server-page.yml
+
+chatglance servers update-config \
+  --inventory-config ~/.chatarch/glance/config/server-inventory.yml \
+  --data ~/.chatarch/glance/data/server-status.json \
+  --config ~/.chatarch/glance/config/glance.yml \
+  --output ~/.chatarch/glance/config/glance.yml.infra-candidate
+```
+
 Maintain a durable Glance runtime (default `~/.chatarch/glance`):
 
 ```bash
 chatglance runtime maintain \
-  --runtime-home ~/.chatarch/glance \
-  --restart-service chatarch-glance.service
+  --runtime-home ~/.chatarch/glance
 ```
 
 Render recommended systemd user units:
@@ -113,10 +157,11 @@ Recommended topology: **systemd runs Glance directly; chatglance performs mainte
 
 - Main service: `chatarch-glance.service` executes `~/.chatarch/glance/bin/glance -config ~/.chatarch/glance/config/glance.yml` directly.
 - Content data: repository inventory JSON, caches, and generated snapshots live under `~/.chatarch/glance/data/` or `~/.chatarch/glance/cache/`.
+- Infra inventory: the real `server-inventory.yml` is runtime config that defines which SSH aliases are marked as Infra; generated `server-status.json` / `server-page.yml` are external snapshots, not source.
 - Live config: `~/.chatarch/glance/config/glance.yml`; backups go under `~/.chatarch/glance/config/backups/` before replacement.
 - Maintenance: `chatglance runtime maintain` is a oneshot command and can be scheduled by `chatarch-glance-maintenance.timer`.
 - Install/start: `chatglance runtime install-systemd --start` and `chatglance runtime start` use only user-level systemd and never write `/etc/systemd`.
-- A long-running Python wrapper is intentionally not recommended: it couples server lifecycle to content generation and makes systemd restarts, logs, health checks, and rollback worse.
+- A long-running Python wrapper is intentionally not recommended: it couples server lifecycle to content generation and makes service logs, health checks, and rollback worse.
 
 ## Safety boundaries
 

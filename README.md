@@ -22,7 +22,10 @@
 
 - `src/chatglance/`：页面生成、Glance YAML patch、runtime maintenance、user-level systemd unit 渲染/安装等辅助代码。
 - `tests/`：项目页、Disk root-only patch、runtime/systemd、workflow contract 的回归测试。
+- `docs/infra.md`：Infra/`服务器` 页的配置机制、外部数据生成链路、刷新方式和 cron/timer 模板。
 - `docs/deployment/current-site.md`：当前线上 Glance 网站的私有部署记录，包括服务拓扑、路径、user service/timer、local/public entry、验收和安全边界。
+- `examples/server-inventory.example.yml`：可提交的脱敏 inventory 配置示例；真实 inventory 放在 runtime config 目录。
+- `scripts/refresh-server-status.sh`：可手动运行或挂 cron/systemd timer 的外部刷新脚本模板。
 - `README.md` / `README.en.md` / `CHANGELOG.md`：对外/协作入口；避免写入 live auth、token、password hash 或代理凭据。
 
 ## 当前能力
@@ -32,7 +35,9 @@
 - `待处理 PR / Issue` 只显示 PR/Issue 非 0 的仓库，并按 `(PR, Issue, 最近提交)` 降序。
 - 生成 config 副本时清理 legacy generated pages：`Projects`、`ChatArch Projects`、`ChatArch Projects List`。
 - 为 Glance `server-stats` 写入“只显示有意义磁盘”的 Disk 配置：当前 live 策略始终保留 `/`，只有当 `/home` 是独立挂载点时才加 `/home`；每个可见 mountpoint 都显式写入 `hide: false`，避免 Disk 显示 `n/a`，同时继续隐藏 snap/loop/tmp/overlay。
-- 维护 durable runtime：一次性 `runtime maintain` 可原子更新 live config、备份、校验，并在内容变化时可选重启 systemd user service。
+- 从 Infra inventory YAML 选择 SSH alias，执行只读采集，生成静态 `server-status.json`，再渲染 Glance `服务器`/Infra page。
+- `服务器` 页的收起卡片显示 IP/CPU/内存/硬盘/状态；GPU、挂载目录、filtered `lsblk`、安全 `getdevices` 摘要、`Last Reboot` 放在展开详情中。
+- 维护 durable runtime：一次性 `runtime maintain` 可原子更新 live config、备份、校验；服务生命周期动作不放在默认 docs 示例里。
 - 渲染并安装 user-level systemd units：主服务仍直接启动 upstream Glance Go binary；维护任务是独立 oneshot/timer，不是 Python wrapper。
 - 通过 CLI 安装、启用、启动和回读当前 Glance 页面对应的 user service/timer。
 
@@ -46,6 +51,20 @@ chatglance --version
 python -m pytest -q
 python -m build
 ```
+
+刷新 Infra/`服务器` 页的推荐入口是外部脚本，而不是手改 JSON：
+
+```bash
+cp examples/server-inventory.example.yml ~/.chatarch/glance/config/server-inventory.yml
+$EDITOR ~/.chatarch/glance/config/server-inventory.yml
+
+CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
+CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
+CHATGLANCE_INFRA_CONFIG=~/.chatarch/glance/config/server-inventory.yml \
+bash scripts/refresh-server-status.sh
+```
+
+脚本内部调用 `chatglance servers collect/render-page/update-config`，先生成 candidate config 并执行 `glance config:validate`，验证通过且内容变化时才备份 live config、替换；service manager 动作留给外层 cron/systemd wrapper 或人工操作。完整机制见 [`docs/infra.md`](docs/infra.md)。
 
 ## CLI 示例
 
@@ -74,12 +93,37 @@ chatglance disks root-only \
   --output playground/glance.root-disk.yml
 ```
 
+查看 Infra 配置选中的服务器 aliases：
+
+```bash
+chatglance servers candidates \
+  --inventory-config ~/.chatarch/glance/config/server-inventory.yml
+```
+
+手动刷新 Infra 静态数据和页面 YAML：
+
+```bash
+chatglance servers collect \
+  --inventory-config ~/.chatarch/glance/config/server-inventory.yml \
+  --output ~/.chatarch/glance/data/server-status.json
+
+chatglance servers render-page \
+  --inventory-config ~/.chatarch/glance/config/server-inventory.yml \
+  --data ~/.chatarch/glance/data/server-status.json \
+  --output ~/.chatarch/glance/data/server-page.yml
+
+chatglance servers update-config \
+  --inventory-config ~/.chatarch/glance/config/server-inventory.yml \
+  --data ~/.chatarch/glance/data/server-status.json \
+  --config ~/.chatarch/glance/config/glance.yml \
+  --output ~/.chatarch/glance/config/glance.yml.infra-candidate
+```
+
 维护一个 durable Glance runtime（默认 `~/.chatarch/glance`）：
 
 ```bash
 chatglance runtime maintain \
-  --runtime-home ~/.chatarch/glance \
-  --restart-service chatarch-glance.service
+  --runtime-home ~/.chatarch/glance
 ```
 
 生成推荐 systemd user units：
@@ -113,10 +157,11 @@ chatglance runtime status
 
 - 主服务：`chatarch-glance.service` 直接执行 `~/.chatarch/glance/bin/glance -config ~/.chatarch/glance/config/glance.yml`。
 - 内容数据：repository inventory JSON、缓存和生成快照放在 `~/.chatarch/glance/data/` 或 `~/.chatarch/glance/cache/`。
+- Infra inventory：真实 `server-inventory.yml` 是 runtime config，定义哪些 SSH aliases 被标记为 Infra；生成的 `server-status.json` / `server-page.yml` 是外部快照，不是源码。
 - live config：`~/.chatarch/glance/config/glance.yml`；更新前写备份到 `~/.chatarch/glance/config/backups/`。
 - 维护：`chatglance runtime maintain` 是 oneshot，可由 `chatarch-glance-maintenance.timer` 周期触发。
 - 安装/启动：`chatglance runtime install-systemd --start` 与 `chatglance runtime start` 只使用 user-level systemd，不写 `/etc/systemd`。
-- 不建议加 Python 长驻 wrapper：wrapper 会把 server 生命周期和内容生成耦合，反而不利于 systemd 重启、日志、健康检查和回滚。
+- 不建议加 Python 长驻 wrapper：wrapper 会把 server 生命周期和内容生成耦合，反而不利于服务日志、健康检查和回滚。
 
 ## 安全边界
 

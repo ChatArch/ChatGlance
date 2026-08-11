@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import html
 import ipaddress
 import json
@@ -15,6 +15,8 @@ import socket
 import subprocess
 from typing import Any, Iterable, cast
 
+import yaml
+
 SERVER_PAGE_NAME = "服务器"
 LEGACY_SERVER_PAGE_NAMES = {"Servers", "Server Status", "服务器状态"}
 
@@ -24,11 +26,11 @@ printf 'hostname=%s\n' "$(hostname 2>/dev/null || true)"
 printf 'user=%s\n' "$(id -un 2>/dev/null || true)"
 printf 'kernel=%s\n' "$(uname -srmo 2>/dev/null || uname -a 2>/dev/null || true)"
 printf 'ips=%s\n' "$(hostname -I 2>/dev/null || true)"
-printf 'collected_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
+printf 'collected_at=%s\n' "$(TZ=Asia/Shanghai date +%Y-%m-%dT%H:%M:%S+08:00 2>/dev/null || date +%Y-%m-%dT%H:%M:%S 2>/dev/null || true)"
 boot_epoch="$(awk '$1=="btime" {print $2}' /proc/stat 2>/dev/null || true)"
 if [ -n "$boot_epoch" ]; then
-  boot_iso="$(date -u -d "@$boot_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
-  printf 'last_reboot=%s\n' "$boot_iso"
+  boot_iso="$(TZ=Asia/Shanghai date -d "@$boot_epoch" +%Y-%m-%dT%H:%M:%S+08:00 2>/dev/null || true)"
+  [ -n "$boot_iso" ] && printf 'last_reboot=%s\n' "$boot_iso"
 fi
 if [ -r /proc/uptime ]; then
   read uptime_seconds rest_uptime < /proc/uptime
@@ -110,8 +112,11 @@ EXCLUDED_ALIASES = {
 PUBLIC_ALIAS_MARKERS = ("tencent", "aliyun", "ctyun", "azure", "newazure", "newaliyun", "tencent.am")
 
 
-def utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+BEIJING_TZ = timezone(timedelta(hours=8))
+
+
+def beijing_now() -> str:
+    return datetime.now(BEIJING_TZ).strftime("%Y-%m-%dT%H:%M:%S+08:00")
 
 
 def load_server_status(path: str | Path) -> dict[str, Any]:
@@ -121,6 +126,140 @@ def load_server_status(path: str | Path) -> dict[str, Any]:
     if not isinstance(data.get("servers"), list):
         raise ValueError("server status JSON must contain a servers list")
     return data
+
+
+def load_server_inventory_config(path: str | Path) -> dict[str, Any]:
+    """Load the optional Infra/server inventory configuration YAML."""
+
+    raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        raise ValueError("server inventory config must be a YAML object")
+    return cast(dict[str, Any], raw)
+
+
+def _inventory_section(config: dict[str, Any]) -> dict[str, Any]:
+    value = config.get("inventory", config.get("server_inventory", config))
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("inventory section must be an object")
+    return cast(dict[str, Any], value)
+
+
+def _as_alias_list(value: Any, *, field: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError(f"{field} must be a list")
+    aliases: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            alias = item.strip()
+        elif isinstance(item, dict):
+            alias = str(item.get("alias", "")).strip()
+        else:
+            raise ValueError(f"{field} entries must be strings or objects with alias")
+        if alias:
+            aliases.append(alias)
+    return aliases
+
+
+def aliases_from_inventory_config(config: dict[str, Any], *, ssh_aliases: Iterable[str] | None = None) -> list[str]:
+    """Return configured SSH aliases after exclusions, preserving order."""
+
+    inventory = _inventory_section(config)
+    aliases: list[str] = []
+    if inventory.get("default_candidates"):
+        aliases.extend(default_candidate_aliases(ssh_aliases))
+    aliases.extend(_as_alias_list(inventory.get("aliases"), field="inventory.aliases"))
+    aliases.extend(_as_alias_list(inventory.get("hosts"), field="inventory.hosts"))
+    exclude = set(EXCLUDED_ALIASES)
+    exclude.update(_as_alias_list(inventory.get("exclude"), field="inventory.exclude"))
+    exclude.update(_as_alias_list(inventory.get("excludes"), field="inventory.excludes"))
+    selected: list[str] = []
+    for alias in aliases:
+        if alias in exclude or "lean4web" in alias:
+            continue
+        if alias not in selected:
+            selected.append(alias)
+    return selected
+
+
+def host_overrides_from_inventory_config(config: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Return per-host display overrides from the inventory config."""
+
+    inventory = _inventory_section(config)
+    hosts = inventory.get("hosts", [])
+    if hosts is None:
+        return {}
+    if not isinstance(hosts, list):
+        raise ValueError("inventory.hosts must be a list")
+    overrides: dict[str, dict[str, str]] = {}
+    for item in hosts:
+        if not isinstance(item, dict):
+            continue
+        alias = str(item.get("alias", "")).strip()
+        if not alias:
+            continue
+        values: dict[str, str] = {}
+        for source, target in (
+            ("display_name", "display_name"),
+            ("label", "display_name"),
+            ("name", "display_name"),
+            ("group", "group"),
+            ("connection_kind", "connection_kind"),
+        ):
+            value = str(item.get(source, "")).strip()
+            if value and target not in values:
+                values[target] = value
+        if values:
+            overrides[alias] = values
+    return overrides
+
+
+def apply_server_inventory_config(data: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    """Apply configured display metadata to collected server-status data."""
+
+    overrides = host_overrides_from_inventory_config(config)
+    if not overrides:
+        return data
+    updated = deepcopy(data)
+    for item in updated.get("servers", []):
+        if not isinstance(item, dict):
+            continue
+        alias = str(item.get("alias", ""))
+        for key, value in overrides.get(alias, {}).items():
+            item[key] = value
+    return updated
+
+
+def collection_options_from_inventory_config(config: dict[str, Any]) -> dict[str, int]:
+    """Return default collection options encoded in the Infra config."""
+
+    inventory = _inventory_section(config)
+    collection = config.get("collection", {})
+    if collection is None:
+        collection = {}
+    if not isinstance(collection, dict):
+        raise ValueError("collection section must be an object")
+    timeout = collection.get("timeout", inventory.get("timeout", 18))
+    workers = collection.get("workers", inventory.get("workers", 8))
+    return {"timeout": int(timeout), "workers": int(workers)}
+
+
+def page_options_from_inventory_config(config: dict[str, Any]) -> dict[str, str]:
+    """Return server page display options from the Infra config."""
+
+    page = config.get("page", {})
+    if page is None:
+        page = {}
+    if not isinstance(page, dict):
+        raise ValueError("page section must be an object")
+    return {
+        "page_name": str(page.get("name") or SERVER_PAGE_NAME),
+        "page_slug": str(page.get("slug") or "servers"),
+        "widget_title": str(page.get("widget_title") or page.get("title") or "服务器状态"),
+    }
 
 
 def dump_json(data: dict[str, Any]) -> str:
@@ -595,7 +734,7 @@ def parse_probe_output(alias: str, output: str, target: dict[str, str]) -> dict[
         "hostname": meta.get("hostname", ""),
         "user": meta.get("user", ""),
         "kernel": meta.get("kernel", ""),
-        "collected_at": meta.get("collected_at") or utc_now(),
+        "collected_at": meta.get("collected_at") or beijing_now(),
         "last_reboot": meta.get("last_reboot", ""),
         "uptime_seconds": meta.get("uptime_seconds", ""),
         "cpu": _cpu_from_sections(sections),
@@ -632,7 +771,7 @@ def probe_alias(alias: str, *, timeout: int = 18) -> dict[str, Any]:
             "ip": fallback_ip,
             "status": "unreachable",
             "error": "timeout",
-            "collected_at": utc_now(),
+            "collected_at": beijing_now(),
         }
     if completed.returncode != 0:
         message = " | ".join((completed.stderr or completed.stdout).strip().splitlines()[:2])
@@ -644,7 +783,7 @@ def probe_alias(alias: str, *, timeout: int = 18) -> dict[str, Any]:
             "ip": fallback_ip,
             "status": "unreachable",
             "error": message or f"ssh exit {completed.returncode}",
-            "collected_at": utc_now(),
+            "collected_at": beijing_now(),
         }
     return parse_probe_output(alias, completed.stdout, target)
 
@@ -659,7 +798,7 @@ def collect_server_status(aliases: Iterable[str], *, timeout: int = 18, workers:
     order = {"cube": 0, "public": 1, "other": 2}
     results.sort(key=lambda item: (order.get(text_value(item.get("group"), "other"), 9), text_value(item.get("display_name") or item.get("alias"), "")))
     online = sum(1 for item in results if item.get("status") == "online")
-    return {"generated_at": utc_now(), "count": len(results), "online": online, "servers": results}
+    return {"generated_at": beijing_now(), "count": len(results), "online": online, "servers": results}
 
 
 def _status_label(status: str) -> str:
@@ -809,10 +948,16 @@ def render_servers_html(data: dict[str, Any]) -> str:
 """
 
 
-def build_servers_page(data: dict[str, Any], *, page_name: str = SERVER_PAGE_NAME) -> dict[str, Any]:
+def build_servers_page(
+    data: dict[str, Any],
+    *,
+    page_name: str = SERVER_PAGE_NAME,
+    page_slug: str = "servers",
+    widget_title: str = "服务器状态",
+) -> dict[str, Any]:
     return {
         "name": page_name,
-        "slug": "servers",
+        "slug": page_slug,
         "width": "wide",
         "columns": [
             {
@@ -820,7 +965,7 @@ def build_servers_page(data: dict[str, Any], *, page_name: str = SERVER_PAGE_NAM
                 "widgets": [
                     {
                         "type": "html",
-                        "title": "服务器状态",
+                        "title": widget_title,
                         "source": render_servers_html(data),
                     }
                 ],
@@ -829,12 +974,23 @@ def build_servers_page(data: dict[str, Any], *, page_name: str = SERVER_PAGE_NAM
     }
 
 
-def replace_servers_page(config: dict[str, Any], data: dict[str, Any], *, page_name: str = SERVER_PAGE_NAME) -> dict[str, Any]:
+def replace_servers_page(
+    config: dict[str, Any],
+    data: dict[str, Any],
+    *,
+    page_name: str = SERVER_PAGE_NAME,
+    page_slug: str = "servers",
+    widget_title: str = "服务器状态",
+) -> dict[str, Any]:
     updated = deepcopy(config)
     pages = updated.setdefault("pages", [])
     if not isinstance(pages, list):
         raise ValueError("Glance config `pages` must be a list")
     legacy_names = set(LEGACY_SERVER_PAGE_NAMES) | {page_name}
-    pages[:] = [page for page in pages if not (isinstance(page, dict) and page.get("name") in legacy_names)]
-    pages.append(build_servers_page(data, page_name=page_name))
+    pages[:] = [
+        page
+        for page in pages
+        if not (isinstance(page, dict) and (page.get("name") in legacy_names or page.get("slug") == page_slug))
+    ]
+    pages.append(build_servers_page(data, page_name=page_name, page_slug=page_slug, widget_title=widget_title))
     return updated

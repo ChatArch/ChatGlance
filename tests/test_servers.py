@@ -7,8 +7,12 @@ from click.testing import CliRunner
 from chatglance.cli import main
 from chatglance.servers import (
     SERVER_PAGE_NAME,
+    aliases_from_inventory_config,
+    apply_server_inventory_config,
     build_servers_page,
+    collection_options_from_inventory_config,
     default_candidate_aliases,
+    page_options_from_inventory_config,
     parse_probe_output,
     replace_servers_page,
     render_servers_html,
@@ -17,7 +21,7 @@ from chatglance.servers import (
 
 def sample_status() -> dict:
     return {
-        "generated_at": "2026-08-11T00:00:00Z",
+        "generated_at": "2026-08-11T08:00:00+08:00",
         "count": 1,
         "online": 1,
         "servers": [
@@ -31,8 +35,8 @@ def sample_status() -> dict:
                 "hostname": "hitk",
                 "user": "zhihong",
                 "kernel": "Linux 6.8 x86_64",
-                "collected_at": "2026-08-11T00:00:01Z",
-                "last_reboot": "2026-08-09T12:34:56Z",
+                "collected_at": "2026-08-11T08:00:01+08:00",
+                "last_reboot": "2026-08-09T20:34:56+08:00",
                 "uptime_seconds": "123456",
                 "cpu": {"cores": 16, "load1": 0.4, "usage_percent": 12.5},
                 "memory": {"total_bytes": 34359738368, "available_bytes": 17179869184, "used_percent": 50.0},
@@ -82,7 +86,7 @@ def test_render_servers_html_contains_required_card_fields() -> None:
     assert "挂载目录容量" in html
     assert "使用时间" in html
     assert "getdevices 摘要" in html
-    assert "Last Reboot=2026-08-09T12:34:56Z" in html
+    assert "Last Reboot=2026-08-09T20:34:56+08:00" in html
     assert "/dev/nvme0n1" in html
     assert "服务器 1 台" in html
 
@@ -118,6 +122,29 @@ def test_default_candidate_aliases_excludes_user_excluded_targets() -> None:
     assert default_candidate_aliases(aliases) == ["hitk.cube", "auc.cube", "tencent.am"]
 
 
+def test_inventory_config_selects_hosts_and_page_options() -> None:
+    config = {
+        "page": {"name": "Infra", "slug": "infra", "widget_title": "Infra status"},
+        "inventory": {
+            "default_candidates": True,
+            "aliases": ["manual.host", "local"],
+            "exclude": ["auc.cube"],
+            "hosts": [
+                {"alias": "hitk.cube", "label": "HITK", "group": "cube"},
+                {"alias": "manual.host", "label": "Manual"},
+            ],
+        },
+        "collection": {"timeout": 30, "workers": 4},
+    }
+    ssh_aliases = ["auc.cube", "hitk.cube", "rexpc", "tencent.am"]
+    assert aliases_from_inventory_config(config, ssh_aliases=ssh_aliases) == ["hitk.cube", "tencent.am", "manual.host"]
+    assert collection_options_from_inventory_config(config) == {"timeout": 30, "workers": 4}
+    assert page_options_from_inventory_config(config) == {"page_name": "Infra", "page_slug": "infra", "widget_title": "Infra status"}
+    updated = apply_server_inventory_config(sample_status(), config)
+    assert updated["servers"][0]["display_name"] == "HITK"
+    assert updated["servers"][0]["group"] == "cube"
+
+
 def test_parse_probe_output_matches_getdevices_readonly_fields() -> None:
     output = """
 @@chatglance:meta@@
@@ -125,8 +152,8 @@ hostname=hitk
 user=zhihong
 kernel=Linux 6.8 x86_64
 ips=192.168.98.21 10.0.0.2
-collected_at=2026-08-11T00:00:01Z
-last_reboot=2026-08-09T12:34:56Z
+collected_at=2026-08-11T08:00:01+08:00
+last_reboot=2026-08-09T20:34:56+08:00
 uptime_seconds=123456
 @@chatglance:cpu@@
 cores=8
@@ -170,7 +197,7 @@ device=sda rotational=0 size=1T lvm= mountpoints=/
     ]
     assert [device["name"] for device in server["devices"]] == ["sda", "sda1"]
     assert server["getdevices"][0]["drive_type"] == "固态"
-    assert server["last_reboot"] == "2026-08-09T12:34:56Z"
+    assert server["last_reboot"] == "2026-08-09T20:34:56+08:00"
     assert server["uptime_seconds"] == "123456"
 
 
@@ -189,17 +216,39 @@ def test_cli_servers_render_and_update_config(tmp_path) -> None:
         encoding="utf-8",
     )
     runner = CliRunner()
-    result = runner.invoke(main, ["servers", "render-page", "--data", str(data_path), "--output", str(page_path)])
+    inventory_path = tmp_path / "server-inventory.yml"
+    inventory_path.write_text(
+        "page:\n"
+        "  name: Infra\n"
+        "  slug: infra\n"
+        "  widget_title: Infra status\n",
+        encoding="utf-8",
+    )
+    result = runner.invoke(main, ["servers", "render-page", "--data", str(data_path), "--inventory-config", str(inventory_path), "--output", str(page_path)])
     assert result.exit_code == 0, result.output
-    assert "name: 服务器" in page_path.read_text(encoding="utf-8")
+    assert "name: Infra" in page_path.read_text(encoding="utf-8")
+    assert "slug: infra" in page_path.read_text(encoding="utf-8")
+    assert "title: Infra status" in page_path.read_text(encoding="utf-8")
 
     result = runner.invoke(
         main,
-        ["servers", "update-config", "--data", str(data_path), "--config", str(config_path), "--output", str(output_path)],
+        [
+            "servers",
+            "update-config",
+            "--data",
+            str(data_path),
+            "--inventory-config",
+            str(inventory_path),
+            "--config",
+            str(config_path),
+            "--output",
+            str(output_path),
+        ],
     )
     assert result.exit_code == 0, result.output
     rendered = output_path.read_text(encoding="utf-8")
     assert "name: ChatArch" in rendered
     assert "name: 项目" in rendered
-    assert "name: 服务器" in rendered
+    assert "name: Infra" in rendered
+    assert "slug: infra" in rendered
     assert "172.23.148.35" in rendered
