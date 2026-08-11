@@ -204,9 +204,12 @@ def test_build_project_inventory_classifies_from_actual_cli_tree_over_stale_over
     by_name = {item["name"]: item for item in inventory["repositories"]}
 
     assert by_name["ChatCI"]["cli"]["actual_tree"]["business_command_count"] == 0
+    assert by_name["ChatCI"]["category"] == "python-early"
     assert category_key(by_name["ChatCI"]) == "python-early"
     assert display_category(by_name["ChatCI"]) == "Python (early)"
     assert by_name["ChatCRS"]["cli"]["actual_tree"]["business_command_count"] == 8
+    assert by_name["ChatCRS"]["reviewed_category"] == "python-early"
+    assert by_name["ChatCRS"]["category"] == "python-package"
     assert category_key(by_name["ChatCRS"]) == "python-package"
     assert display_category(by_name["ChatCRS"]) == "Python 包"
     assert inventory["counts"]["with_actual_cli_tree"] == 2

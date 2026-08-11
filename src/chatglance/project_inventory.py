@@ -556,12 +556,14 @@ def enrich_repository(
     baseline = _as_dict(baseline_item)
     baseline_category = str(baseline.get("category") or "").strip()
     if baseline_category:
+        item["reviewed_category"] = baseline_category
         item["category"] = baseline_category
 
     item["package"] = package
     if actual_cli_tree_fetcher and package.get("python_name"):
         enrich_actual_cli_tree(item, fetcher=actual_cli_tree_fetcher, timeout=cli_tree_timeout)
     item["evidence"] = evidence
+    item["category"] = category_key(item)
     item["category_label"] = display_category(item)
     return item
 
