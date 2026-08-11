@@ -24,7 +24,7 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 - `tests/`: regression tests for project pages, Disk mountpoint visibility, runtime/systemd helpers, and release workflow contracts.
 - `docs/quickstart.md`: new-machine quick start that keeps Glance frontend config primary and `chatglance` as a management helper.
 - `docs/site-architecture.md`: boundary between ChatGlance as a Python package, the Glance runtime, generated config, and runtime data refresh scripts.
-- `docs/projects.md`: project-page display contract, PyPI-only version rule, entrypoint-only CLI rule, baseline categories, and refresh review checklist.
+- `docs/projects.md`: project-page display contract, PyPI-only version rule, entrypoint-only display rule, actual CLI-tree classification evidence, and refresh review checklist.
 - `docs/infra.md`: configuration mechanism, external data-generation chain, refresh workflow, and cron/timer template for the Infra/`服务器` page.
 - `docs/deployment/current-site.md`: private repository-only deployment record for the current live Glance site. It is excluded from public package artifacts.
 - `examples/server-inventory.example.yml`: sanitized inventory config template. The real inventory belongs in the runtime config directory.
@@ -34,7 +34,7 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 
 ## Current capabilities
 
-- Refresh repository inventory JSON from current ChatGH/GitHub data and render a Glance `项目` page with a visible `generated_at` refresh timestamp; version display is PyPI-only, CLI display is package-entrypoint-only, and reviewed categories such as `Python (early)` are preserved via baseline inventory instead of being overwritten by CLI subcommand surface.
+- Refresh repository inventory JSON from current ChatGH/GitHub data and render a Glance `项目` page with a visible `generated_at` refresh timestamp; version display is PyPI-only, the compact table shows package entrypoints only, and Python early/non-early classification is corrected from latest-PyPI actual CLI tree/help evidence while stale baseline categories remain audit evidence only.
 - Keep the current tabs limited to `最近提交`, `待处理 PR / Issue`, `分类`, and `一览表`.
 - Filter the triage tab to repositories with non-zero PR or Issue counts and sort by `(PR, Issue, recent commit)` descending.
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.
@@ -58,7 +58,7 @@ python -m pytest -q
 python -m build
 ```
 
-The recommended `项目` refresh entry point is also a repository script. It uses the current ChatGH repository list for PR/Issue/timestamp fields, then reads default-branch manifest/CLI source evidence without running repository code. Private repository contents use `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN` when present, otherwise the script reuses the repo-local GitHub credential configured by `chatgh set-token` in the current ChatGlance checkout without printing it:
+The recommended `项目` refresh entry point is also a repository script. It uses the current ChatGH repository list for PR/Issue/timestamp fields, then reads default-branch manifest/entrypoint evidence without cloning, building, or executing repository source trees. For Python package maturity, it probes the latest published PyPI package with `uvx --from <package>@latest <entrypoint> --tree` or help fallback and writes `project-cli-tree-report.tsv` as audit evidence. Private repository contents use `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN` when present, otherwise the script reuses the repo-local GitHub credential configured by `chatgh set-token` in the current ChatGlance checkout without printing it:
 
 ```bash
 CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \

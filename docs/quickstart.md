@@ -21,6 +21,7 @@
   config/backups/                    # 替换前备份
   data/chatarch-projects.json        # 生成的项目页仓库清单快照
   data/projects-page.yml             # 生成的项目页 Glance YAML
+  data/project-cli-tree-report.tsv   # 生成的 Python CLI tree 分类审计 TSV
   data/server-status.json            # 生成的服务器状态快照
   data/server-page.yml               # 生成的服务器页 Glance YAML
   cache/                             # 其它可再生成缓存
@@ -154,7 +155,7 @@ collection:
 
 ## 4. 先预览再更新
 
-项目页先刷新当前 GitHub/ChatGH 数据。这个命令会更新 PR/Issue/时间字段，并只读读取默认分支的 `pyproject.toml`、`package.json` 和 CLI 源码形状；它不会 clone、install 或执行各仓库代码。private repo 内容读取优先使用 `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`，否则复用当前 ChatGlance checkout 里 `chatgh set-token` 配好的 repo-local GitHub credential，不打印 token：
+项目页先刷新当前 GitHub/ChatGH 数据。这个命令会更新 PR/Issue/时间字段，并只读读取默认分支的 `pyproject.toml`、`package.json` 和入口声明；它不会 clone、build 或执行各仓库源码。为了判断 Python 包是否已经具备真实业务 CLI，它会默认用 `uvx --from <package>@latest <entrypoint> --tree` 安装并探测 latest PyPI 包的 CLI tree，必要时 fallback 到 help 输出。private repo 内容读取优先使用 `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`，否则复用当前 ChatGlance checkout 里 `chatgh set-token` 配好的 repo-local GitHub credential，不打印 token：
 
 ```bash
 chatglance projects collect \
@@ -255,12 +256,13 @@ bash scripts/refresh-server-status.sh
 
 项目页脚本做的事：
 
-1. `projects collect` 用 ChatGH 当前 repo 列表生成 `chatarch-projects.json`。
-2. `projects render-page` 生成 `projects-page.yml`。
-3. `projects update-config` 生成 `glance.yml.projects-candidate`。
-4. 运行 `glance ... config:validate`。
-5. 如果内容变化，备份旧 `glance.yml` 并替换。
-6. 输出 `changed=true/false`，给外层 cron、timer 或人工流程判断。
+1. `projects collect` 用 ChatGH 当前 repo 列表生成 `chatarch-projects.json`，并用 latest PyPI actual CLI tree/help 证据校正 Python early/non-early 分类。
+2. 写出 `project-cli-tree-report.tsv`，记录 entrypoint 数、actual business command 数、命令名和分类结果，便于审计 `ChatCI` / `ChatCRS` 这类样本。
+3. `projects render-page` 生成 `projects-page.yml`。
+4. `projects update-config` 生成 `glance.yml.projects-candidate`。
+5. 运行 `glance ... config:validate`。
+6. 如果内容变化，备份旧 `glance.yml`、项目 JSON、项目 page YAML 和 CLI-tree TSV，再一起替换。
+7. 输出 `changed=true/false`，给外层 cron、timer 或人工流程判断。
 
 服务器页脚本做的事：
 
@@ -304,11 +306,11 @@ bash scripts/refresh-server-status.sh
 
 `Python (early)` 的判断标准：
 
-1. inventory 已经标成 `python-package-template/early`、`template/early` 或 `python-early`。
-2. 或者它像 Python 包（例如有 `pyproject.toml`、`package.python_name` 或 language 是 Python），但 CLI 还只有一个入口名，没有可展开的实体命令树。
-3. 或者 CLI surface 只有全局 option flags，例如 `--help`、`--version`，没有面向业务对象/资源的实体命令。
+1. actual CLI tree/help 里没有业务子命令，只有入口名或全局 option flags，例如 `--help`、`--version`、`--tree`。
+2. 或者描述、baseline、manifest 等证据明确说明它是 placeholder、scaffold、PyPI name registration 之类早期包。
+3. 旧 inventory 中的 `python-package-template/early`、`template/early` 或 `python-early` 可以作为 reviewed evidence 保留，但不能压过当前 actual CLI tree。
 
-成熟 Python 包的优先信号：最新 manifest/CLI 源码里已经能看到多个实体子命令或 expanded command tree。这个信号会覆盖旧 inventory 里的 early/template 分类，避免 `ChatCRS` 这类已经成熟的包继续被旧快照误标。
+成熟 Python 包的优先信号：latest PyPI 包的 `<entrypoint> --tree` 或 help 输出里能看到面向业务对象/资源的实体子命令。这个信号会覆盖旧 inventory 里的 early/template 分类，避免 `ChatCRS` 这类已经成熟的包继续被旧快照误标。
 
 这会把 `ChatFlow`、`ChatExplore`、`ChatSMTP`、`ChatSync` 这类 placeholder/entrypoint-only package 从普通 `Python 包` 校正到 `Python (early)`，同时让已有实体命令面的 `ChatCRS` 显示为 `Python 包`。
 
