@@ -148,23 +148,49 @@ def projects() -> None:
 @click.option("--baseline-data", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Prior project inventory JSON whose reviewed categories should be preserved.")
 @click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Inventory JSON path to write.")
 @click.option("--chatgh-bin", default="chatgh", show_default=True, help="ChatGH executable used for authenticated repo listing.")
+@click.option("--uvx-bin", default="uvx", show_default=True, help="uvx executable used to install latest PyPI packages for actual CLI tree collection.")
 @click.option("--limit", default=500, show_default=True, type=int, help="Maximum repositories to request from ChatGH.")
 @click.option("--workers", default=12, show_default=True, type=int, help="Parallel GitHub contents workers for manifest reads.")
 @click.option("--timeout", default=12, show_default=True, type=int, help="Per-file GitHub contents timeout in seconds.")
-def collect_projects(owner: str, repo_list_json: Path | None, baseline_data: Path | None, output_path: Path, chatgh_bin: str, limit: int, workers: int, timeout: int) -> None:
+@click.option("--actual-cli-tree/--no-actual-cli-tree", default=False, show_default=True, help="Install latest PyPI packages with uvx and classify from each entrypoint's actual CLI tree.")
+@click.option("--cli-tree-timeout", default=90, show_default=True, type=int, help="Per-entrypoint uvx/CLI tree timeout in seconds.")
+def collect_projects(
+    owner: str,
+    repo_list_json: Path | None,
+    baseline_data: Path | None,
+    output_path: Path,
+    chatgh_bin: str,
+    uvx_bin: str,
+    limit: int,
+    workers: int,
+    timeout: int,
+    actual_cli_tree: bool,
+    cli_tree_timeout: int,
+) -> None:
     """Refresh project inventory JSON from ChatGH and read-only repository metadata."""
 
     inventory = refresh_project_inventory(
         output_path=output_path,
         repo_list_json=repo_list_json,
         baseline_data=baseline_data,
-        options=RefreshOptions(owner=owner, limit=limit, workers=workers, timeout=timeout, chatgh_bin=chatgh_bin),
+        options=RefreshOptions(
+            owner=owner,
+            limit=limit,
+            workers=workers,
+            timeout=timeout,
+            chatgh_bin=chatgh_bin,
+            uvx_bin=uvx_bin,
+            collect_actual_cli_trees=actual_cli_tree,
+            cli_tree_timeout=cli_tree_timeout,
+        ),
     )
     counts_obj = inventory.get("counts")
     counts = counts_obj if isinstance(counts_obj, dict) else {}
     repo_count = counts.get("visible_repos", 0)
     open_prs = counts.get("total_open_prs", 0)
     open_issues = counts.get("total_open_issues", 0)
+    actual_trees = counts.get("with_actual_cli_tree", 0)
+    actual_business = counts.get("with_actual_cli_business_commands", 0)
     click.echo(
         " ".join(
             [
@@ -173,6 +199,8 @@ def collect_projects(owner: str, repo_list_json: Path | None, baseline_data: Pat
                 f"repos={repo_count}",
                 f"open_prs={open_prs}",
                 f"open_issues={open_issues}",
+                f"actual_cli_trees={actual_trees}",
+                f"actual_cli_business={actual_business}",
             ]
         )
     )
