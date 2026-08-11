@@ -20,16 +20,16 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 
 ## Repository contents
 
-- `src/chatglance/`: helper code for page generation, Glance YAML patching, runtime maintenance, and user-level systemd unit rendering/installation.
+- `src/chatglance/`: helper code for project, server, and website-service card page generation, Glance YAML patching, runtime maintenance, and user-level systemd unit rendering/installation.
 - `tests/`: regression tests for project pages, Disk mountpoint visibility, runtime/systemd helpers, and release workflow contracts.
 - `docs/quickstart.md`: new-machine quick start that keeps Glance frontend config primary and `chatglance` as a management helper.
 - `docs/site-architecture.md`: boundary between ChatGlance as a Python package, the Glance runtime, generated config, and runtime data refresh scripts.
 - `docs/projects.md`: project-page display contract, PyPI-only version rule, entrypoint-only display rule, actual CLI-tree classification evidence, and refresh review checklist.
 - `docs/infra.md`: configuration mechanism, external data-generation chain, refresh workflow, and cron/timer template for the Infra/`服务器` page.
 - `docs/deployment/current-site.md`: private repository-only deployment record for the current live Glance site. It is excluded from public package artifacts.
-- `examples/server-inventory.example.yml`: sanitized inventory config template. The real inventory belongs in the runtime config directory.
+- `examples/server-inventory.example.yml` / `examples/site-services.example.yml`: sanitized inventory config templates. Real inventories belong in the runtime config directory.
 - `scripts/refresh-projects-page.sh`: script template that refreshes current GitHub/ChatGH project data, renders the `项目` page, validates a candidate config, and safely replaces it.
-- `scripts/refresh-server-status.sh`: external refresh script template for manual runs, cron, or a systemd user timer.
+- `scripts/refresh-server-status.sh` / `scripts/refresh-sites-page.sh`: external refresh script templates for manual runs, cron, or systemd user timers.
 - `README.md` / `README.en.md` / `CHANGELOG.md`: collaboration and package-facing entry points; do not include live auth, tokens, password hashes, proxy credentials, or secret-bearing files.
 
 ## Current capabilities
@@ -41,6 +41,7 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 - Patch Glance `server-stats` to show only selected meaningful disks. The current live policy keeps `/` and adds `/home` only when it is a separate mountpoint; each visible entry is written with `hide: false` so the Disk card does not render `n/a`, while snap/loop/tmp overlays stay hidden.
 - Select SSH aliases from an Infra inventory YAML, collect a read-only static `server-status.json`, and render the Glance `服务器`/Infra page from that snapshot.
 - Keep collapsed server cards limited to IP/CPU/memory/disk/status while GPU, mountpoints, filtered `lsblk`, safe `getdevices` summaries, and `Last Reboot` stay in expandable details.
+- Generate a reviewed `网站服务` page from `site-services.yml`: one cover image, description, health status, Uptime detail link, and public jump button per service. Local hosts are used only for probing/operator config and are not shown on the human-facing page.
 - Maintain a durable runtime with `runtime maintain`: atomic live-config update, backup, and validation; service lifecycle actions stay outside the default docs examples.
 - Render and install user-level systemd units: the main service still starts the upstream Glance Go binary directly; maintenance is an independent oneshot/timer, not a Python server wrapper.
 - Install, enable, start, and read back the current Glance page user service/timer from the CLI.
@@ -82,6 +83,18 @@ bash scripts/refresh-server-status.sh
 ```
 
 The script calls `chatglance servers collect/render-page/update-config`, writes a candidate config, runs `glance config:validate`, then backs up/replaces the live config when content changed; service-manager actions stay in the outer cron/systemd wrapper or a manual operator step. See [`docs/infra.md`](docs/infra.md) for the full mechanism.
+
+The `网站服务` page refresh uses a fixed reviewed inventory and does not auto-scan Nginx. Covers can be generated as SVG files with `chatglance sites export-covers`, uploaded to Share or another image host, and persisted as `cover_url` values in the runtime inventory. If a service lacks `cover_url`, the page uses an inline generated SVG fallback:
+
+```bash
+cp examples/site-services.example.yml ~/.chatarch/glance/config/site-services.yml
+$EDITOR ~/.chatarch/glance/config/site-services.yml
+
+CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
+CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
+CHATGLANCE_SITES_CONFIG=~/.chatarch/glance/config/site-services.yml \
+bash scripts/refresh-sites-page.sh
+```
 
 ## CLI examples
 
@@ -145,6 +158,30 @@ chatglance servers update-config \
   --output ~/.chatarch/glance/config/glance.yml.infra-candidate
 ```
 
+Generate website-service data, covers, and page YAML:
+
+```bash
+chatglance sites collect \
+  --inventory-config ~/.chatarch/glance/config/site-services.yml \
+  --gatus-db ~/.chatarch/uptime-gatus/data/gatus.db \
+  --output ~/.chatarch/glance/data/site-services.json
+
+chatglance sites export-covers \
+  --data ~/.chatarch/glance/data/site-services.json \
+  --output-dir playground/site-covers \
+  --public-base-url https://share.public.wzhecnu.cn/chatglance-site-covers/ \
+  --updated-data ~/.chatarch/glance/data/site-services.json
+
+chatglance sites render-page \
+  --data ~/.chatarch/glance/data/site-services.json \
+  --output ~/.chatarch/glance/data/site-services-page.yml
+
+chatglance sites update-config \
+  --data ~/.chatarch/glance/data/site-services.json \
+  --config ~/.chatarch/glance/config/glance.yml \
+  --output ~/.chatarch/glance/config/glance.yml.sites-candidate
+```
+
 Maintain a durable Glance runtime (default `~/.chatarch/glance`):
 
 ```bash
@@ -184,7 +221,7 @@ Recommended topology: **systemd runs Glance directly; chatglance performs mainte
 - Main service: `chatarch-glance.service` executes `~/.chatarch/glance/bin/glance -config ~/.chatarch/glance/config/glance.yml` directly.
 - Reusable source, scripts, and docs live inside the ChatArch/ChatGlance repository, for example `src/chatglance/`, `scripts/`, `docs/`, and `examples/`.
 - Content data: repository inventory JSON, caches, and generated snapshots live under the ChatArch-owned runtime at `~/.chatarch/glance/data/` or `~/.chatarch/glance/cache/`.
-- Infra inventory: the real `server-inventory.yml` is runtime config that defines which SSH aliases are marked as Infra; generated `chatarch-projects.json`, `projects-page.yml`, `server-status.json`, and `server-page.yml` are runtime static snapshots, not source.
+- Infra/site inventory: the real `server-inventory.yml` and `site-services.yml` are runtime config; generated `chatarch-projects.json`, `projects-page.yml`, `server-status.json`, `server-page.yml`, `site-services.json`, and `site-services-page.yml` are runtime static snapshots, not source.
 - Live config: `~/.chatarch/glance/config/glance.yml`; backups go under `~/.chatarch/glance/config/backups/` before replacement.
 - Maintenance: `chatglance runtime maintain` is a oneshot command and can be scheduled by `chatarch-glance-maintenance.timer`.
 - Install/start: `chatglance runtime install-systemd --start` and `chatglance runtime start` use only user-level systemd and never write `/etc/systemd`.

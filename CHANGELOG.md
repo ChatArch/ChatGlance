@@ -11,6 +11,7 @@
 - Add visible `刷新时间` / `generated_at` information to the generated `项目` page overview so PR/Issue data freshness is explicit.
 - Normalize early Python package display on the `项目` page to `Python (early)` while deriving Python maturity from latest-PyPI actual CLI tree/help evidence; stale early/template categories are retained only as reviewed audit evidence and cannot demote complex packages such as ChatCRS.
 - Keep regenerated `项目` pages immediately after the `ChatArch` home page, before `服务器`, instead of appending them to the end of the navigation.
+- Add reviewed `网站服务` page generation with card layout, generated/hosted SVG cover support, public jump links, Uptime detail links, fixed `site-services.yml` inventory, and `scripts/refresh-sites-page.sh` candidate-validation workflow.
 
 ## 0.1.2 - 2026-08-09
 

@@ -18,12 +18,15 @@
   bin/glance                         # upstream Glance Go binary
   config/glance.yml                  # live Glance config，前端配置主入口
   config/server-inventory.yml        # Infra/服务器页 inventory，runtime config
+  config/site-services.yml           # 网站服务页 reviewed inventory，runtime config
   config/backups/                    # 替换前备份
   data/chatarch-projects.json        # 生成的项目页仓库清单快照
   data/projects-page.yml             # 生成的项目页 Glance YAML
   data/project-cli-tree-report.tsv   # 生成的 Python CLI tree 分类审计 TSV
   data/server-status.json            # 生成的服务器状态快照
   data/server-page.yml               # 生成的服务器页 Glance YAML
+  data/site-services.json            # 生成的网站服务卡片快照
+  data/site-services-page.yml        # 生成的网站服务页 Glance YAML
   cache/                             # 其它可再生成缓存
   logs/                              # 外层调度器日志
 ```
@@ -34,8 +37,10 @@
 docs/quickstart.md                   # 本页面
 docs/infra.md                        # Infra 刷新机制细节
 examples/server-inventory.example.yml
+examples/site-services.example.yml
 scripts/refresh-projects-page.sh
 scripts/refresh-server-status.sh
+scripts/refresh-sites-page.sh
 src/chatglance/
 ```
 
@@ -105,6 +110,7 @@ pages:
 - `html` widget 里的 HTML/CSS
 - `项目` 页的数据来源和表格文案
 - `服务器` 页卡片文案、展开字段、颜色和分组
+- `网站服务` 页卡片文案、封面图、public 跳转和 Uptime 状态入口
 
 CLI 应该只是帮你把这些片段稳定生成出来，而不是把前端自由度锁死。
 
@@ -222,6 +228,37 @@ chatglance servers update-config \
 ```bash
 ~/.chatarch/glance/bin/glance -config ~/.chatarch/glance/config/glance.yml.infra-candidate config:validate
 ```
+
+网站服务页从固定 reviewed inventory 渲染，不自动扫描 Nginx。local host 只用于 Gatus/local vhost 探测，不展示到前端页面；人类入口只显示 public 跳转：
+
+```bash
+cp examples/site-services.example.yml ~/.chatarch/glance/config/site-services.yml
+$EDITOR ~/.chatarch/glance/config/site-services.yml
+
+chatglance sites collect \
+  --inventory-config ~/.chatarch/glance/config/site-services.yml \
+  --gatus-db ~/.chatarch/uptime-gatus/data/gatus.db \
+  --output ~/.chatarch/glance/data/site-services.json
+
+chatglance sites export-covers \
+  --data ~/.chatarch/glance/data/site-services.json \
+  --output-dir playground/site-covers \
+  --public-base-url https://share.public.wzhecnu.cn/chatglance-site-covers/ \
+  --updated-data ~/.chatarch/glance/data/site-services.json
+
+chatglance sites render-page \
+  --data ~/.chatarch/glance/data/site-services.json \
+  --output ~/.chatarch/glance/data/site-services-page.yml
+
+chatglance sites update-config \
+  --data ~/.chatarch/glance/data/site-services.json \
+  --config ~/.chatarch/glance/config/glance.yml \
+  --output ~/.chatarch/glance/config/glance.yml.sites-candidate
+
+~/.chatarch/glance/bin/glance -config ~/.chatarch/glance/config/glance.yml.sites-candidate config:validate
+```
+
+如果 inventory 里已经写了 `cover_url`（例如 Share 图床 URL），页面直接使用该图片；否则会使用内联 SVG 兜底。
 
 确认通过后，再把 candidate 提升为 live config，并保留备份：
 

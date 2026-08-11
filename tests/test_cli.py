@@ -27,4 +27,7 @@ def test_tree_option_prints_registered_cli_tree():
     assert "render-systemd" in result.output
     assert "install-systemd" in result.output
     assert "start" in result.output
+    assert "servers" in result.output
+    assert "sites" in result.output
+    assert "export-covers" in result.output
     assert "status" in result.output
