@@ -55,6 +55,8 @@ bash /home/zhihong/Playground/core/ChatGlance/scripts/refresh-projects-page.sh
 
 By default the script uses the current runtime inventory JSON as `--baseline-data` before writing the next snapshot. This preserves reviewed categories while updating current repo counts, PR/Issue counts, PyPI versions, entrypoints, and `generated_at`.
 
+The script stages generated artifacts before touching the live files: it writes `chatarch-projects.json.next` and `projects-page.yml.next`, builds `glance.yml.projects-candidate`, validates the candidate with the Glance binary, then backs up and replaces the live JSON, page YAML, and config together. A failed validation must not leave a new page YAML paired with old data/config.
+
 The script writes:
 
 ```text
@@ -69,7 +71,7 @@ It validates the candidate with:
 $CHATGLANCE_RUNTIME_HOME/bin/glance -config $CHATGLANCE_RUNTIME_HOME/config/glance.yml.projects-candidate config:validate
 ```
 
-If validation passes and the candidate differs, it backs up the live config and data, then replaces the live config. It intentionally does **not** restart or reload the Glance service; the operator or an outer wrapper owns service lifecycle.
+If validation passes and the candidate differs, it backs up the live config, data, and page YAML, then replaces the live config/data/page artifacts. It intentionally does **not** restart or reload the Glance service; the operator or an outer wrapper owns service lifecycle.
 
 ## Required review before live
 
