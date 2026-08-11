@@ -26,7 +26,10 @@ def replace_projects_page(config: dict[str, Any], inventory: dict[str, Any], *, 
     """Return a config copy where the generated projects page is replaced.
 
     This function does not mutate the input mapping. It removes old generated page
-    names and then replaces/appends the current `page_name` page.
+    names and then inserts the current `page_name` page immediately after the
+    `ChatArch` home page when present. That keeps the live navigation stable as
+    `ChatArch`, `项目`, `服务器` instead of appending generated content after newer
+    pages.
     """
 
     updated = deepcopy(config)
@@ -35,7 +38,12 @@ def replace_projects_page(config: dict[str, Any], inventory: dict[str, Any], *, 
         raise ValueError("Glance config `pages` must be a list")
     legacy_names = set(LEGACY_PAGE_NAMES) | {page_name}
     pages[:] = [page for page in pages if not (isinstance(page, dict) and page.get("name") in legacy_names)]
-    pages.append(build_projects_page(inventory, page_name=page_name))
+    new_page = build_projects_page(inventory, page_name=page_name)
+    insert_at = next((index + 1 for index, page in enumerate(pages) if isinstance(page, dict) and page.get("name") == "ChatArch"), None)
+    if insert_at is None:
+        pages.append(new_page)
+    else:
+        pages.insert(insert_at, new_page)
     return updated
 
 

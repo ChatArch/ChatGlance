@@ -23,8 +23,10 @@ The `chatglance` command is the helper used to apply these rules to the live run
 - Upstream process: upstream Glance Go binary served on localhost behind Nginx/public-entry routing.
 - Runtime home: `/home/zhihong/.chatarch/glance`
 - Runtime config: `/home/zhihong/.chatarch/glance/config/glance.yml`
-- Runtime inventory snapshot: `/home/zhihong/.chatarch/glance/data/chatarch-projects.json`
+- Runtime project snapshot: `/home/zhihong/.chatarch/glance/data/chatarch-projects.json`
+- Runtime project page YAML snapshot: `/home/zhihong/.chatarch/glance/data/projects-page.yml`
 - Runtime server-status snapshot: `/home/zhihong/.chatarch/glance/data/server-status.json`
+- Runtime server page YAML snapshot: `/home/zhihong/.chatarch/glance/data/server-page.yml`
 - Standard ChatArch Python venv for helper CLI: `/home/zhihong/.chatarch/venv`
 
 Live auth settings, password hashes, cookies, proxy credentials, and token-bearing files remain outside Git and are not copied into this repository.
@@ -53,16 +55,19 @@ Maintenance flow:
 `ChatGlance` owns these safe transformations:
 
 1. Replace legacy generated project pages with the current `项目` page.
-2. Render the current tabs:
+2. Keep regenerated `项目` immediately after `ChatArch`, before `服务器`, so the live navigation stays `ChatArch` → `项目` → `服务器`.
+3. Refresh project inventory data from current ChatGH/GitHub metadata before rendering; the generated page overview includes `刷新时间` / `generated_at` so stale PR/Issue counts are visible.
+4. Normalize project type labels for the frontend: early Python packages render as `Python (early)`, including `python-package-template/early` and Python CLIs that only expose an entrypoint or global option flags; expanded current CLI surfaces override stale early/template categories.
+5. Render the current tabs:
    - `最近提交`
    - `待处理 PR / Issue`
    - `分类`
    - `一览表`
-3. Hide unhelpful Disk mountpoints such as snap/loop/tmp/overlay entries.
-4. Keep only meaningful local disks:
+6. Hide unhelpful Disk mountpoints such as snap/loop/tmp/overlay entries.
+7. Keep only meaningful local disks:
    - always `/` as `根分区`;
    - include `/home` as `Home` only when `/home` is a distinct mountpoint on the host.
-5. With Glance `hide-mountpoints-by-default: true`, every visible mountpoint must explicitly include `hide: false`.
+8. With Glance `hide-mountpoints-by-default: true`, every visible mountpoint must explicitly include `hide: false`.
 
 Correct Disk config shape:
 
@@ -94,6 +99,23 @@ Fix committed for `ChatGlance==0.1.2`:
 - `patch_server_stats_mountpoints()` writes `{name: <label>, hide: false}` for every selected mountpoint.
 - `runtime maintain` discovers meaningful mountpoints on the live host.
 - `/home` is not added on the current host because it is not a separate mountpoint from `/`.
+
+## Project page live note
+
+Date: 2026-08-11
+
+The `项目` page is rendered from the ChatArch-owned runtime snapshot at `/home/zhihong/.chatarch/glance/data/chatarch-projects.json`. Refreshes should use the bundled ChatGlance repo script, not ad-hoc files outside the ChatArch/ChatGlance project:
+
+```bash
+CHATGLANCE_BIN=/home/zhihong/.chatarch/venv/bin/chatglance \
+CHATGH_BIN=/home/zhihong/.chatarch/venv/bin/chatgh \
+CHATGLANCE_RUNTIME_HOME=/home/zhihong/.chatarch/glance \
+bash scripts/refresh-projects-page.sh
+```
+
+The script performs `projects collect`, `projects render-page`, `projects update-config`, and `glance -config ... config:validate`; it then backs up/replaces the live config only when content changes. It uses ChatGH for the authenticated repo list and either token environment variables or the ChatGlance repo-local GitHub credential for private repository contents. It does not store GitHub tokens or live auth secrets, and it does not perform service-manager actions.
+
+The generated overview includes `刷新时间` / `generated_at` so stale PR/Issue counts are visible. Reusable scripts and code live in ChatArch/ChatGlance; validation snapshots for this work stay under the ChatArch workspace project `projects/chatarch/chatglance/playground/`, not workspace root or `/tmp`.
 
 ## Server page live note
 
@@ -132,7 +154,7 @@ bash scripts/refresh-server-status.sh
 
 Manual command equivalence is documented in `docs/infra.md`: `chatglance servers collect --inventory-config ...`, `render-page --inventory-config ...`, and `update-config --inventory-config ...`, followed by `glance -config ... config:validate`; service-manager actions stay outside the bundled refresh script and run only from the scheduler/operator boundary when needed.
 
-For the first live install, the validated page was appended to the runtime config directly, because this was a live-page task and the formal PR/PyPI release was intentionally deferred. The PR now records the repeatable inventory/config/refresh mechanism for future updates.
+The repeatable PR path now records the inventory/config/refresh mechanism. Live changes should be applied through a validated candidate config, with a timestamped backup before replacement and a user-service lifecycle action only after validation succeeds.
 
 ## Verification checklist
 

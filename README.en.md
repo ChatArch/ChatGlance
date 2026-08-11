@@ -22,15 +22,17 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 
 - `src/chatglance/`: helper code for page generation, Glance YAML patching, runtime maintenance, and user-level systemd unit rendering/installation.
 - `tests/`: regression tests for project pages, Disk mountpoint visibility, runtime/systemd helpers, and release workflow contracts.
+- `docs/quickstart.md`: new-machine quick start that keeps Glance frontend config primary and `chatglance` as a management helper.
 - `docs/infra.md`: configuration mechanism, external data-generation chain, refresh workflow, and cron/timer template for the Infra/`服务器` page.
 - `docs/deployment/current-site.md`: private repository-only deployment record for the current live Glance site. It is excluded from public package artifacts.
 - `examples/server-inventory.example.yml`: sanitized inventory config template. The real inventory belongs in the runtime config directory.
+- `scripts/refresh-projects-page.sh`: script template that refreshes current GitHub/ChatGH project data, renders the `项目` page, validates a candidate config, and safely replaces it.
 - `scripts/refresh-server-status.sh`: external refresh script template for manual runs, cron, or a systemd user timer.
 - `README.md` / `README.en.md` / `CHANGELOG.md`: collaboration and package-facing entry points; do not include live auth, tokens, password hashes, proxy credentials, or secret-bearing files.
 
 ## Current capabilities
 
-- Render a Glance `项目` page from repository inventory JSON.
+- Refresh repository inventory JSON from current ChatGH/GitHub data and render a Glance `项目` page with a visible `generated_at` refresh timestamp; project type display normalizes long early-package labels, so `python-package-template/early` or Python CLIs with only an entrypoint / global `--help` and `--version` option flags show as `Python (early)`, while packages with real subcommands in current source show as `Python 包`.
 - Keep the current tabs limited to `最近提交`, `待处理 PR / Issue`, `分类`, and `一览表`.
 - Filter the triage tab to repositories with non-zero PR or Issue counts and sort by `(PR, Issue, recent commit)` descending.
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.
@@ -43,6 +45,8 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 
 ## Quick start
 
+For a new machine that should host a similar but still highly customizable Glance site, start with [`docs/quickstart.md`](docs/quickstart.md): `glance.yml` / widgets / HTML/CSS remain the primary frontend configuration surface, while `chatglance` only manages collection, rendering, validation, backup, and replacement.
+
 ```bash
 pip install -e ".[dev]"
 chatglance --help
@@ -51,6 +55,17 @@ chatglance --version
 python -m pytest -q
 python -m build
 ```
+
+The recommended `项目` refresh entry point is also a repository script. It uses the current ChatGH repository list for PR/Issue/timestamp fields, then reads default-branch manifest/CLI source evidence without running repository code. Private repository contents use `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN` when present, otherwise the script reuses the repo-local GitHub credential configured by `chatgh set-token` in the current ChatGlance checkout without printing it:
+
+```bash
+CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
+CHATGH_BIN=~/.chatarch/venv/bin/chatgh \
+CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
+bash scripts/refresh-projects-page.sh
+```
+
+The generated project overview includes a `刷新时间` item so operators can see when the PR/Issue data was refreshed.
 
 The recommended Infra/`服务器` refresh entry point is the external script, not hand-editing JSON:
 
@@ -67,6 +82,15 @@ bash scripts/refresh-server-status.sh
 The script calls `chatglance servers collect/render-page/update-config`, writes a candidate config, runs `glance config:validate`, then backs up/replaces the live config when content changed; service-manager actions stay in the outer cron/systemd wrapper or a manual operator step. See [`docs/infra.md`](docs/infra.md) for the full mechanism.
 
 ## CLI examples
+
+Refresh current GitHub/ChatGH project data:
+
+```bash
+chatglance projects collect \
+  --owner ChatArch \
+  --chatgh-bin ~/.chatarch/venv/bin/chatgh \
+  --output ~/.chatarch/glance/data/chatarch-projects.json
+```
 
 Render only the project page YAML:
 
@@ -156,8 +180,9 @@ chatglance runtime status
 Recommended topology: **systemd runs Glance directly; chatglance performs maintenance only**.
 
 - Main service: `chatarch-glance.service` executes `~/.chatarch/glance/bin/glance -config ~/.chatarch/glance/config/glance.yml` directly.
-- Content data: repository inventory JSON, caches, and generated snapshots live under `~/.chatarch/glance/data/` or `~/.chatarch/glance/cache/`.
-- Infra inventory: the real `server-inventory.yml` is runtime config that defines which SSH aliases are marked as Infra; generated `server-status.json` / `server-page.yml` are external snapshots, not source.
+- Reusable source, scripts, and docs live inside the ChatArch/ChatGlance repository, for example `src/chatglance/`, `scripts/`, `docs/`, and `examples/`.
+- Content data: repository inventory JSON, caches, and generated snapshots live under the ChatArch-owned runtime at `~/.chatarch/glance/data/` or `~/.chatarch/glance/cache/`.
+- Infra inventory: the real `server-inventory.yml` is runtime config that defines which SSH aliases are marked as Infra; generated `chatarch-projects.json`, `projects-page.yml`, `server-status.json`, and `server-page.yml` are runtime static snapshots, not source.
 - Live config: `~/.chatarch/glance/config/glance.yml`; backups go under `~/.chatarch/glance/config/backups/` before replacement.
 - Maintenance: `chatglance runtime maintain` is a oneshot command and can be scheduled by `chatarch-glance-maintenance.timer`.
 - Install/start: `chatglance runtime install-systemd --start` and `chatglance runtime start` use only user-level systemd and never write `/etc/systemd`.

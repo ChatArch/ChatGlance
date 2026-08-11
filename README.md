@@ -22,15 +22,17 @@
 
 - `src/chatglance/`：页面生成、Glance YAML patch、runtime maintenance、user-level systemd unit 渲染/安装等辅助代码。
 - `tests/`：项目页、Disk root-only patch、runtime/systemd、workflow contract 的回归测试。
+- `docs/quickstart.md`：新机器快速开始：以 Glance 前端配置为主、`chatglance` CLI 管理为辅的配置路径。
 - `docs/infra.md`：Infra/`服务器` 页的配置机制、外部数据生成链路、刷新方式和 cron/timer 模板。
 - `docs/deployment/current-site.md`：当前线上 Glance 网站的私有部署记录，包括服务拓扑、路径、user service/timer、local/public entry、验收和安全边界。
 - `examples/server-inventory.example.yml`：可提交的脱敏 inventory 配置示例；真实 inventory 放在 runtime config 目录。
+- `scripts/refresh-projects-page.sh`：刷新 GitHub/ChatGH 当前项目数据、生成 `项目` 页并安全替换 candidate config 的脚本模板。
 - `scripts/refresh-server-status.sh`：可手动运行或挂 cron/systemd timer 的外部刷新脚本模板。
 - `README.md` / `README.en.md` / `CHANGELOG.md`：对外/协作入口；避免写入 live auth、token、password hash 或代理凭据。
 
 ## 当前能力
 
-- 从 repository inventory JSON 生成 Glance `项目` page。
+- 通过 ChatGH/GitHub 当前数据刷新 repository inventory JSON，生成带 `generated_at` 的 Glance `项目` page；项目类型展示会把长分类归一化，例如 `python-package-template/early` / 只有 entrypoint 或 `--help`、`--version` 这类 option flags 的早期 Python CLI 显示为 `Python (early)`，但最新源码里已经有实体子命令的包会显示为 `Python 包`。
 - 当前 page tabs 固定为：`最近提交`、`待处理 PR / Issue`、`分类`、`一览表`。
 - `待处理 PR / Issue` 只显示 PR/Issue 非 0 的仓库，并按 `(PR, Issue, 最近提交)` 降序。
 - 生成 config 副本时清理 legacy generated pages：`Projects`、`ChatArch Projects`、`ChatArch Projects List`。
@@ -43,6 +45,8 @@
 
 ## 快速开始
 
+新机器配置类似当前站点时，先看 [`docs/quickstart.md`](docs/quickstart.md)：它把 `glance.yml` / widgets / HTML/CSS 作为主要前端配置入口，`chatglance` 只负责采集、渲染、校验、备份和替换这些管理动作。
+
 ```bash
 pip install -e ".[dev]"
 chatglance --help
@@ -51,6 +55,17 @@ chatglance --version
 python -m pytest -q
 python -m build
 ```
+
+刷新 `项目` 页的推荐入口同样是仓库脚本；它用 ChatGH 当前 repo 列表刷新 PR/Issue/时间字段，再只读读取默认分支 manifest/CLI 源码证据。private repo 内容读取优先使用 `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`，否则复用当前 ChatGlance checkout 里 `chatgh set-token` 配好的 repo-local GitHub credential，不打印 token：
+
+```bash
+CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
+CHATGH_BIN=~/.chatarch/venv/bin/chatgh \
+CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
+bash scripts/refresh-projects-page.sh
+```
+
+生成的项目页会在概览里显示 `刷新时间`，用于判断 PR/Issue 数据的新鲜度。
 
 刷新 Infra/`服务器` 页的推荐入口是外部脚本，而不是手改 JSON：
 
@@ -67,6 +82,15 @@ bash scripts/refresh-server-status.sh
 脚本内部调用 `chatglance servers collect/render-page/update-config`，先生成 candidate config 并执行 `glance config:validate`，验证通过且内容变化时才备份 live config、替换；service manager 动作留给外层 cron/systemd wrapper 或人工操作。完整机制见 [`docs/infra.md`](docs/infra.md)。
 
 ## CLI 示例
+
+刷新 GitHub/ChatGH 当前项目数据：
+
+```bash
+chatglance projects collect \
+  --owner ChatArch \
+  --chatgh-bin ~/.chatarch/venv/bin/chatgh \
+  --output ~/.chatarch/glance/data/chatarch-projects.json
+```
 
 只生成 `项目` page YAML：
 
@@ -156,8 +180,9 @@ chatglance runtime status
 推荐拓扑是 **systemd 直接运行 Glance，chatglance 只做维护**：
 
 - 主服务：`chatarch-glance.service` 直接执行 `~/.chatarch/glance/bin/glance -config ~/.chatarch/glance/config/glance.yml`。
-- 内容数据：repository inventory JSON、缓存和生成快照放在 `~/.chatarch/glance/data/` 或 `~/.chatarch/glance/cache/`。
-- Infra inventory：真实 `server-inventory.yml` 是 runtime config，定义哪些 SSH aliases 被标记为 Infra；生成的 `server-status.json` / `server-page.yml` 是外部快照，不是源码。
+- 可复用源码、脚本、文档都放在 ChatArch/ChatGlance repo 内，例如 `src/chatglance/`、`scripts/`、`docs/`、`examples/`。
+- 内容数据：repository inventory JSON、缓存和生成快照放在 ChatArch-owned runtime：`~/.chatarch/glance/data/` 或 `~/.chatarch/glance/cache/`。
+- Infra inventory：真实 `server-inventory.yml` 是 runtime config，定义哪些 SSH aliases 被标记为 Infra；生成的 `chatarch-projects.json`、`projects-page.yml`、`server-status.json`、`server-page.yml` 是 runtime 静态快照，不是源码。
 - live config：`~/.chatarch/glance/config/glance.yml`；更新前写备份到 `~/.chatarch/glance/config/backups/`。
 - 维护：`chatglance runtime maintain` 是 oneshot，可由 `chatarch-glance-maintenance.timer` 周期触发。
 - 安装/启动：`chatglance runtime install-systemd --start` 与 `chatglance runtime start` 只使用 user-level systemd，不写 `/etc/systemd`。

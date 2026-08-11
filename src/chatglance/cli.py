@@ -15,6 +15,7 @@ import click
 from chatglance import __version__
 from chatglance.glance_config import load_yaml, patch_disks_from_files, update_projects_page_from_files, write_yaml
 from chatglance.projects import PAGE_NAME, build_projects_page, dump_yaml, load_inventory
+from chatglance.project_inventory import RefreshOptions, refresh_project_inventory
 from chatglance.runtime import discover_meaningful_mountpoints, maintain_config, runtime_path
 from chatglance.servers import (
     SERVER_PAGE_NAME,
@@ -137,6 +138,40 @@ def main(ctx: click.Context, show_tree: bool) -> None:
 @main.group()
 def projects() -> None:
     """Generate Glance project dashboard pages."""
+
+
+@projects.command("collect")
+@click.option("--owner", default="ChatArch", show_default=True, help="GitHub organization or owner to inventory.")
+@click.option("--repo-list-json", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Existing ChatGH repo-list JSON to enrich instead of calling ChatGH.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Inventory JSON path to write.")
+@click.option("--chatgh-bin", default="chatgh", show_default=True, help="ChatGH executable used for authenticated repo listing.")
+@click.option("--limit", default=500, show_default=True, type=int, help="Maximum repositories to request from ChatGH.")
+@click.option("--workers", default=12, show_default=True, type=int, help="Parallel GitHub contents workers for manifest reads.")
+@click.option("--timeout", default=12, show_default=True, type=int, help="Per-file GitHub contents timeout in seconds.")
+def collect_projects(owner: str, repo_list_json: Path | None, output_path: Path, chatgh_bin: str, limit: int, workers: int, timeout: int) -> None:
+    """Refresh project inventory JSON from ChatGH and read-only repository metadata."""
+
+    inventory = refresh_project_inventory(
+        output_path=output_path,
+        repo_list_json=repo_list_json,
+        options=RefreshOptions(owner=owner, limit=limit, workers=workers, timeout=timeout, chatgh_bin=chatgh_bin),
+    )
+    counts_obj = inventory.get("counts")
+    counts = counts_obj if isinstance(counts_obj, dict) else {}
+    repo_count = counts.get("visible_repos", 0)
+    open_prs = counts.get("total_open_prs", 0)
+    open_issues = counts.get("total_open_issues", 0)
+    click.echo(
+        " ".join(
+            [
+                f"wrote {output_path}",
+                f"generated_at={inventory.get('generated_at')}",
+                f"repos={repo_count}",
+                f"open_prs={open_prs}",
+                f"open_issues={open_issues}",
+            ]
+        )
+    )
 
 
 @projects.command("render-page")

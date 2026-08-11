@@ -12,13 +12,25 @@ LEGACY_PAGE_NAMES = {"Projects", "ChatArch Projects", "ChatArch Projects List"}
 
 CATEGORY_LABELS = {
     "python-package": "Python 包",
+    "python-early": "Python (early)",
     "node-package": "Node / npm 包",
     "service/app": "服务 / 应用",
     "docs/site": "文档 / 站点",
-    "template/early": "模板 / 早期包",
     "other": "其他项目",
 }
-CATEGORY_ORDER = ["python-package", "node-package", "service/app", "docs/site", "template/early", "other"]
+CATEGORY_ORDER = ["python-package", "python-early", "node-package", "service/app", "docs/site", "other"]
+CATEGORY_ALIASES = {
+    "python-package": "python-package",
+    "python-early": "python-early",
+    "node/npm-package": "node-package",
+    "node-package": "node-package",
+    "docs-site": "docs/site",
+    "docs/site": "docs/site",
+    "service/app": "service/app",
+    "project/unknown": "other",
+    "other": "other",
+}
+EARLY_PYTHON_CATEGORY_ALIASES = {"python-package-template/early", "template/early", "python-early"}
 
 
 def load_inventory(path: str | Path) -> dict[str, Any]:
@@ -47,6 +59,87 @@ def text_value(value: Any, fallback: str = "—") -> str:
 
 def html_text(value: Any, fallback: str = "—") -> str:
     return html.escape(text_value(value, fallback), quote=True)
+
+
+def _raw_category(value: Any) -> str:
+    return text_value(value, "other").strip().lower()
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _cli_commands(item: dict[str, Any]) -> list[str]:
+    cli = _mapping(item.get("cli"))
+    raw_commands = cli.get("commands")
+    commands = raw_commands if isinstance(raw_commands, list) else []
+    return [str(command).strip() for command in commands if str(command).strip()]
+
+
+def _is_python_package_like(item: dict[str, Any]) -> bool:
+    category = _raw_category(item.get("category"))
+    package = _mapping(item.get("package"))
+    evidence = _mapping(item.get("evidence"))
+    language = text_value(item.get("language"), "").lower()
+    return (
+        category in {"python-package", "python-package-template/early", "template/early", "python-early"}
+        or bool(package.get("python_name"))
+        or (language == "python" and bool(evidence.get("has_pyproject")))
+    )
+
+
+def _cli_surface_is_early(item: dict[str, Any]) -> bool:
+    """Return True when the CLI exists but has no substantive command surface.
+
+    ChatArch placeholder/early packages often expose only an entrypoint or global
+    option flags such as `--help`/`--version`. Treat those as `Python (early)` so
+    the project page does not overstate them as mature Python packages. A version
+    tag alone is not a maturity signal; placeholder packages can be tagged.
+    """
+
+    cli = _mapping(item.get("cli"))
+    commands = _cli_commands(item)
+    if not commands:
+        return False
+    if commands and all(command.startswith("-") for command in commands):
+        return True
+    if text_value(cli.get("tree_status"), "") == "command-names-only":
+        return True
+    return False
+
+
+def _cli_surface_is_mature(item: dict[str, Any]) -> bool:
+    """Return True when inventory contains evidence of real subcommands.
+
+    This intentionally overrides stale early/template categories: the category field
+    can lag behind the repository, while an expanded CLI surface comes from a fresh
+    checkout or command-tree probe.
+    """
+
+    commands = [command for command in _cli_commands(item) if not command.startswith("-")]
+    if len(commands) > 1:
+        return True
+    tree_status = text_value(_mapping(item.get("cli")).get("tree_status"), "")
+    return tree_status in {"expanded", "ok", "complete"}
+
+
+def category_key(item: dict[str, Any]) -> str:
+    raw = _raw_category(item.get("category"))
+    mapped = CATEGORY_ALIASES.get(raw, raw)
+    if _is_python_package_like(item):
+        if _cli_surface_is_mature(item):
+            return "python-package"
+        if raw in EARLY_PYTHON_CATEGORY_ALIASES or _cli_surface_is_early(item):
+            return "python-early"
+        if mapped == "python-package":
+            return "python-package"
+    if mapped in CATEGORY_LABELS:
+        return mapped
+    return "other"
+
+
+def display_category(item: dict[str, Any]) -> str:
+    return CATEGORY_LABELS.get(category_key(item), "其他项目")
 
 
 def version_display(version: dict[str, Any] | None) -> str:
@@ -80,7 +173,7 @@ def sorted_repos(data: dict[str, Any], sort_key: str, limit: int | None = None) 
         )
     elif sort_key == "category":
         order = {name: index for index, name in enumerate(CATEGORY_ORDER)}
-        rows = sorted(repos, key=lambda item: (order.get(text_value(item.get("category"), "other"), 999), text_value(item.get("name"), "")))
+        rows = sorted(repos, key=lambda item: (order.get(category_key(item), 999), text_value(item.get("name"), "")))
     else:
         rows = sorted(repos, key=lambda item: text_value(item.get("name"), "").lower())
     return rows[:limit] if limit else rows
@@ -111,12 +204,14 @@ def bookmark_link(item: dict[str, Any], *, url_kind: str = "repo") -> dict[str, 
 def make_overview_groups(data: dict[str, Any]) -> list[dict[str, Any]]:
     counts = data.get("counts") if isinstance(data.get("counts"), dict) else {}
     triage_count = int(counts.get("with_open_prs") or 0) + int(counts.get("with_open_issues") or 0)
+    generated_at = text_value(data.get("generated_at"), "—")
     return [
         {
             "title": "概览",
             "links": [
                 {"title": "可见仓库", "url": "https://github.com/ChatArch", "description": str(counts.get("visible_repos", len(repositories(data)))), "icon": "si:github"},
                 {"title": "待处理 PR / Issue", "url": "https://github.com/ChatArch", "description": str(triage_count), "icon": "mdi:source-pull"},
+                {"title": "刷新时间", "url": "https://github.com/ChatArch", "description": generated_at, "icon": "mdi:clock-outline"},
                 {"title": "生成数据", "url": "https://github.com/ChatArch", "description": "本地生成快照 · 不含凭据", "icon": "mdi:code-json"},
             ],
         }
@@ -135,10 +230,10 @@ def make_sort_widget(data: dict[str, Any], title: str, sort_key: str) -> dict[st
 def make_category_groups(data: dict[str, Any]) -> list[dict[str, Any]]:
     groups: list[dict[str, Any]] = []
     for category in CATEGORY_ORDER:
-        rows = [item for item in sorted_repos(data, "category") if text_value(item.get("category"), "other") == category]
+        rows = [item for item in sorted_repos(data, "category") if category_key(item) == category]
         if rows:
             groups.append({"title": CATEGORY_LABELS.get(category, category), "links": [bookmark_link(item) for item in rows]})
-    remainder = [item for item in sorted_repos(data, "category") if text_value(item.get("category"), "other") not in CATEGORY_ORDER]
+    remainder = [item for item in sorted_repos(data, "category") if category_key(item) not in CATEGORY_ORDER]
     if remainder:
         groups.append({"title": "其他项目", "links": [bookmark_link(item) for item in remainder]})
     return groups
@@ -164,7 +259,7 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
             f'<td class="num">{int(item.get("open_prs") or 0)}</td>'
             f'<td class="num">{int(item.get("open_issues") or 0)}</td>'
             f'<td>{html_text(version_display(item.get("version") if isinstance(item.get("version"), dict) else None))}</td>'
-            f'<td>{html_text(CATEGORY_LABELS.get(text_value(item.get("category"), "other"), text_value(item.get("category"), "other")))}</td>'
+            f'<td>{html_text(display_category(item))}</td>'
             f'<td>{html_text(cli)}</td>'
             f'<td>{docs_cell}</td>'
             f'<td>{html_text(safe_date(item.get("pushed_at") or item.get("updated_at")))}</td>'
