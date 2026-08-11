@@ -27,6 +27,12 @@ inventory:
   # read-only over SSH.
   hosts:
     - alias: "infra-cube-1"
+      # Optional endpoint override. Use this when the SSH config HostName or DNS
+      # is stale but the alias still owns the correct user/key/port settings.
+      hostname: "172.23.0.10"
+      port: 3322
+      user: "zhihong"
+      strict_host_key_checking: "accept-new"
       label: "cube-1"
       group: "cube"
       connection_kind: "内网连接"

@@ -217,6 +217,45 @@ def host_overrides_from_inventory_config(config: dict[str, Any]) -> dict[str, di
     return overrides
 
 
+def host_connection_overrides_from_inventory_config(config: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Return per-host SSH endpoint overrides from the inventory config.
+
+    These overrides are intentionally separate from display metadata. They let a
+    runtime inventory correct stale SSH-config HostName/DNS data while still
+    using the named alias, so alias-scoped User/Port/IdentityFile settings keep
+    working unless explicitly overridden.
+    """
+
+    inventory = _inventory_section(config)
+    hosts = inventory.get("hosts", [])
+    if hosts is None:
+        return {}
+    if not isinstance(hosts, list):
+        raise ValueError("inventory.hosts must be a list")
+    overrides: dict[str, dict[str, str]] = {}
+    for item in hosts:
+        if not isinstance(item, dict):
+            continue
+        alias = str(item.get("alias", "")).strip()
+        if not alias:
+            continue
+        values: dict[str, str] = {}
+        for source, target in (
+            ("hostname", "hostname"),
+            ("host", "hostname"),
+            ("port", "port"),
+            ("user", "user"),
+            ("strict_host_key_checking", "strict_host_key_checking"),
+        ):
+            raw = item.get(source)
+            value = str(raw).strip() if raw is not None else ""
+            if value and target not in values:
+                values[target] = value
+        if values:
+            overrides[alias] = values
+    return overrides
+
+
 def apply_server_inventory_config(data: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     """Apply configured display metadata to collected server-status data."""
 
@@ -264,6 +303,22 @@ def page_options_from_inventory_config(config: dict[str, Any]) -> dict[str, str]
 
 def dump_json(data: dict[str, Any]) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2, sort_keys=False) + "\n"
+
+
+def server_status_regressions(previous: dict[str, Any], current: dict[str, Any]) -> list[str]:
+    """Return aliases that regressed from online to non-online status."""
+
+    previous_online = {
+        str(item.get("alias", ""))
+        for item in previous.get("servers", [])
+        if isinstance(item, dict) and item.get("status") == "online" and str(item.get("alias", ""))
+    }
+    current_status = {
+        str(item.get("alias", "")): str(item.get("status", ""))
+        for item in current.get("servers", [])
+        if isinstance(item, dict) and str(item.get("alias", ""))
+    }
+    return sorted(alias for alias in previous_online if alias in current_status and current_status.get(alias) != "online")
 
 
 def text_value(value: Any, fallback: str = "—") -> str:
@@ -564,7 +619,7 @@ def connection_ip(target: dict[str, str]) -> str:
     return seen[0] if seen else ""
 
 
-def ssh_target(alias: str) -> dict[str, str]:
+def ssh_target(alias: str, override: dict[str, str] | None = None) -> dict[str, str]:
     completed = subprocess.run(
         ["ssh", "-G", alias],
         stdout=subprocess.PIPE,
@@ -579,7 +634,42 @@ def ssh_target(alias: str) -> dict[str, str]:
             key, value = line.split(None, 1)
             if key in {"hostname", "user", "port"}:
                 target[key] = value.strip()
+    if override:
+        ssh_options: dict[str, str] = {}
+        for key in ("hostname", "port", "user", "strict_host_key_checking"):
+            value = str(override.get(key, "")).strip()
+            if not value:
+                continue
+            if key in {"hostname", "port", "user"}:
+                target[key] = value
+            ssh_options[key] = value
+        if ssh_options:
+            target["_ssh_options"] = json.dumps(ssh_options, ensure_ascii=False)
     return target
+
+
+def _ssh_option_args(target: dict[str, str]) -> list[str]:
+    raw = target.get("_ssh_options", "")
+    if not raw:
+        return []
+    try:
+        options = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(options, dict):
+        return []
+    args: list[str] = []
+    mapping = {
+        "hostname": "HostName",
+        "port": "Port",
+        "user": "User",
+        "strict_host_key_checking": "StrictHostKeyChecking",
+    }
+    for key, option_name in mapping.items():
+        value = str(options.get(key, "")).strip()
+        if value:
+            args.extend(["-o", f"{option_name}={value}"])
+    return args
 
 
 def resolve_global_ip(hostname: str) -> str:
@@ -635,7 +725,6 @@ def default_candidate_aliases(aliases: Iterable[str] | None = None) -> list[str]
     values = list(aliases or ssh_config_aliases())
     selected: list[str] = []
     public_exact = {
-        "tencent.am",
         "rex.aliyun",
         "rex.newazure",
         "elion.newaliyun",
@@ -660,11 +749,11 @@ def _alias_preference(alias: str, target: dict[str, str]) -> tuple[int, str]:
     return (score, alias)
 
 
-def dedupe_aliases_by_target(aliases: Iterable[str]) -> list[str]:
+def dedupe_aliases_by_target(aliases: Iterable[str], *, host_overrides: dict[str, dict[str, str]] | None = None) -> list[str]:
     by_target: dict[tuple[str, str], tuple[str, dict[str, str]]] = {}
     for alias in aliases:
         try:
-            target = ssh_target(alias)
+            target = ssh_target(alias, (host_overrides or {}).get(alias))
         except Exception:
             target = {"alias": alias, "hostname": alias, "port": "22", "user": ""}
         key = (target.get("hostname", alias), target.get("port", "22"))
@@ -746,16 +835,16 @@ def parse_probe_output(alias: str, output: str, target: dict[str, str]) -> dict[
     }
 
 
-def probe_alias(alias: str, *, timeout: int = 18) -> dict[str, Any]:
+def probe_alias(alias: str, *, timeout: int = 18, target_override: dict[str, str] | None = None) -> dict[str, Any]:
     try:
-        target = ssh_target(alias)
+        target = ssh_target(alias, target_override)
     except Exception:
         target = {"alias": alias, "hostname": alias, "port": "22", "user": ""}
     kind = connection_kind(alias, target)
     fallback_ip = connection_ip(target) or (resolve_global_ip(target.get("hostname", alias)) if kind == "公网连接" else target.get("hostname", ""))
     try:
         completed = subprocess.run(
-            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", alias, "bash -s"],
+            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", *_ssh_option_args(target), alias, "bash -s"],
             input=REMOTE_PROBE_SCRIPT,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -788,11 +877,11 @@ def probe_alias(alias: str, *, timeout: int = 18) -> dict[str, Any]:
     return parse_probe_output(alias, completed.stdout, target)
 
 
-def collect_server_status(aliases: Iterable[str], *, timeout: int = 18, workers: int = 8) -> dict[str, Any]:
-    selected = dedupe_aliases_by_target(aliases)
+def collect_server_status(aliases: Iterable[str], *, timeout: int = 18, workers: int = 8, host_overrides: dict[str, dict[str, str]] | None = None) -> dict[str, Any]:
+    selected = dedupe_aliases_by_target(aliases, host_overrides=host_overrides)
     results: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        future_map = {pool.submit(probe_alias, alias, timeout=timeout): alias for alias in selected}
+        future_map = {pool.submit(probe_alias, alias, timeout=timeout, target_override=(host_overrides or {}).get(alias)): alias for alias in selected}
         for future in as_completed(future_map):
             results.append(future.result())
     order = {"cube": 0, "public": 1, "other": 2}
