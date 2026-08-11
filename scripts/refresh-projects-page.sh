@@ -22,23 +22,37 @@ PAGE_PATH="${CHATGLANCE_PROJECTS_PAGE_YML:-$RUNTIME_HOME/data/projects-page.yml}
 CONFIG_PATH="${CHATGLANCE_CONFIG:-$RUNTIME_HOME/config/glance.yml}"
 CANDIDATE_PATH="${CHATGLANCE_CANDIDATE_CONFIG:-$RUNTIME_HOME/config/glance.yml.projects-candidate}"
 BACKUP_DIR="${CHATGLANCE_BACKUP_DIR:-$RUNTIME_HOME/config/backups}"
+CATEGORY_OVERRIDES_PATH="${CHATGLANCE_PROJECTS_CATEGORY_OVERRIDES_JSON:-$RUNTIME_HOME/config/project-category-overrides.json}"
+BASELINE_PATH="${CHATGLANCE_PROJECTS_BASELINE_JSON:-}"
+NEXT_DATA_PATH="${CHATGLANCE_PROJECTS_NEXT_JSON:-$DATA_PATH.next}"
 
 mkdir -p "$(dirname "$DATA_PATH")" "$(dirname "$PAGE_PATH")" "$BACKUP_DIR"
 
 (
   cd "$REPO_ROOT"
+  baseline_args=()
+  if [[ -z "$BASELINE_PATH" && -s "$CATEGORY_OVERRIDES_PATH" ]]; then
+    BASELINE_PATH="$CATEGORY_OVERRIDES_PATH"
+  fi
+  if [[ -z "$BASELINE_PATH" ]]; then
+    BASELINE_PATH="$DATA_PATH"
+  fi
+  if [[ -s "$BASELINE_PATH" ]]; then
+    baseline_args=(--baseline-data "$BASELINE_PATH")
+  fi
   "$CHATGLANCE_BIN" projects collect \
     --owner "$OWNER" \
     --chatgh-bin "$CHATGH_BIN" \
-    --output "$DATA_PATH"
+    "${baseline_args[@]}" \
+    --output "$NEXT_DATA_PATH"
 )
 
 "$CHATGLANCE_BIN" projects render-page \
-  --data "$DATA_PATH" \
+  --data "$NEXT_DATA_PATH" \
   --output "$PAGE_PATH"
 
 "$CHATGLANCE_BIN" projects update-config \
-  --data "$DATA_PATH" \
+  --data "$NEXT_DATA_PATH" \
   --config "$CONFIG_PATH" \
   --output "$CANDIDATE_PATH"
 
@@ -53,6 +67,11 @@ fi
 
 backup="$BACKUP_DIR/glance.projects.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%S+0800).yml"
 cp "$CONFIG_PATH" "$backup"
+data_backup="$BACKUP_DIR/chatarch-projects.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%S+0800).json"
+if [[ -f "$DATA_PATH" ]]; then
+  cp "$DATA_PATH" "$data_backup"
+fi
+mv "$NEXT_DATA_PATH" "$DATA_PATH"
 mv "$CANDIDATE_PATH" "$CONFIG_PATH"
 
-echo "changed=true data=$DATA_PATH page=$PAGE_PATH config=$CONFIG_PATH backup=$backup"
+echo "changed=true data=$DATA_PATH page=$PAGE_PATH config=$CONFIG_PATH backup=$backup data_backup=$data_backup"
