@@ -23,6 +23,7 @@
 - `src/chatglance/`：页面生成、Glance YAML patch、runtime maintenance、user-level systemd unit 渲染/安装等辅助代码。
 - `tests/`：项目页、Disk root-only patch、runtime/systemd、workflow contract 的回归测试。
 - `docs/quickstart.md`：新机器快速开始：以 Glance 前端配置为主、`chatglance` CLI 管理为辅的配置路径。
+- `docs/site-architecture.md`：ChatGlance 作为 Python 包、Glance runtime、生成配置和 runtime 数据脚本之间的边界。
 - `docs/projects.md`：`项目` 页展示内容、PyPI-only 版本规则、entrypoint-only CLI 规则、baseline 分类和刷新验收清单。
 - `docs/infra.md`：Infra/`服务器` 页的配置机制、外部数据生成链路、刷新方式和 cron/timer 模板。
 - `docs/deployment/current-site.md`：当前线上 Glance 网站的私有部署记录，包括服务拓扑、路径、user service/timer、local/public entry、验收和安全边界。

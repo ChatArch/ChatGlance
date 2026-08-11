@@ -23,6 +23,7 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 - `src/chatglance/`: helper code for page generation, Glance YAML patching, runtime maintenance, and user-level systemd unit rendering/installation.
 - `tests/`: regression tests for project pages, Disk mountpoint visibility, runtime/systemd helpers, and release workflow contracts.
 - `docs/quickstart.md`: new-machine quick start that keeps Glance frontend config primary and `chatglance` as a management helper.
+- `docs/site-architecture.md`: boundary between ChatGlance as a Python package, the Glance runtime, generated config, and runtime data refresh scripts.
 - `docs/projects.md`: project-page display contract, PyPI-only version rule, entrypoint-only CLI rule, baseline categories, and refresh review checklist.
 - `docs/infra.md`: configuration mechanism, external data-generation chain, refresh workflow, and cron/timer template for the Infra/`服务器` page.
 - `docs/deployment/current-site.md`: private repository-only deployment record for the current live Glance site. It is excluded from public package artifacts.
