@@ -57,7 +57,7 @@ Maintenance flow:
 1. Replace legacy generated project pages with the current `项目` page.
 2. Keep regenerated `项目` immediately after `ChatArch`, before `服务器`, so the live navigation stays `ChatArch` → `项目` → `服务器`.
 3. Refresh project inventory data from current ChatGH/GitHub metadata before rendering; the generated page overview includes `刷新时间` / `generated_at` so stale PR/Issue counts are visible.
-4. Normalize project type labels for the frontend: early Python packages render as `Python (early)`, including `python-package-template/early` and Python CLIs that only expose an entrypoint or global option flags; expanded current CLI surfaces override stale early/template categories.
+4. Normalize project type labels for the frontend: early Python packages render as `Python (early)` when that reviewed category is present in the runtime baseline/category overrides. CLI entrypoints alone must not promote or demote a reviewed early category.
 5. Render the current tabs:
    - `最近提交`
    - `待处理 PR / Issue`
@@ -113,7 +113,7 @@ CHATGLANCE_RUNTIME_HOME=/home/zhihong/.chatarch/glance \
 bash scripts/refresh-projects-page.sh
 ```
 
-The script performs `projects collect`, `projects render-page`, `projects update-config`, and `glance -config ... config:validate`; it then backs up/replaces the live config only when content changes. It uses ChatGH for the authenticated repo list and either token environment variables or the ChatGlance repo-local GitHub credential for private repository contents. It does not store GitHub tokens or live auth secrets, and it does not perform service-manager actions.
+The script performs `projects collect`, `projects render-page`, `projects update-config`, and `glance -config ... config:validate`; it stages `.next` JSON/page artifacts, validates the candidate config, then backs up/replaces the live JSON, page YAML, and config together only after validation succeeds. It uses ChatGH for the authenticated repo list and either token environment variables or the ChatGlance repo-local GitHub credential for private repository contents. It does not store GitHub tokens or live auth secrets, and it does not perform service-manager actions.
 
 The generated overview includes `刷新时间` / `generated_at` so stale PR/Issue counts are visible. Reusable scripts and code live in ChatArch/ChatGlance; validation snapshots for this work stay under the ChatArch workspace project `projects/chatarch/chatglance/playground/`, not workspace root or `/tmp`.
 
@@ -127,7 +127,7 @@ The live dashboard has three pages:
 2. `项目` — generated project dashboard.
 3. `服务器` — server-status cards generated from a static JSON snapshot.
 
-The `服务器` page is rendered from `/home/zhihong/.chatarch/glance/data/server-status.json` through an `html` widget. The snapshot is collected by read-only SSH probes using the runtime inventory config at `/home/zhihong/.chatarch/glance/config/server-inventory.yml`. It records IP, CPU, memory, GPU, mounted filesystem capacity, filtered `lsblk` devices, `Last Reboot`, raw uptime seconds, and the cube `getdevices.sh` disk summary when it can run without installing packages. Displayed collection and reboot timestamps use Beijing time (`+08:00`).
+The `服务器` page is rendered from `/home/zhihong/.chatarch/glance/data/server-status.json` through an `html` widget. The snapshot is collected by read-only SSH probes using the runtime inventory config at `/home/zhihong/.chatarch/glance/config/server-inventory.yml`. That runtime inventory is the live source of truth for the displayed server list and contains only aliases/display labels/groups/connection labels, not credentials. It records IP, CPU, memory, GPU, mounted filesystem capacity, filtered `lsblk` devices, `Last Reboot`, raw uptime seconds, and the cube `getdevices.sh` disk summary when it can run without installing packages. Displayed collection and reboot timestamps use Beijing time (`+08:00`).
 
 Collection boundaries:
 
@@ -152,9 +152,15 @@ CHATGLANCE_INFRA_CONFIG=/home/zhihong/.chatarch/glance/config/server-inventory.y
 bash scripts/refresh-server-status.sh
 ```
 
-Manual command equivalence is documented in `docs/infra.md`: `chatglance servers collect --inventory-config ...`, `render-page --inventory-config ...`, and `update-config --inventory-config ...`, followed by `glance -config ... config:validate`; service-manager actions stay outside the bundled refresh script and run only from the scheduler/operator boundary when needed.
+Manual command equivalence is documented in `docs/infra.md`: `chatglance servers collect --inventory-config ...`, `render-page --inventory-config ...`, and `update-config --inventory-config ...`, followed by `glance -config ... config:validate`; the bundled script stages `.next` JSON/page artifacts and replaces JSON/page/config together only after validation. Service-manager actions stay outside the bundled refresh script and run only from the scheduler/operator boundary when needed.
 
 The repeatable PR path now records the inventory/config/refresh mechanism. Live changes should be applied through a validated candidate config, with a timestamped backup before replacement and a user-service lifecycle action only after validation succeeds.
+
+Current reviewed live membership after the 2026-08-12 refresh is 10 reachable
+servers: 7 cube hosts plus `rex.aliyun`, `elion.newaliyun`, and `rex.newazure`.
+`tencent.am` is intentionally excluded from the Glance server page; it should not
+be pulled in by default candidates or historical snapshots unless explicitly
+re-added to the runtime inventory.
 
 ## Verification checklist
 

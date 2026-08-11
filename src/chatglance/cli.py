@@ -26,10 +26,12 @@ from chatglance.servers import (
     collect_server_status,
     default_candidate_aliases,
     dump_json,
+    host_connection_overrides_from_inventory_config,
     load_server_inventory_config,
     load_server_status,
     page_options_from_inventory_config,
     replace_servers_page,
+    server_status_regressions,
 )
 from chatglance.systemd import install_user_units, render_all_units, show_user_units, systemctl_user, write_units
 
@@ -265,12 +267,34 @@ def collect_servers(aliases: tuple[str, ...], inventory_config: Path | None, def
     if not selected:
         raise click.ClickException("pass --alias, use --inventory-config, or use --default-candidates")
     options = collection_options_from_inventory_config(config or {})
-    data = collect_server_status(selected, timeout=timeout or options["timeout"], workers=workers or options["workers"])
+    host_overrides = host_connection_overrides_from_inventory_config(config or {})
+    data = collect_server_status(
+        selected,
+        timeout=timeout or options["timeout"],
+        workers=workers or options["workers"],
+        host_overrides=host_overrides,
+    )
     if config:
         data = apply_server_inventory_config(data, config)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(dump_json(data), encoding="utf-8")
     click.echo(f"wrote {output_path} count={data.get('count', 0)} online={data.get('online', 0)}")
+
+
+@servers.command("validate-refresh")
+@click.option("--previous", "previous_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Existing server-status JSON snapshot.")
+@click.option("--next", "next_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Newly collected server-status JSON snapshot.")
+@click.option("--allow-offline-regression", is_flag=True, help="Allow replacing an online host with a non-online status.")
+def validate_servers_refresh(previous_path: Path, next_path: Path, allow_offline_regression: bool) -> None:
+    """Fail closed when a server refresh would downgrade online hosts."""
+
+    previous = load_server_status(previous_path)
+    current = load_server_status(next_path)
+    regressions = server_status_regressions(previous, current)
+    if regressions and not allow_offline_regression:
+        aliases = ",".join(regressions)
+        raise click.ClickException(f"server refresh would mark previously online hosts non-online: {aliases}")
+    click.echo(f"server-refresh-valid regressions={len(regressions)}")
 
 
 @servers.command("render-page")
