@@ -57,7 +57,7 @@ Maintenance flow:
 1. Replace legacy generated project pages with the current `项目` page.
 2. Keep regenerated `项目` immediately after `ChatArch`, before `服务器`, so the live navigation stays `ChatArch` → `项目` → `服务器`.
 3. Refresh project inventory data from current ChatGH/GitHub metadata before rendering; the generated page overview includes `刷新时间` / `generated_at` so stale PR/Issue counts are visible.
-4. Normalize project type labels for the frontend: early Python packages render as `Python (early)` when that reviewed category is present in the runtime baseline/category overrides. CLI entrypoints alone must not promote or demote a reviewed early category.
+4. Normalize project type labels for the frontend: early Python packages render as `Python (early)`, but classification is checked against latest-PyPI actual CLI tree evidence. CLI entrypoint count alone is only the visible table surface; stale runtime baseline/category overrides are retained as `reviewed_category` audit evidence and must not demote a complex package such as ChatCRS.
 5. Render the current tabs:
    - `最近提交`
    - `待处理 PR / Issue`
@@ -113,7 +113,7 @@ CHATGLANCE_RUNTIME_HOME=/home/zhihong/.chatarch/glance \
 bash scripts/refresh-projects-page.sh
 ```
 
-The script performs `projects collect`, `projects render-page`, `projects update-config`, and `glance -config ... config:validate`; it stages `.next` JSON/page artifacts, validates the candidate config, then backs up/replaces the live JSON, page YAML, and config together only after validation succeeds. It uses ChatGH for the authenticated repo list and either token environment variables or the ChatGlance repo-local GitHub credential for private repository contents. It does not store GitHub tokens or live auth secrets, and it does not perform service-manager actions.
+The script performs `projects collect`, writes a `project-cli-tree-report.tsv` audit report, runs `projects render-page`, `projects update-config`, and `glance -config ... config:validate`; it stages `.next` JSON/page/report artifacts, validates the candidate config, then backs up/replaces the live JSON, page YAML, CLI-tree TSV, and config together only after validation succeeds. It uses ChatGH for the authenticated repo list and either token environment variables or the ChatGlance repo-local GitHub credential for private repository contents. For Python classification, it can run `uvx --from <package>@latest <entrypoint> --tree` or help fallback against published packages; it does not clone/build arbitrary repository source trees. It does not store GitHub tokens or live auth secrets, and it does not perform service-manager actions.
 
 The generated overview includes `刷新时间` / `generated_at` so stale PR/Issue counts are visible. Reusable scripts and code live in ChatArch/ChatGlance; validation snapshots for this work stay under the ChatArch workspace project `projects/chatarch/chatglance/playground/`, not workspace root or `/tmp`.
 

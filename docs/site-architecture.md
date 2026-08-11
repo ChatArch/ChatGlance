@@ -7,7 +7,7 @@ ChatGlance is a Python package plus repository-side operations records for the C
 ChatGlance owns the reproducible source and scripts that produce the live site's Glance configuration artifacts:
 
 - `src/chatglance/`: Python package code for rendering Glance page YAML, inline HTML widgets, config patching, validation helpers, and runtime/systemd helpers.
-- `scripts/refresh-projects-page.sh`: refreshes ChatArch project inventory data, renders the `项目` page, validates a candidate `glance.yml`, backs up the previous live files, and replaces the generated artifacts.
+- `scripts/refresh-projects-page.sh`: refreshes ChatArch project inventory data, collects latest-PyPI CLI-tree evidence for Python package classification, renders the `项目` page, validates a candidate `glance.yml`, backs up the previous live files, and replaces the generated artifacts.
 - `scripts/refresh-server-status.sh`: refreshes server-status data, renders the `服务器` page, validates a candidate `glance.yml`, backs up the previous live files, and replaces generated artifacts.
 - `docs/` and `examples/`: deployment contracts, quick start, project-page contract, infra/server-page contract, and sanitized runtime config examples.
 
@@ -16,7 +16,7 @@ ChatGlance owns the reproducible source and scripts that produce the live site's
 - It does not reimplement the upstream Glance server.
 - It does not use npm or `package.json` to build the website.
 - It does not commit live secrets, auth config, tokens, cookies, proxy settings, or raw runtime data.
-- It does not clone/build/run arbitrary ChatArch repositories while refreshing the project page.
+- It does not clone, build, or execute arbitrary repository source trees while refreshing the project page. For Python package maturity classification, it may install the latest published PyPI package with `uvx` and invoke the package entrypoint's `--tree` or help output; this is bounded CLI-surface probing, not source checkout execution.
 
 ## Runtime split
 
@@ -39,6 +39,7 @@ Typical live runtime layout:
   config/backups/                    # generated backups
   data/chatarch-projects.json        # generated project data
   data/projects-page.yml             # generated 项目 page
+  data/project-cli-tree-report.tsv   # generated Python CLI-tree audit report
   data/server-status.json            # generated server snapshot
   data/server-page.yml               # generated 服务器 page
 ```

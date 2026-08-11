@@ -24,7 +24,7 @@
 - `tests/`：项目页、Disk root-only patch、runtime/systemd、workflow contract 的回归测试。
 - `docs/quickstart.md`：新机器快速开始：以 Glance 前端配置为主、`chatglance` CLI 管理为辅的配置路径。
 - `docs/site-architecture.md`：ChatGlance 作为 Python 包、Glance runtime、生成配置和 runtime 数据脚本之间的边界。
-- `docs/projects.md`：`项目` 页展示内容、PyPI-only 版本规则、entrypoint-only CLI 规则、baseline 分类和刷新验收清单。
+- `docs/projects.md`：`项目` 页展示内容、PyPI-only 版本规则、entrypoint-only 展示规则、actual CLI tree 分类证据和刷新验收清单。
 - `docs/infra.md`：Infra/`服务器` 页的配置机制、外部数据生成链路、刷新方式和 cron/timer 模板。
 - `docs/deployment/current-site.md`：当前线上 Glance 网站的私有部署记录，包括服务拓扑、路径、user service/timer、local/public entry、验收和安全边界。
 - `examples/server-inventory.example.yml`：可提交的脱敏 inventory 配置示例；真实 inventory 放在 runtime config 目录。
@@ -34,7 +34,7 @@
 
 ## 当前能力
 
-- 通过 ChatGH/GitHub 当前数据刷新 repository inventory JSON，生成带 `generated_at` 的 Glance `项目` page；版本展示只看 PyPI，CLI 只展示 package entrypoint，分类可通过 baseline inventory 保留人工 review 过的 `Python (early)` 等判断，不能用 CLI 子命令面覆盖分类。
+- 通过 ChatGH/GitHub 当前数据刷新 repository inventory JSON，生成带 `generated_at` 的 Glance `项目` page；版本展示只看 PyPI，CLI 主表只展示 package entrypoint，Python early/non-early 分类使用 latest PyPI actual CLI tree/help 证据校正，旧 baseline 只保留为 reviewed audit evidence。
 - 当前 page tabs 固定为：`最近提交`、`待处理 PR / Issue`、`分类`、`一览表`。
 - `待处理 PR / Issue` 只显示 PR/Issue 非 0 的仓库，并按 `(PR, Issue, 最近提交)` 降序。
 - 生成 config 副本时清理 legacy generated pages：`Projects`、`ChatArch Projects`、`ChatArch Projects List`。
@@ -58,7 +58,7 @@ python -m pytest -q
 python -m build
 ```
 
-刷新 `项目` 页的推荐入口同样是仓库脚本；它用 ChatGH 当前 repo 列表刷新 PR/Issue/时间字段，只读读取默认分支 manifest/entrypoint 证据，并从 PyPI 读取版本。默认用当前 runtime JSON 作为 baseline 保留人工 review 过的分类。private repo 内容读取优先使用 `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`，否则复用当前 ChatGlance checkout 里 `chatgh set-token` 配好的 repo-local GitHub credential，不打印 token。详细验收见 [`docs/projects.md`](docs/projects.md)：
+刷新 `项目` 页的推荐入口同样是仓库脚本；它用 ChatGH 当前 repo 列表刷新 PR/Issue/时间字段，只读读取默认分支 manifest/entrypoint 证据，并从 PyPI 读取版本。默认用当前 runtime JSON 作为 baseline 保留人工 review 过的分类证据，同时用 latest PyPI actual CLI tree/help 结果校正 Python 包成熟度；脚本会生成 `project-cli-tree-report.tsv` 作为审计报告。private repo 内容读取优先使用 `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`，否则复用当前 ChatGlance checkout 里 `chatgh set-token` 配好的 repo-local GitHub credential，不打印 token。详细验收见 [`docs/projects.md`](docs/projects.md)：
 
 ```bash
 CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \

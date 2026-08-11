@@ -9,7 +9,7 @@
 - Add `docs/quickstart.md` for new-machine setup where Glance frontend configuration stays primary and the CLI remains a management helper.
 - Add `chatglance projects collect` and `scripts/refresh-projects-page.sh` so the `项目` page data can be refreshed from current ChatGH/GitHub metadata before rendering, including private repository manifest reads via token environment variables or repo-local GitHub credentials.
 - Add visible `刷新时间` / `generated_at` information to the generated `项目` page overview so PR/Issue data freshness is explicit.
-- Normalize early Python package display on the `项目` page to `Python (early)`, including long `python-package-template/early` categories and Python CLIs that only expose an entrypoint or global option flags; expanded current CLI surfaces override stale early/template categories.
+- Normalize early Python package display on the `项目` page to `Python (early)` while deriving Python maturity from latest-PyPI actual CLI tree/help evidence; stale early/template categories are retained only as reviewed audit evidence and cannot demote complex packages such as ChatCRS.
 - Keep regenerated `项目` pages immediately after the `ChatArch` home page, before `服务器`, instead of appending them to the end of the navigation.
 
 ## 0.1.2 - 2026-08-09
