@@ -143,17 +143,19 @@ def projects() -> None:
 @projects.command("collect")
 @click.option("--owner", default="ChatArch", show_default=True, help="GitHub organization or owner to inventory.")
 @click.option("--repo-list-json", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Existing ChatGH repo-list JSON to enrich instead of calling ChatGH.")
+@click.option("--baseline-data", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Prior project inventory JSON whose reviewed categories should be preserved.")
 @click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Inventory JSON path to write.")
 @click.option("--chatgh-bin", default="chatgh", show_default=True, help="ChatGH executable used for authenticated repo listing.")
 @click.option("--limit", default=500, show_default=True, type=int, help="Maximum repositories to request from ChatGH.")
 @click.option("--workers", default=12, show_default=True, type=int, help="Parallel GitHub contents workers for manifest reads.")
 @click.option("--timeout", default=12, show_default=True, type=int, help="Per-file GitHub contents timeout in seconds.")
-def collect_projects(owner: str, repo_list_json: Path | None, output_path: Path, chatgh_bin: str, limit: int, workers: int, timeout: int) -> None:
+def collect_projects(owner: str, repo_list_json: Path | None, baseline_data: Path | None, output_path: Path, chatgh_bin: str, limit: int, workers: int, timeout: int) -> None:
     """Refresh project inventory JSON from ChatGH and read-only repository metadata."""
 
     inventory = refresh_project_inventory(
         output_path=output_path,
         repo_list_json=repo_list_json,
+        baseline_data=baseline_data,
         options=RefreshOptions(owner=owner, limit=limit, workers=workers, timeout=timeout, chatgh_bin=chatgh_bin),
     )
     counts_obj = inventory.get("counts")

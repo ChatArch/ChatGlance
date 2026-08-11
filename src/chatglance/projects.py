@@ -108,27 +108,10 @@ def _cli_surface_is_early(item: dict[str, Any]) -> bool:
     return False
 
 
-def _cli_surface_is_mature(item: dict[str, Any]) -> bool:
-    """Return True when inventory contains evidence of real subcommands.
-
-    This intentionally overrides stale early/template categories: the category field
-    can lag behind the repository, while an expanded CLI surface comes from a fresh
-    checkout or command-tree probe.
-    """
-
-    commands = [command for command in _cli_commands(item) if not command.startswith("-")]
-    if len(commands) > 1:
-        return True
-    tree_status = text_value(_mapping(item.get("cli")).get("tree_status"), "")
-    return tree_status in {"expanded", "ok", "complete"}
-
-
 def category_key(item: dict[str, Any]) -> str:
     raw = _raw_category(item.get("category"))
     mapped = CATEGORY_ALIASES.get(raw, raw)
     if _is_python_package_like(item):
-        if _cli_surface_is_mature(item):
-            return "python-package"
         if raw in EARLY_PYTHON_CATEGORY_ALIASES or _cli_surface_is_early(item):
             return "python-early"
         if mapped == "python-package":

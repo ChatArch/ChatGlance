@@ -23,6 +23,7 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 - `src/chatglance/`: helper code for page generation, Glance YAML patching, runtime maintenance, and user-level systemd unit rendering/installation.
 - `tests/`: regression tests for project pages, Disk mountpoint visibility, runtime/systemd helpers, and release workflow contracts.
 - `docs/quickstart.md`: new-machine quick start that keeps Glance frontend config primary and `chatglance` as a management helper.
+- `docs/projects.md`: project-page display contract, PyPI-only version rule, entrypoint-only CLI rule, baseline categories, and refresh review checklist.
 - `docs/infra.md`: configuration mechanism, external data-generation chain, refresh workflow, and cron/timer template for the Infra/`服务器` page.
 - `docs/deployment/current-site.md`: private repository-only deployment record for the current live Glance site. It is excluded from public package artifacts.
 - `examples/server-inventory.example.yml`: sanitized inventory config template. The real inventory belongs in the runtime config directory.
@@ -32,7 +33,7 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 
 ## Current capabilities
 
-- Refresh repository inventory JSON from current ChatGH/GitHub data and render a Glance `项目` page with a visible `generated_at` refresh timestamp; project type display normalizes long early-package labels, so `python-package-template/early` or Python CLIs with only an entrypoint / global `--help` and `--version` option flags show as `Python (early)`, while packages with real subcommands in current source show as `Python 包`.
+- Refresh repository inventory JSON from current ChatGH/GitHub data and render a Glance `项目` page with a visible `generated_at` refresh timestamp; version display is PyPI-only, CLI display is package-entrypoint-only, and reviewed categories such as `Python (early)` are preserved via baseline inventory instead of being overwritten by CLI subcommand surface.
 - Keep the current tabs limited to `最近提交`, `待处理 PR / Issue`, `分类`, and `一览表`.
 - Filter the triage tab to repositories with non-zero PR or Issue counts and sort by `(PR, Issue, recent commit)` descending.
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.

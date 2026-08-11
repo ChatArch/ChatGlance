@@ -26,8 +26,10 @@ from chatglance.projects import category_key, display_category
 
 JsonDict = dict[str, Any]
 FetchText = Callable[[str, str], str | None]
+FetchJson = Callable[[str], Any | None]
 
 GITHUB_API = "https://api.github.com"
+PYPI_API = "https://pypi.org/pypi"
 DEFAULT_TIMEOUT = 12
 
 
@@ -197,6 +199,51 @@ def make_github_fetcher(*, token: str | None = None, timeout: int = DEFAULT_TIME
     return fetch
 
 
+def make_pypi_fetcher(*, timeout: int = DEFAULT_TIMEOUT) -> FetchJson:
+    """Return a read-only PyPI JSON fetcher for package version display.
+
+    The project dashboard intentionally uses PyPI as the only version source so
+    Git tags, GitHub releases, and local manifests cannot make the page disagree
+    with the published package state.
+    """
+
+    def fetch(package_name: str) -> Any | None:
+        name = str(package_name or "").strip()
+        if not name:
+            return None
+        encoded = urllib.parse.quote(name, safe="")
+        request = urllib.request.Request(
+            f"{PYPI_API}/{encoded}/json",
+            headers={"Accept": "application/json", "User-Agent": "ChatGlance-inventory-refresh"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                if response.status != 200:
+                    return None
+                return json.loads(response.read().decode("utf-8"))
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            return None
+
+    return fetch
+
+
+def pypi_version(package_name: str | None, *, fetcher: FetchJson) -> JsonDict:
+    """Return a PyPI-only version object for display."""
+
+    if not package_name:
+        return {"value": None, "source": None}
+    payload = fetcher(package_name)
+    if not isinstance(payload, dict):
+        return {"value": None, "source": None}
+    info = payload.get("info")
+    if not isinstance(info, dict):
+        return {"value": None, "source": None}
+    version = str(info.get("version") or "").strip()
+    if not version:
+        return {"value": None, "source": None}
+    return {"value": version, "source": "pypi"}
+
+
 def _first_string_arg(call_args: str) -> str | None:
     match = re.search(r"(?:^|[,(]\s*)(?:name\s*=\s*)?['\"]([^'\"]+)['\"]", call_args)
     return match.group(1) if match else None
@@ -236,6 +283,35 @@ def _as_dict(value: Any) -> JsonDict:
     return value if isinstance(value, dict) else {}
 
 
+def baseline_repositories(data: JsonDict | None) -> dict[str, JsonDict]:
+    """Return a name-indexed map of prior inventory rows used as review baseline."""
+
+    if not isinstance(data, dict):
+        return {}
+    rows = data.get("repositories")
+    if not isinstance(rows, list):
+        return {}
+    result: dict[str, JsonDict] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip().lower()
+        if name:
+            result[name] = row
+    return result
+
+
+def load_baseline_inventory(path: str | Path | None) -> JsonDict | None:
+    """Load an optional prior inventory used to preserve reviewed categories."""
+
+    if path is None:
+        return None
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("baseline inventory JSON must be an object")
+    return payload
+
+
 def _script_entry_modules(pyproject: JsonDict) -> dict[str, str]:
     scripts: dict[str, str] = {}
     project = _as_dict(pyproject.get("project"))
@@ -257,31 +333,24 @@ def _module_to_path(entrypoint: str) -> str | None:
     return "src/" + "/".join(module.split(".")) + ".py"
 
 
-def parse_python_project_cli(pyproject: JsonDict, *, fetch_file: Callable[[str], str | None]) -> JsonDict:
-    """Extract Python entrypoint and Click subcommand evidence."""
+def parse_python_project_cli(pyproject: JsonDict, *, fetch_file: Callable[[str], str | None] | None = None) -> JsonDict:
+    """Extract Python package entrypoint names only.
+
+    The project page tracks whether a repository exposes a package-level CLI
+    entrypoint. It must not expand Click/Typer subcommands into the table, because
+    subcommands are command surface details rather than project identity.
+    """
 
     scripts = _script_entry_modules(pyproject)
     commands = list(scripts.keys())
-    subcommands: list[str] = []
-    for entrypoint in scripts.values():
-        path = _module_to_path(entrypoint)
-        if not path:
-            continue
-        source = fetch_file(path)
-        if not source:
-            continue
-        for name in parse_click_command_names(source):
-            if name not in commands:
-                commands.append(name)
-                subcommands.append(name)
     return {
         "commands": commands,
         "sources": ["pyproject.scripts"] if scripts else [],
-        "tree_status": "expanded" if subcommands else ("command-names-only" if commands else "not-detected"),
+        "tree_status": "entrypoint-only" if commands else "not-detected",
     }
 
 
-def enrich_repository(row: JsonDict, *, owner: str, fetcher: FetchText) -> JsonDict:
+def enrich_repository(row: JsonDict, *, owner: str, fetcher: FetchText, pypi_fetcher: FetchJson, baseline_item: JsonDict | None = None) -> JsonDict:
     """Enrich a ChatGH repo row with lightweight manifest and CLI evidence."""
 
     item = dict(row)
@@ -306,11 +375,8 @@ def enrich_repository(row: JsonDict, *, owner: str, fetcher: FetchText) -> JsonD
             item["description"] = project["description"]
         package["python_name"] = project.get("name") or package.get("python_name") or name
         package.setdefault("npm_name", None)
-        version: JsonDict = dict(_as_dict(item.get("version")))
-        if project.get("version"):
-            version = {"value": project.get("version"), "source": "pyproject.toml"}
-        item["version"] = version or {"value": None, "source": None}
-        item["cli"] = parse_python_project_cli(pyproject, fetch_file=lambda rel: fetcher(full_name, rel))
+        item["version"] = pypi_version(str(package.get("python_name") or name), fetcher=pypi_fetcher)
+        item["cli"] = parse_python_project_cli(pyproject)
         evidence.update({"has_pyproject": True, "details_source": "chatgh+github-contents"})
     else:
         package_json_text = fetcher(full_name, "package.json") if name else None
@@ -325,8 +391,7 @@ def enrich_repository(row: JsonDict, *, owner: str, fetcher: FetchText) -> JsonD
                     item["description"] = package_json["description"]
                 package["npm_name"] = package_json.get("name") or package.get("npm_name")
                 package.setdefault("python_name", None)
-                if package_json.get("version"):
-                    item["version"] = {"value": package_json.get("version"), "source": "package.json"}
+                item["version"] = {"value": None, "source": None}
                 bin_field = package_json.get("bin")
                 if isinstance(bin_field, dict):
                     commands = sorted(str(command) for command in bin_field)
@@ -337,19 +402,46 @@ def enrich_repository(row: JsonDict, *, owner: str, fetcher: FetchText) -> JsonD
                 item["cli"] = {"commands": commands, "sources": ["package.json.bin"] if commands else [], "tree_status": "command-names-only" if commands else "not-detected"}
                 evidence.update({"has_package_json": True, "details_source": "chatgh+github-contents"})
 
+    baseline = _as_dict(baseline_item)
+    baseline_category = str(baseline.get("category") or "").strip()
+    if baseline_category:
+        item["category"] = baseline_category
+
     item["package"] = package
     item["evidence"] = evidence
     item["category_label"] = display_category(item)
     return item
 
 
-def build_project_inventory(repo_rows: Iterable[JsonDict], *, owner: str = "ChatArch", generated_at: str | None = None, fetcher: FetchText | None = None, workers: int = 12) -> JsonDict:
+def build_project_inventory(
+    repo_rows: Iterable[JsonDict],
+    *,
+    owner: str = "ChatArch",
+    generated_at: str | None = None,
+    fetcher: FetchText | None = None,
+    pypi_fetcher: FetchJson | None = None,
+    baseline_inventory: JsonDict | None = None,
+    workers: int = 12,
+) -> JsonDict:
     """Build the dashboard inventory object from repository rows."""
 
     rows = [row for row in repo_rows if isinstance(row, dict)]
     fetcher = fetcher or make_github_fetcher()
+    pypi_fetcher = pypi_fetcher or make_pypi_fetcher()
+    baseline = baseline_repositories(baseline_inventory)
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, workers)) as executor:
-        repositories = list(executor.map(lambda row: enrich_repository(row, owner=owner, fetcher=fetcher), rows))
+        repositories = list(
+            executor.map(
+                lambda row: enrich_repository(
+                    row,
+                    owner=owner,
+                    fetcher=fetcher,
+                    pypi_fetcher=pypi_fetcher,
+                    baseline_item=baseline.get(str(row.get("name") or "").strip().lower()),
+                ),
+                rows,
+            )
+        )
 
     counts = {
         "visible_repos": len(repositories),
@@ -361,6 +453,7 @@ def build_project_inventory(repo_rows: Iterable[JsonDict], *, owner: str = "Chat
         "total_open_prs": sum(int(item.get("open_prs") or 0) for item in repositories),
         "total_open_issues": sum(int(item.get("open_issues") or 0) for item in repositories),
         "with_detected_version": sum(1 for item in repositories if isinstance(item.get("version"), dict) and bool(item["version"].get("value"))),
+        "with_detected_cli_entries": sum(1 for item in repositories if isinstance(item.get("cli"), dict) and bool(item["cli"].get("commands"))),
         "with_detected_cli_commands": sum(1 for item in repositories if isinstance(item.get("cli"), dict) and bool(item["cli"].get("commands"))),
         "with_docs_candidates": sum(1 for item in repositories if item.get("docs")),
     }
@@ -374,7 +467,7 @@ def build_project_inventory(repo_rows: Iterable[JsonDict], *, owner: str = "Chat
             "owner": owner,
             "repo_count": len(rows),
             "auth_source": "chatgh repo list + optional GitHub token environment",
-            "notes": "Repository list comes from ChatGH. Manifest and CLI evidence is fetched read-only from default-branch repository files. Credentials are omitted.",
+            "notes": "Repository list comes from ChatGH. Manifest and package entrypoint evidence is fetched read-only from default-branch repository files. Version display uses PyPI only. Optional baseline inventory preserves reviewed categories. Credentials are omitted.",
         },
         "counts": counts,
         "categories": categories,
@@ -382,13 +475,14 @@ def build_project_inventory(repo_rows: Iterable[JsonDict], *, owner: str = "Chat
     }
 
 
-def refresh_project_inventory(*, output_path: str | Path, options: RefreshOptions = RefreshOptions(), repo_list_json: str | Path | None = None) -> JsonDict:
+def refresh_project_inventory(*, output_path: str | Path, options: RefreshOptions = RefreshOptions(), repo_list_json: str | Path | None = None, baseline_data: str | Path | None = None) -> JsonDict:
     """Refresh and write the project inventory JSON."""
 
     rows = load_repo_rows(repo_list_json) if repo_list_json else run_chatgh_repo_list(owner=options.owner, limit=options.limit, chatgh_bin=options.chatgh_bin)
     token = resolve_token(options.token_env)
     fetcher = make_github_fetcher(token=token, timeout=options.timeout)
-    inventory = build_project_inventory(rows, owner=options.owner, generated_at=options.generated_at, fetcher=fetcher, workers=options.workers)
+    baseline_inventory = load_baseline_inventory(baseline_data)
+    inventory = build_project_inventory(rows, owner=options.owner, generated_at=options.generated_at, fetcher=fetcher, baseline_inventory=baseline_inventory, workers=options.workers)
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(inventory, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

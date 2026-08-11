@@ -49,7 +49,7 @@ def test_parse_click_command_names_handles_positional_and_keyword_names():
     assert parse_click_command_names(CHATGLANCE_CLI_SOURCE) == ["projects", "render-page", "update-config"]
 
 
-def test_parse_python_project_cli_marks_subcommands_as_expanded():
+def test_parse_python_project_cli_keeps_only_package_entrypoints():
     pyproject = {
         "project": {
             "name": "ChatGlance",
@@ -59,8 +59,8 @@ def test_parse_python_project_cli_marks_subcommands_as_expanded():
 
     cli = parse_python_project_cli(pyproject, fetch_file=lambda path: CHATGLANCE_CLI_SOURCE if path == "src/chatglance/cli.py" else None)
 
-    assert cli["tree_status"] == "expanded"
-    assert cli["commands"] == ["chatglance", "projects", "render-page", "update-config"]
+    assert cli["tree_status"] == "entrypoint-only"
+    assert cli["commands"] == ["chatglance"]
 
 
 def test_build_project_inventory_uses_fresh_cli_surface_for_categories():
@@ -88,8 +88,21 @@ def test_build_project_inventory_uses_fresh_cli_surface_for_categories():
         ("ChatArch/ChatSMTP", "pyproject.toml"): '[project]\nname = "ChatSMTP"\nversion = "0.1.0"\n[project.scripts]\nchatsmtp = "chatsmtp.cli:main"\n',
         ("ChatArch/ChatSMTP", "src/chatsmtp/cli.py"): ENTRYPOINT_ONLY_SOURCE,
     }
+    pypi = {
+        "ChatGlance": {"info": {"version": "0.1.2"}},
+        "ChatSMTP": {"info": {"version": "0.1.0"}},
+    }
+    baseline = {"repositories": [{"name": "ChatSMTP", "category": "python-package-template/early"}]}
 
-    inventory = build_project_inventory(rows, owner="ChatArch", generated_at="2026-08-11T21:00:00+08:00", fetcher=lambda full, rel: files.get((full, rel)), workers=1)
+    inventory = build_project_inventory(
+        rows,
+        owner="ChatArch",
+        generated_at="2026-08-11T21:00:00+08:00",
+        fetcher=lambda full, rel: files.get((full, rel)),
+        pypi_fetcher=lambda name: pypi.get(name),
+        baseline_inventory=baseline,
+        workers=1,
+    )
     by_name = {item["name"]: item for item in inventory["repositories"]}
 
     assert inventory["generated_at"] == "2026-08-11T21:00:00+08:00"
@@ -99,11 +112,14 @@ def test_build_project_inventory_uses_fresh_cli_surface_for_categories():
     assert display_category(by_name["ChatGlance"]) == "Python 包"
     assert category_key(by_name["ChatSMTP"]) == "python-early"
     assert display_category(by_name["ChatSMTP"]) == "Python (early)"
-    assert by_name["ChatGlance"]["cli"]["commands"] == ["chatglance", "projects", "render-page", "update-config"]
+    assert by_name["ChatGlance"]["cli"]["commands"] == ["chatglance"]
+    assert by_name["ChatGlance"]["version"] == {"value": "0.1.2", "source": "pypi"}
+    assert by_name["ChatSMTP"]["version"] == {"value": "0.1.0", "source": "pypi"}
+    assert inventory["counts"]["with_detected_cli_entries"] == 2
 
 
 def test_loadable_inventory_shape_is_json_serializable(tmp_path):
-    inventory = build_project_inventory([], generated_at="2026-08-11T21:00:00+08:00", fetcher=lambda _full, _rel: None, workers=1)
+    inventory = build_project_inventory([], generated_at="2026-08-11T21:00:00+08:00", fetcher=lambda _full, _rel: None, pypi_fetcher=lambda _name: None, workers=1)
     output = tmp_path / "projects.json"
     output.write_text(json.dumps(inventory, ensure_ascii=False), encoding="utf-8")
 

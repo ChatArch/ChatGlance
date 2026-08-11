@@ -102,32 +102,32 @@ def test_project_category_display_normalizes_early_python_packages():
     assert "模板 / 早期包" not in rendered
 
 
-def test_project_category_uses_latest_cli_surface_over_stale_early_category():
+def test_project_category_keeps_reviewed_early_category_even_with_cli_entry():
     chatcrs = {
         "name": "ChatCRS",
         "html_url": "https://github.com/ChatArch/ChatCRS",
         "category": "python-package-template/early",
         "language": "Python",
         "package": {"python_name": "ChatCRS"},
-        "version": {"value": "v0.2.2", "source": "latest-tag"},
-        "cli": {"commands": ["chatcrs", "health", "admin", "admin login"], "tree_status": "expanded"},
+        "version": {"value": "0.2.5", "source": "pypi"},
+        "cli": {"commands": ["chatcrs"], "tree_status": "entrypoint-only"},
         "evidence": {"has_pyproject": True},
     }
 
-    assert category_key(chatcrs) == "python-package"
-    assert display_category(chatcrs) == "Python 包"
+    assert category_key(chatcrs) == "python-early"
+    assert display_category(chatcrs) == "Python (early)"
 
 
-def test_project_category_treats_entrypoint_only_python_cli_as_early_even_with_tag():
-    for name, command, version in [("ChatSMTP", "chatsmtp", "v0.1.0"), ("ChatSync", "chatsync", "v0.0.2")]:
+def test_project_category_treats_reviewed_early_python_cli_as_early():
+    for name, command, version in [("ChatSMTP", "chatsmtp", "0.1.0"), ("ChatSync", "chatsync", "0.0.2")]:
         item = {
             "name": name,
             "html_url": f"https://github.com/ChatArch/{name}",
-            "category": "python-package",
+            "category": "python-package-template/early",
             "language": "Python",
             "package": {"python_name": name},
-            "version": {"value": version, "source": "latest-tag"},
-            "cli": {"commands": [command], "tree_status": "command-names-only"},
+            "version": {"value": version, "source": "pypi"},
+            "cli": {"commands": [command], "tree_status": "entrypoint-only"},
             "evidence": {"has_pyproject": True},
         }
 
