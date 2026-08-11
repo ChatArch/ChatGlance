@@ -115,7 +115,9 @@ Collection boundaries:
 - no token, private key, proxy, or full SSH config exposure;
 - displayed IPs follow the SSH connection endpoint: cube aliases use the locally resolved `172.*` target, public hosts use their configured public HostName IP;
 - common virtual VGA adapters on ordinary public VMs are not counted as GPUs, so those cards render `GPU: NULL`;
-- GPU details are kept in the card's expandable details section;
+- collapsed cards show IP, CPU, memory, disk, and status only;
+- GPU details are kept only in the card's expandable details section;
+- expanded system details include `Last Reboot` and raw `uptime_seconds` from the read-only Linux probe;
 - `lsblk` loop/rom/zram/snap/tmpfs/proc/sysfs noise is filtered;
 - `azure.cn`, `essay.newaliyun`, `rex.ctyun`, and `zhihong.tencent` are excluded from the default server page inventory.
 

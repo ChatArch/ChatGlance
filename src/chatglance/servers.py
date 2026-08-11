@@ -25,6 +25,15 @@ printf 'user=%s\n' "$(id -un 2>/dev/null || true)"
 printf 'kernel=%s\n' "$(uname -srmo 2>/dev/null || uname -a 2>/dev/null || true)"
 printf 'ips=%s\n' "$(hostname -I 2>/dev/null || true)"
 printf 'collected_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
+boot_epoch="$(awk '$1=="btime" {print $2}' /proc/stat 2>/dev/null || true)"
+if [ -n "$boot_epoch" ]; then
+  boot_iso="$(date -u -d "@$boot_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
+  printf 'last_reboot=%s\n' "$boot_iso"
+fi
+if [ -r /proc/uptime ]; then
+  read uptime_seconds rest_uptime < /proc/uptime
+  printf 'uptime_seconds=%s\n' "${uptime_seconds%%.*}"
+fi
 
 printf '@@chatglance:cpu@@\n'
 printf 'cores=%s\n' "$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
@@ -587,6 +596,8 @@ def parse_probe_output(alias: str, output: str, target: dict[str, str]) -> dict[
         "user": meta.get("user", ""),
         "kernel": meta.get("kernel", ""),
         "collected_at": meta.get("collected_at") or utc_now(),
+        "last_reboot": meta.get("last_reboot", ""),
+        "uptime_seconds": meta.get("uptime_seconds", ""),
         "cpu": _cpu_from_sections(sections),
         "memory": _memory_from_sections(sections),
         "disks": parse_df(sections.get("df", [])),
@@ -653,28 +664,6 @@ def collect_server_status(aliases: Iterable[str], *, timeout: int = 18, workers:
 
 def _status_label(status: str) -> str:
     return {"online": "在线", "unreachable": "不可达", "error": "错误"}.get(status, status or "未知")
-
-
-def _gpu_summary(gpus: list[dict[str, Any]]) -> str:
-    if not gpus:
-        return "NULL"
-    names = [text_value(gpu.get("name"), "GPU") for gpu in gpus]
-    unique_names = []
-    for name in names:
-        if name not in unique_names:
-            unique_names.append(name)
-    util_values = []
-    for gpu in gpus:
-        value = gpu.get("utilization_percent")
-        if value is None:
-            continue
-        try:
-            util_values.append(float(value))
-        except (TypeError, ValueError):
-            continue
-    max_util = max(util_values) if util_values else None
-    suffix = f" · max {max_util:.0f}%" if max_util is not None else ""
-    return f"{len(gpus)} GPU · {', '.join(unique_names[:2])}{'…' if len(unique_names) > 2 else ''}{suffix}"
 
 
 def _gpu_table(gpus: list[dict[str, Any]]) -> str:
@@ -772,15 +761,14 @@ def _server_card(server: dict[str, Any]) -> str:
     <div><span>CPU</span><strong>{html_text(format_percent(cpu.get('usage_percent')))} · {html_text(cpu.get('cores'))} cores · load {html_text(cpu.get('load1'))}</strong></div>
     <div><span>内存</span><strong>{html_text(format_percent(memory.get('used_percent')))} · {html_text(format_bytes(memory.get('available_bytes')))} 可用 / {html_text(format_bytes(memory.get('total_bytes')))}</strong></div>
     <div><span>硬盘</span><strong>{html_text(primary_disk.get('mountpoint'))} {html_text(format_percent(primary_disk.get('used_percent')))} · {html_text(format_bytes(primary_disk.get('available_bytes')))} 可用</strong></div>
-    <div><span>GPU</span><strong>{html_text(_gpu_summary(gpus))}</strong></div>
   </div>
   <details>
-    <summary>展开 GPU、挂载目录和 devices</summary>
+    <summary>展开详情</summary>
     <div class="detail-section"><h4>GPU 详情</h4>{_gpu_table(gpus)}</div>
     <div class="detail-section"><h4>挂载目录容量</h4>{_disk_table(disks)}</div>
     <div class="detail-section"><h4>getdevices 摘要</h4>{_getdevices_table(getdevices)}</div>
     <div class="detail-section"><h4>lsblk devices</h4>{_device_table(devices)}</div>
-    <div class="detail-section"><h4>系统</h4><p>hostname={html_text(server.get('hostname'))} · user={html_text(server.get('user'))} · kernel={html_text(server.get('kernel'))}</p></div>
+    <div class="detail-section"><h4>系统</h4><p>hostname={html_text(server.get('hostname'))} · user={html_text(server.get('user'))} · kernel={html_text(server.get('kernel'))}<br>Last Reboot={html_text(server.get('last_reboot'))} · uptime_seconds={html_text(server.get('uptime_seconds'))}</p></div>
   </details>
 </div>
 """

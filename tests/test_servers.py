@@ -32,6 +32,8 @@ def sample_status() -> dict:
                 "user": "zhihong",
                 "kernel": "Linux 6.8 x86_64",
                 "collected_at": "2026-08-11T00:00:01Z",
+                "last_reboot": "2026-08-09T12:34:56Z",
+                "uptime_seconds": "123456",
                 "cpu": {"cores": 16, "load1": 0.4, "usage_percent": 12.5},
                 "memory": {"total_bytes": 34359738368, "available_bytes": 17179869184, "used_percent": 50.0},
                 "disks": [
@@ -76,10 +78,11 @@ def test_render_servers_html_contains_required_card_fields() -> None:
     html = render_servers_html(sample_status())
     assert "172.23.148.35" in html
     assert "NULL" in html
-    assert "展开 GPU、挂载目录和 devices" in html
+    assert "展开详情" in html
     assert "挂载目录容量" in html
     assert "使用时间" in html
     assert "getdevices 摘要" in html
+    assert "Last Reboot=2026-08-09T12:34:56Z" in html
     assert "/dev/nvme0n1" in html
     assert "服务器 1 台" in html
 
@@ -123,6 +126,8 @@ user=zhihong
 kernel=Linux 6.8 x86_64
 ips=192.168.98.21 10.0.0.2
 collected_at=2026-08-11T00:00:01Z
+last_reboot=2026-08-09T12:34:56Z
+uptime_seconds=123456
 @@chatglance:cpu@@
 cores=8
 loadavg=0.10 0.20 0.30 1/2 3
@@ -165,6 +170,8 @@ device=sda rotational=0 size=1T lvm= mountpoints=/
     ]
     assert [device["name"] for device in server["devices"]] == ["sda", "sda1"]
     assert server["getdevices"][0]["drive_type"] == "固态"
+    assert server["last_reboot"] == "2026-08-09T12:34:56Z"
+    assert server["uptime_seconds"] == "123456"
 
 
 def test_cli_servers_render_and_update_config(tmp_path) -> None:
