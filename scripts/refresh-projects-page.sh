@@ -25,6 +25,7 @@ BACKUP_DIR="${CHATGLANCE_BACKUP_DIR:-$RUNTIME_HOME/config/backups}"
 CATEGORY_OVERRIDES_PATH="${CHATGLANCE_PROJECTS_CATEGORY_OVERRIDES_JSON:-$RUNTIME_HOME/config/project-category-overrides.json}"
 BASELINE_PATH="${CHATGLANCE_PROJECTS_BASELINE_JSON:-}"
 NEXT_DATA_PATH="${CHATGLANCE_PROJECTS_NEXT_JSON:-$DATA_PATH.next}"
+NEXT_PAGE_PATH="${CHATGLANCE_PROJECTS_NEXT_PAGE_YML:-$PAGE_PATH.next}"
 
 mkdir -p "$(dirname "$DATA_PATH")" "$(dirname "$PAGE_PATH")" "$BACKUP_DIR"
 
@@ -49,7 +50,7 @@ mkdir -p "$(dirname "$DATA_PATH")" "$(dirname "$PAGE_PATH")" "$BACKUP_DIR"
 
 "$CHATGLANCE_BIN" projects render-page \
   --data "$NEXT_DATA_PATH" \
-  --output "$PAGE_PATH"
+  --output "$NEXT_PAGE_PATH"
 
 "$CHATGLANCE_BIN" projects update-config \
   --data "$NEXT_DATA_PATH" \
@@ -61,7 +62,9 @@ mkdir -p "$(dirname "$DATA_PATH")" "$(dirname "$PAGE_PATH")" "$BACKUP_DIR"
 if cmp -s "$CANDIDATE_PATH" "$CONFIG_PATH"; then
   unchanged="$BACKUP_DIR/glance.projects.unchanged.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%S+0800).yml"
   mv "$CANDIDATE_PATH" "$unchanged"
-  echo "changed=false data=$DATA_PATH page=$PAGE_PATH config=$CONFIG_PATH candidate=$unchanged"
+  unchanged_page="$BACKUP_DIR/projects-page.unchanged.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%S+0800).yml"
+  mv "$NEXT_PAGE_PATH" "$unchanged_page"
+  echo "changed=false data=$DATA_PATH page=$PAGE_PATH config=$CONFIG_PATH candidate=$unchanged page_candidate=$unchanged_page"
   exit 0
 fi
 
@@ -71,7 +74,12 @@ data_backup="$BACKUP_DIR/chatarch-projects.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%
 if [[ -f "$DATA_PATH" ]]; then
   cp "$DATA_PATH" "$data_backup"
 fi
+page_backup="$BACKUP_DIR/projects-page.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%S+0800).yml"
+if [[ -f "$PAGE_PATH" ]]; then
+  cp "$PAGE_PATH" "$page_backup"
+fi
 mv "$NEXT_DATA_PATH" "$DATA_PATH"
+mv "$NEXT_PAGE_PATH" "$PAGE_PATH"
 mv "$CANDIDATE_PATH" "$CONFIG_PATH"
 
-echo "changed=true data=$DATA_PATH page=$PAGE_PATH config=$CONFIG_PATH backup=$backup data_backup=$data_backup"
+echo "changed=true data=$DATA_PATH page=$PAGE_PATH config=$CONFIG_PATH backup=$backup data_backup=$data_backup page_backup=$page_backup"
