@@ -17,6 +17,7 @@ def test_tree_option_prints_registered_cli_tree():
     assert result.exit_code == 0, result.output
     assert "chatglance  # Generate and maintain ChatArch Glance dashboard config" in result.output
     assert "projects" in result.output
+    assert "collect" in result.output
     assert "render-page" in result.output
     assert "update-config" in result.output
     assert "disks" in result.output

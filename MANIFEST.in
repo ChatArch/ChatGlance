@@ -1,3 +1,7 @@
 # Private live-deployment records stay in the private repository only.
 # PyPI wheel/sdist artifacts are public, so do not ship exact host/path records.
 recursive-exclude docs/deployment *
+include docs/quickstart.md
+include docs/infra.md
+recursive-include examples *.yml
+recursive-include scripts *.sh

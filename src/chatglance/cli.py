@@ -13,9 +13,24 @@ from typing import NoReturn
 import click
 
 from chatglance import __version__
-from chatglance.glance_config import patch_disks_from_files, update_projects_page_from_files
+from chatglance.glance_config import load_yaml, patch_disks_from_files, update_projects_page_from_files, write_yaml
 from chatglance.projects import PAGE_NAME, build_projects_page, dump_yaml, load_inventory
+from chatglance.project_inventory import RefreshOptions, refresh_project_inventory
 from chatglance.runtime import discover_meaningful_mountpoints, maintain_config, runtime_path
+from chatglance.servers import (
+    SERVER_PAGE_NAME,
+    aliases_from_inventory_config,
+    apply_server_inventory_config,
+    build_servers_page,
+    collection_options_from_inventory_config,
+    collect_server_status,
+    default_candidate_aliases,
+    dump_json,
+    load_server_inventory_config,
+    load_server_status,
+    page_options_from_inventory_config,
+    replace_servers_page,
+)
 from chatglance.systemd import install_user_units, render_all_units, show_user_units, systemctl_user, write_units
 
 
@@ -125,6 +140,40 @@ def projects() -> None:
     """Generate Glance project dashboard pages."""
 
 
+@projects.command("collect")
+@click.option("--owner", default="ChatArch", show_default=True, help="GitHub organization or owner to inventory.")
+@click.option("--repo-list-json", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Existing ChatGH repo-list JSON to enrich instead of calling ChatGH.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Inventory JSON path to write.")
+@click.option("--chatgh-bin", default="chatgh", show_default=True, help="ChatGH executable used for authenticated repo listing.")
+@click.option("--limit", default=500, show_default=True, type=int, help="Maximum repositories to request from ChatGH.")
+@click.option("--workers", default=12, show_default=True, type=int, help="Parallel GitHub contents workers for manifest reads.")
+@click.option("--timeout", default=12, show_default=True, type=int, help="Per-file GitHub contents timeout in seconds.")
+def collect_projects(owner: str, repo_list_json: Path | None, output_path: Path, chatgh_bin: str, limit: int, workers: int, timeout: int) -> None:
+    """Refresh project inventory JSON from ChatGH and read-only repository metadata."""
+
+    inventory = refresh_project_inventory(
+        output_path=output_path,
+        repo_list_json=repo_list_json,
+        options=RefreshOptions(owner=owner, limit=limit, workers=workers, timeout=timeout, chatgh_bin=chatgh_bin),
+    )
+    counts_obj = inventory.get("counts")
+    counts = counts_obj if isinstance(counts_obj, dict) else {}
+    repo_count = counts.get("visible_repos", 0)
+    open_prs = counts.get("total_open_prs", 0)
+    open_issues = counts.get("total_open_issues", 0)
+    click.echo(
+        " ".join(
+            [
+                f"wrote {output_path}",
+                f"generated_at={inventory.get('generated_at')}",
+                f"repos={repo_count}",
+                f"open_prs={open_prs}",
+                f"open_issues={open_issues}",
+            ]
+        )
+    )
+
+
 @projects.command("render-page")
 @click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Inventory JSON generated from repository metadata.")
 @click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="YAML file to write the generated Glance page object to.")
@@ -167,6 +216,109 @@ def root_only_disk(config_path: Path, output_path: Path, mountpoint: str, mount_
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     patch_disks_from_files(config_path, output_path, mountpoint=mountpoint, name=mount_name)
+    click.echo(f"wrote {output_path}")
+
+
+@main.group()
+def servers() -> None:
+    """Collect and render the `服务器` Glance page."""
+
+
+@servers.command("candidates")
+@click.option("--config", "ssh_config", type=click.Path(path_type=Path, dir_okay=False), help="SSH config to scan. Defaults to ~/.ssh/config.")
+@click.option("--inventory-config", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Infra/server inventory YAML. When set, print configured aliases.")
+def server_candidates(ssh_config: Path | None, inventory_config: Path | None) -> None:
+    """Print server aliases selected for the Infra page."""
+
+    from chatglance.servers import dedupe_aliases_by_target, ssh_config_aliases
+
+    ssh_aliases = ssh_config_aliases(ssh_config) if ssh_config else None
+    if inventory_config:
+        config = load_server_inventory_config(inventory_config)
+        aliases = aliases_from_inventory_config(config, ssh_aliases=ssh_aliases)
+    else:
+        aliases = default_candidate_aliases(ssh_aliases)
+    aliases = dedupe_aliases_by_target(aliases)
+    for alias in aliases:
+        click.echo(alias)
+
+
+@servers.command("collect")
+@click.option("--alias", "aliases", multiple=True, help="SSH alias to collect. Repeat for multiple servers.")
+@click.option("--inventory-config", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Infra/server inventory YAML with aliases, exclusions, labels, timeout, and workers.")
+@click.option("--default-candidates/--no-default-candidates", default=False, show_default=True, help="Use ChatGlance's default SSH-config candidate filter when --alias is omitted.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Output server-status JSON path.")
+@click.option("--timeout", default=None, type=int, help="Per-host SSH probe timeout in seconds. Overrides inventory config.")
+@click.option("--workers", default=None, type=int, help="Parallel read-only SSH workers. Overrides inventory config.")
+def collect_servers(aliases: tuple[str, ...], inventory_config: Path | None, default_candidates: bool, output_path: Path, timeout: int | None, workers: int | None) -> None:
+    """Collect a read-only static server-status JSON snapshot."""
+
+    selected = list(aliases)
+    config: dict | None = None
+    if inventory_config:
+        config = load_server_inventory_config(inventory_config)
+        selected.extend(aliases_from_inventory_config(config))
+    if not selected and default_candidates:
+        selected = default_candidate_aliases()
+    if not selected:
+        raise click.ClickException("pass --alias, use --inventory-config, or use --default-candidates")
+    options = collection_options_from_inventory_config(config or {})
+    data = collect_server_status(selected, timeout=timeout or options["timeout"], workers=workers or options["workers"])
+    if config:
+        data = apply_server_inventory_config(data, config)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(dump_json(data), encoding="utf-8")
+    click.echo(f"wrote {output_path} count={data.get('count', 0)} online={data.get('online', 0)}")
+
+
+@servers.command("render-page")
+@click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Server-status JSON snapshot.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="YAML file to write the generated Glance page object to.")
+@click.option("--inventory-config", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Infra/server inventory YAML. Supplies page name/slug/title when present.")
+@click.option("--page-name", default=None, help=f"Generated Glance page name. Defaults to inventory config or {SERVER_PAGE_NAME}.")
+@click.option("--page-slug", default=None, help="Generated Glance page slug. Defaults to inventory config or servers.")
+@click.option("--widget-title", default=None, help="Generated Glance HTML widget title. Defaults to inventory config or 服务器状态.")
+def render_servers_page(data_path: Path, output_path: Path, inventory_config: Path | None, page_name: str | None, page_slug: str | None, widget_title: str | None) -> None:
+    """Render the `服务器` page YAML from server-status JSON."""
+
+    config = load_server_inventory_config(inventory_config) if inventory_config else {}
+    page_options = page_options_from_inventory_config(config)
+    data = load_server_status(data_path)
+    page = build_servers_page(
+        data,
+        page_name=page_name or page_options["page_name"],
+        page_slug=page_slug or page_options["page_slug"],
+        widget_title=widget_title or page_options["widget_title"],
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(dump_yaml(page), encoding="utf-8")
+    click.echo(f"wrote {output_path}")
+
+
+@servers.command("update-config")
+@click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Server-status JSON snapshot.")
+@click.option("--config", "config_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Existing Glance YAML config.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Output path for the updated Glance YAML config.")
+@click.option("--inventory-config", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Infra/server inventory YAML. Supplies page name/slug/title when present.")
+@click.option("--page-name", default=None, help=f"Generated Glance page name. Defaults to inventory config or {SERVER_PAGE_NAME}.")
+@click.option("--page-slug", default=None, help="Generated Glance page slug. Defaults to inventory config or servers.")
+@click.option("--widget-title", default=None, help="Generated Glance HTML widget title. Defaults to inventory config or 服务器状态.")
+def update_servers_config(data_path: Path, config_path: Path, output_path: Path, inventory_config: Path | None, page_name: str | None, page_slug: str | None, widget_title: str | None) -> None:
+    """Write a config copy with the generated server page replaced."""
+
+    inventory = load_server_inventory_config(inventory_config) if inventory_config else {}
+    page_options = page_options_from_inventory_config(inventory)
+    data = load_server_status(data_path)
+    config = load_yaml(config_path)
+    updated = replace_servers_page(
+        config,
+        data,
+        page_name=page_name or page_options["page_name"],
+        page_slug=page_slug or page_options["page_slug"],
+        widget_title=widget_title or page_options["widget_title"],
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    write_yaml(output_path, updated)
     click.echo(f"wrote {output_path}")
 
 

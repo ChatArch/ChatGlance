@@ -1,11 +1,12 @@
 import yaml
 
 from chatglance.glance_config import patch_server_stats_root_only, replace_projects_page
-from chatglance.projects import build_projects_page
+from chatglance.projects import build_projects_page, category_key, display_category
 
 
 def sample_inventory():
     return {
+        "generated_at": "2026-08-11T17:30:00+08:00",
         "counts": {"visible_repos": 3, "with_open_prs": 1, "with_open_issues": 1},
         "repositories": [
             {
@@ -41,6 +42,31 @@ def sample_inventory():
                 "cli": {"commands": []},
                 "docs": [],
             },
+            {
+                "name": "ChatFlow",
+                "html_url": "https://github.com/ChatArch/ChatFlow",
+                "open_prs": 0,
+                "open_issues": 0,
+                "pushed_at": "2026-06-27T00:00:00Z",
+                "category": "python-package",
+                "language": "Python",
+                "package": {"python_name": "ChatFlow"},
+                "version": {"value": None, "source": None},
+                "cli": {"commands": ["chatflow"], "tree_status": "command-names-only"},
+                "evidence": {"has_pyproject": True},
+                "docs": [],
+            },
+            {
+                "name": "delta-template",
+                "html_url": "https://github.com/ChatArch/delta-template",
+                "open_prs": 0,
+                "open_issues": 0,
+                "pushed_at": "2026-08-04T00:00:00Z",
+                "category": "python-package-template/early",
+                "version": {},
+                "cli": {"commands": ["--help", "--version"]},
+                "docs": [],
+            },
         ],
     }
 
@@ -60,6 +86,63 @@ def test_build_projects_page_has_only_current_tabs():
     assert "命令与文档" not in rendered
 
 
+def test_project_category_display_normalizes_early_python_packages():
+    data = sample_inventory()
+    repos = {item["name"]: item for item in data["repositories"]}
+
+    assert category_key(repos["ChatFlow"]) == "python-early"
+    assert display_category(repos["ChatFlow"]) == "Python (early)"
+    assert category_key(repos["delta-template"]) == "python-early"
+    assert display_category(repos["delta-template"]) == "Python (early)"
+
+    page = build_projects_page(data)
+    rendered = yaml.safe_dump(page, allow_unicode=True, sort_keys=False)
+    assert "Python (early)" in rendered
+    assert "python-package-template/early" not in rendered
+    assert "模板 / 早期包" not in rendered
+
+
+def test_project_category_uses_latest_cli_surface_over_stale_early_category():
+    chatcrs = {
+        "name": "ChatCRS",
+        "html_url": "https://github.com/ChatArch/ChatCRS",
+        "category": "python-package-template/early",
+        "language": "Python",
+        "package": {"python_name": "ChatCRS"},
+        "version": {"value": "v0.2.2", "source": "latest-tag"},
+        "cli": {"commands": ["chatcrs", "health", "admin", "admin login"], "tree_status": "expanded"},
+        "evidence": {"has_pyproject": True},
+    }
+
+    assert category_key(chatcrs) == "python-package"
+    assert display_category(chatcrs) == "Python 包"
+
+
+def test_project_category_treats_entrypoint_only_python_cli_as_early_even_with_tag():
+    for name, command, version in [("ChatSMTP", "chatsmtp", "v0.1.0"), ("ChatSync", "chatsync", "v0.0.2")]:
+        item = {
+            "name": name,
+            "html_url": f"https://github.com/ChatArch/{name}",
+            "category": "python-package",
+            "language": "Python",
+            "package": {"python_name": name},
+            "version": {"value": version, "source": "latest-tag"},
+            "cli": {"commands": [command], "tree_status": "command-names-only"},
+            "evidence": {"has_pyproject": True},
+        }
+
+        assert category_key(item) == "python-early"
+        assert display_category(item) == "Python (early)"
+
+
+def test_project_overview_shows_inventory_refresh_time():
+    page = build_projects_page(sample_inventory())
+    rendered = yaml.safe_dump(page, allow_unicode=True, sort_keys=False)
+
+    assert "刷新时间" in rendered
+    assert "2026-08-11T17:30:00+08:00" in rendered
+
+
 def test_triage_tab_filters_zero_zero_repositories():
     page = build_projects_page(sample_inventory())
     triage_widget = page["columns"][1]["widgets"][0]["widgets"][1]
@@ -73,6 +156,13 @@ def test_replace_projects_page_removes_legacy_generated_pages():
     updated = replace_projects_page(config, sample_inventory())
 
     assert [page["name"] for page in updated["pages"]] == ["ChatArch", "项目"]
+
+
+def test_replace_projects_page_keeps_projects_after_home_before_servers():
+    config = {"pages": [{"name": "ChatArch"}, {"name": "服务器", "slug": "servers"}, {"name": "项目"}]}
+    updated = replace_projects_page(config, sample_inventory())
+
+    assert [page["name"] for page in updated["pages"]] == ["ChatArch", "项目", "服务器"]
 
 
 def test_patch_server_stats_root_only_hides_default_mountpoints():

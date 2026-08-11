@@ -1,0 +1,40 @@
+# Example Infra/server inventory config for `chatglance servers`.
+# Keep real SSH aliases and auth material outside public artifacts.
+
+page:
+  # The current ChatArch site uses the Chinese page name, but this can also be
+  # changed to `Infra` if the Glance navigation should expose an English label.
+  name: "服务器"
+  slug: "servers"
+  widget_title: "服务器状态"
+
+inventory:
+  # When true, ChatGlance scans SSH config aliases and applies its safe default
+  # filter for server-dashboard candidates. Add explicit `hosts` below for a
+  # reviewed, deterministic inventory.
+  default_candidates: false
+
+  # Optional extra aliases. Usually prefer `hosts` so labels are documented.
+  aliases: []
+
+  # Aliases to keep out of the page even if they appear in default candidates.
+  # Use this for laptops, local-only test boxes, retired hosts, or aliases that
+  # point at the same machine through a second account.
+  exclude: []
+
+  # Reviewed Infra hosts. `alias` must resolve through SSH config on the control
+  # machine running the refresh. Labels are presentation-only; collection remains
+  # read-only over SSH.
+  hosts:
+    - alias: "infra-cube-1"
+      label: "cube-1"
+      group: "cube"
+      connection_kind: "内网连接"
+    - alias: "infra-public-1"
+      label: "public-1"
+      group: "public"
+      connection_kind: "公网连接"
+
+collection:
+  timeout: 18
+  workers: 8
