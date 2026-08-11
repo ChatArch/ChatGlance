@@ -1,0 +1,67 @@
+page:
+  name: 网站服务
+  slug: sites
+  widget_title: 网站服务
+  uptime_base_url: https://uptime.public.wzhecnu.cn/
+
+sites:
+  - name: bilisum
+    title: BiliSum
+    kind: Media intelligence
+    description: Bilibili 视频摘要与内容理解入口。
+  - name: chattea
+    title: ChatTea
+    kind: Collaboration workflow
+    description: ChatArch 的 Gitea 协作、任务流与实践工作台入口。
+  - name: discourse
+    title: Discourse
+    kind: Community topics
+    description: 长讨论、决策记录与社区主题空间。
+  - name: game
+    title: Game
+    kind: Game service
+    description: 游戏与社区互动相关的网页服务入口。
+  - name: gitea
+    title: Gitea
+    kind: Git service
+    description: ChatArch 自托管 Git、Issue、PR 与 Pages 能力入口。
+  - name: glance
+    title: Glance
+    kind: Dashboard
+    description: ChatArch 项目、服务器与网站服务状态总览。
+  - name: localboard
+    title: LocalBoard
+    kind: Workspace board
+    description: ChatBoard 本地工作区视图与健康状态入口。
+  - name: matter
+    title: Matter
+    kind: Realtime workspace
+    description: Matter 实时协作、频道和 Agent 房间入口。
+  - name: nas
+    title: NAS
+    kind: File share
+    description: NAS 与静态文件共享入口。
+  - name: overleaf
+    title: Overleaf
+    kind: LaTeX writing
+    description: 协作式 LaTeX 文档与论文写作环境。
+  - name: revolt
+    title: Revolt
+    kind: Discord-like chat
+    description: 自托管 Discord-like 实时社区与 Agent 试验空间。
+  - name: share
+    title: Share
+    kind: Temporary file share
+    description: 临时文件分享与轻量图床入口。
+  - name: speakr
+    title: Speakr
+    kind: Recording and ASR
+    description: 录音、上传、转写与 AI 笔记服务入口。
+  - name: uptime
+    title: Uptime
+    kind: Status monitoring
+    description: Gatus 站点可用性与服务健康状态看板。
+  - name: zulip
+    title: Zulip
+    kind: Structured chat
+    description: Stream/Topic 结构化实时讨论和 Agent 协作空间。

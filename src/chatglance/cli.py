@@ -33,6 +33,19 @@ from chatglance.servers import (
     replace_servers_page,
     server_status_regressions,
 )
+from chatglance.sites import (
+    DEFAULT_PAGE_SLUG as SITES_DEFAULT_PAGE_SLUG,
+    DEFAULT_WIDGET_TITLE as SITES_DEFAULT_WIDGET_TITLE,
+    SITES_PAGE_NAME,
+    apply_gatus_status,
+    build_sites_page,
+    dump_json as dump_sites_json,
+    dump_yaml as dump_sites_yaml,
+    export_site_covers,
+    load_sites_data,
+    load_sites_inventory,
+    replace_sites_page,
+)
 from chatglance.systemd import install_user_units, render_all_units, show_user_units, systemctl_user, write_units
 
 
@@ -371,6 +384,88 @@ def update_servers_config(data_path: Path, config_path: Path, output_path: Path,
         page_slug=page_slug or page_options["page_slug"],
         widget_title=widget_title or page_options["widget_title"],
     )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    write_yaml(output_path, updated)
+    click.echo(f"wrote {output_path}")
+
+
+@main.group()
+def sites() -> None:
+    """Collect and render the `网站服务` Glance page."""
+
+
+@sites.command("collect")
+@click.option("--inventory-config", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Reviewed website-service inventory YAML.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Output site-services JSON path.")
+@click.option("--gatus-db", type=click.Path(path_type=Path, dir_okay=False), help="Optional Gatus sqlite DB used to attach latest local monitor status.")
+def collect_sites(inventory_config: Path, output_path: Path, gatus_db: Path | None) -> None:
+    """Collect reviewed website-service cards and optional Uptime status."""
+
+    data = load_sites_inventory(inventory_config)
+    if gatus_db:
+        data = apply_gatus_status(data, gatus_db)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(dump_sites_json(data), encoding="utf-8")
+    counts = data.get("counts") if isinstance(data.get("counts"), dict) else {}
+    click.echo(
+        " ".join(
+            [
+                f"wrote {output_path}",
+                f"generated_at={data.get('generated_at')}",
+                f"sites={counts.get('sites', 0)}",
+                f"healthy={counts.get('healthy', 0)}",
+                f"monitored={counts.get('monitored', 0)}",
+            ]
+        )
+    )
+
+
+@sites.command("render-page")
+@click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Site-services JSON generated from reviewed inventory.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="YAML file to write the generated Glance page object to.")
+@click.option("--page-name", default=SITES_PAGE_NAME, show_default=True, help="Generated Glance page name.")
+@click.option("--page-slug", default=SITES_DEFAULT_PAGE_SLUG, show_default=True, help="Generated Glance page slug.")
+@click.option("--widget-title", default=SITES_DEFAULT_WIDGET_TITLE, show_default=True, help="Generated Glance HTML widget title.")
+def render_sites_page(data_path: Path, output_path: Path, page_name: str, page_slug: str, widget_title: str) -> None:
+    """Render the `网站服务` page YAML from site-services JSON."""
+
+    data = load_sites_data(data_path)
+    page = build_sites_page(data, page_name=page_name, page_slug=page_slug, widget_title=widget_title)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(dump_sites_yaml(page), encoding="utf-8")
+    click.echo(f"wrote {output_path}")
+
+
+@sites.command("export-covers")
+@click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Site-services JSON generated from reviewed inventory.")
+@click.option("--output-dir", type=click.Path(path_type=Path, file_okay=False), required=True, help="Directory where generated SVG covers are written.")
+@click.option("--public-base-url", help="Optional public base URL to attach as cover_url values in the updated JSON.")
+@click.option("--updated-data", type=click.Path(path_type=Path, dir_okay=False), help="Optional output JSON path with cover_url values attached.")
+def export_sites_covers(data_path: Path, output_dir: Path, public_base_url: str | None, updated_data: Path | None) -> None:
+    """Export generated SVG covers for reviewed website services."""
+
+    data = load_sites_data(data_path)
+    updated = export_site_covers(data, output_dir, public_base_url=public_base_url)
+    if updated_data:
+        updated_data.parent.mkdir(parents=True, exist_ok=True)
+        updated_data.write_text(dump_sites_json(updated), encoding="utf-8")
+    count = len([item for item in updated.get("sites", []) if isinstance(item, dict)])
+    click.echo(f"wrote {count} covers to {output_dir}")
+
+
+@sites.command("update-config")
+@click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Site-services JSON generated from reviewed inventory.")
+@click.option("--config", "config_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Existing Glance YAML config.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Output path for the updated Glance YAML config.")
+@click.option("--page-name", default=SITES_PAGE_NAME, show_default=True, help="Generated Glance page name.")
+@click.option("--page-slug", default=SITES_DEFAULT_PAGE_SLUG, show_default=True, help="Generated Glance page slug.")
+@click.option("--widget-title", default=SITES_DEFAULT_WIDGET_TITLE, show_default=True, help="Generated Glance HTML widget title.")
+def update_sites_config(data_path: Path, config_path: Path, output_path: Path, page_name: str, page_slug: str, widget_title: str) -> None:
+    """Write a config copy with the generated website-services page replaced."""
+
+    data = load_sites_data(data_path)
+    config = load_yaml(config_path)
+    updated = replace_sites_page(config, data, page_name=page_name, page_slug=page_slug, widget_title=widget_title)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     write_yaml(output_path, updated)
     click.echo(f"wrote {output_path}")

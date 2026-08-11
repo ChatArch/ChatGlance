@@ -27,6 +27,9 @@ The `chatglance` command is the helper used to apply these rules to the live run
 - Runtime project page YAML snapshot: `/home/zhihong/.chatarch/glance/data/projects-page.yml`
 - Runtime server-status snapshot: `/home/zhihong/.chatarch/glance/data/server-status.json`
 - Runtime server page YAML snapshot: `/home/zhihong/.chatarch/glance/data/server-page.yml`
+- Runtime website-services reviewed inventory: `/home/zhihong/.chatarch/glance/config/site-services.yml`
+- Runtime website-services snapshot: `/home/zhihong/.chatarch/glance/data/site-services.json`
+- Runtime website-services page YAML snapshot: `/home/zhihong/.chatarch/glance/data/site-services-page.yml`
 - Standard ChatArch Python venv for helper CLI: `/home/zhihong/.chatarch/venv`
 
 Live auth settings, password hashes, cookies, proxy credentials, and token-bearing files remain outside Git and are not copied into this repository.
@@ -68,6 +71,7 @@ Maintenance flow:
    - always `/` as `根分区`;
    - include `/home` as `Home` only when `/home` is a distinct mountpoint on the host.
 8. With Glance `hide-mountpoints-by-default: true`, every visible mountpoint must explicitly include `hide: false`.
+9. Render the reviewed `网站服务` page from fixed runtime config, not from live Nginx auto-discovery. Cards show cover image, description, health status, Uptime detail, and a public jump button; local hostnames remain probe/operator data and must not be displayed on the public-facing page.
 
 Correct Disk config shape:
 
@@ -126,6 +130,7 @@ The live dashboard has three pages:
 1. `ChatArch` — ChatArch home / general entry page.
 2. `项目` — generated project dashboard.
 3. `服务器` — server-status cards generated from a static JSON snapshot.
+4. `网站服务` — reviewed service cards with cover images, public jump links, and Uptime status.
 
 The `服务器` page is rendered from `/home/zhihong/.chatarch/glance/data/server-status.json` through an `html` widget. The snapshot is collected by read-only SSH probes using the runtime inventory config at `/home/zhihong/.chatarch/glance/config/server-inventory.yml`. That runtime inventory is the live source of truth for the displayed server list and contains only aliases/display labels/groups/connection labels, not credentials. It records IP, CPU, memory, GPU, mounted filesystem capacity, filtered `lsblk` devices, `Last Reboot`, raw uptime seconds, and the cube `getdevices.sh` disk summary when it can run without installing packages. Displayed collection and reboot timestamps use Beijing time (`+08:00`).
 
@@ -161,6 +166,28 @@ servers: 7 cube hosts plus `rex.aliyun`, `elion.newaliyun`, and `rex.newazure`.
 `tencent.am` is intentionally excluded from the Glance server page; it should not
 be pulled in by default candidates or historical snapshots unless explicitly
 re-added to the runtime inventory.
+
+## Website-services page live note
+
+Date: 2026-08-12
+
+The `网站服务` page is rendered from the reviewed runtime inventory at `/home/zhihong/.chatarch/glance/config/site-services.yml`. It records 15 reviewed pages: `bilisum`, `chattea`, `discourse`, `game`, `gitea`, `glance`, `localboard`, `matter`, `nas`, `overleaf`, `revolt`, `share`, `speakr`, `uptime`, and `zulip`.
+
+Intentionally excluded from the first published service page: ChatVideo entries, duplicate/non-target ChatBoard aliases (`board`, `dashboard`, `macboard`), duplicate `mattermost`, unstable `mailpit`, and `pages` because Pages is part of Gitea rather than a standalone card.
+
+The current Gatus/Uptime group is `ChatArch Services`. It probes local vhosts without using public URLs by requesting `http://127.0.0.1/` with the relevant `Host: <service>.local.wzhecnu.cn` header. The Glance card page does not show those local hostnames; it links to the public service URL and to the matching Uptime detail page.
+
+Configured refresh flow for the static website-services snapshot:
+
+```bash
+CHATGLANCE_BIN=/home/zhihong/.chatarch/venv/bin/chatglance \
+CHATGLANCE_RUNTIME_HOME=/home/zhihong/.chatarch/glance \
+CHATGLANCE_SITES_CONFIG=/home/zhihong/.chatarch/glance/config/site-services.yml \
+CHATGLANCE_GATUS_DB=/home/zhihong/.chatarch/uptime-gatus/data/gatus.db \
+bash scripts/refresh-sites-page.sh
+```
+
+Cover images are generated SVG files currently served from Share under `https://share.public.wzhecnu.cn/chatglance-site-covers-20260812/`. The inventory persists those `cover_url` values so ordinary page refreshes do not need to upload images again. If an entry lacks `cover_url`, `chatglance` renders an inline generated SVG fallback.
 
 ## Verification checklist
 
