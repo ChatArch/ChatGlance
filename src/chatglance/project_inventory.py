@@ -27,6 +27,7 @@ from chatglance.projects import category_key, display_category
 JsonDict = dict[str, Any]
 FetchText = Callable[[str, str], str | None]
 FetchJson = Callable[[str], Any | None]
+ActualCliTreeFetcher = Callable[[str, str, int], str | None]
 
 GITHUB_API = "https://api.github.com"
 PYPI_API = "https://pypi.org/pypi"
@@ -41,6 +42,9 @@ class RefreshOptions:
     limit: int = 500
     workers: int = 12
     timeout: int = DEFAULT_TIMEOUT
+    cli_tree_timeout: int = 90
+    collect_actual_cli_trees: bool = False
+    uvx_bin: str = "uvx"
     token_env: tuple[str, ...] = ("CHATGLANCE_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN")
     chatgh_bin: str = "chatgh"
     generated_at: str | None = None
@@ -350,7 +354,154 @@ def parse_python_project_cli(pyproject: JsonDict, *, fetch_file: Callable[[str],
     }
 
 
-def enrich_repository(row: JsonDict, *, owner: str, fetcher: FetchText, pypi_fetcher: FetchJson, baseline_item: JsonDict | None = None) -> JsonDict:
+TREE_NODE_RE = re.compile(r"(?:├──|└──)\s+(.+)$")
+
+
+def _tree_token(text: str) -> str:
+    before_comment = text.split("#", 1)[0].strip()
+    parts = before_comment.split()
+    return parts[0].strip() if parts else ""
+
+
+def parse_actual_cli_tree_output(output: str) -> JsonDict:
+    """Parse a ChatArch-style ``--tree`` output into business command counts.
+
+    The dashboard classification uses real installed CLI trees. Global options
+    such as ``--help``/``--version``/``--tree`` are not business commands; every
+    non-option tree node is counted as a substantive CLI command node.
+    """
+
+    business_commands: list[str] = []
+    global_options: list[str] = []
+    for line in output.splitlines():
+        match = TREE_NODE_RE.search(line)
+        if not match:
+            continue
+        token = _tree_token(match.group(1))
+        if not token:
+            continue
+        if token.startswith("-"):
+            if token not in global_options:
+                global_options.append(token)
+            continue
+        business_commands.append(token)
+    if not business_commands:
+        in_commands = False
+        for raw_line in output.splitlines():
+            stripped = raw_line.strip()
+            if not stripped:
+                if in_commands:
+                    break
+                continue
+            if stripped.rstrip(":").lower() == "commands":
+                in_commands = True
+                continue
+            if not in_commands:
+                continue
+            if raw_line[:1] and not raw_line.startswith((" ", "\t")):
+                break
+            token = stripped.split()[0] if stripped.split() else ""
+            if token and not token.startswith("-") and token not in business_commands:
+                business_commands.append(token)
+    return {
+        "status": "ok",
+        "business_commands": business_commands,
+        "business_command_count": len(business_commands),
+        "global_options": global_options,
+        "global_option_count": len(global_options),
+    }
+
+
+def make_actual_cli_tree_fetcher(*, uvx_bin: str = "uvx") -> ActualCliTreeFetcher:
+    """Return a fetcher that installs the latest PyPI package and reads CLI tree.
+
+    ``uvx --from <package>@latest`` makes the refresh classify the currently
+    published PyPI package instead of a stale local checkout or cached tool.
+    """
+
+    def fetch(package_name: str, command: str, timeout: int) -> str | None:
+        package = str(package_name or "").strip()
+        entrypoint = str(command or "").strip()
+        if not package or not entrypoint:
+            return None
+        package_spec = f"{package}@latest"
+        base = [uvx_bin, "--from", package_spec, entrypoint]
+        for args in ([*base, "--tree"], [*base, "--help"]):
+            try:
+                result = subprocess.run(
+                    args,
+                    check=False,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=timeout,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            if result.returncode == 0 and result.stdout:
+                return result.stdout
+        return None
+
+    return fetch
+
+
+def enrich_actual_cli_tree(item: JsonDict, *, fetcher: ActualCliTreeFetcher, timeout: int) -> None:
+    """Add actual installed CLI tree evidence to an enriched inventory row."""
+
+    package = _as_dict(item.get("package"))
+    cli = dict(_as_dict(item.get("cli")))
+    package_name = str(package.get("python_name") or item.get("name") or "").strip()
+    commands = [str(command).strip() for command in cli.get("commands", []) if str(command).strip()]
+    if not package_name or not commands:
+        cli["actual_tree"] = {"status": "no-entrypoint", "business_commands": [], "business_command_count": 0, "global_options": [], "global_option_count": 0}
+        item["cli"] = cli
+        return
+
+    per_entrypoint: dict[str, JsonDict] = {}
+    all_business: list[str] = []
+    all_options: list[str] = []
+    statuses: list[str] = []
+    for command in commands:
+        output = fetcher(package_name, command, timeout)
+        if not output:
+            tree = {"status": "unavailable", "business_commands": [], "business_command_count": 0, "global_options": [], "global_option_count": 0}
+        else:
+            tree = parse_actual_cli_tree_output(output)
+        per_entrypoint[command] = tree
+        statuses.append(str(tree.get("status") or "unknown"))
+        all_business.extend(str(cmd) for cmd in tree.get("business_commands", []) if str(cmd).strip())
+        for option in tree.get("global_options", []):
+            text = str(option).strip()
+            if text and text not in all_options:
+                all_options.append(text)
+
+    if any(status == "ok" for status in statuses):
+        status = "ok"
+    elif statuses:
+        status = statuses[0]
+    else:
+        status = "no-entrypoint"
+    cli["actual_tree"] = {
+        "status": status,
+        "business_commands": all_business,
+        "business_command_count": len(all_business),
+        "global_options": all_options,
+        "global_option_count": len(all_options),
+        "entrypoints": per_entrypoint,
+    }
+    item["cli"] = cli
+
+
+def enrich_repository(
+    row: JsonDict,
+    *,
+    owner: str,
+    fetcher: FetchText,
+    pypi_fetcher: FetchJson,
+    baseline_item: JsonDict | None = None,
+    actual_cli_tree_fetcher: ActualCliTreeFetcher | None = None,
+    cli_tree_timeout: int = 90,
+) -> JsonDict:
     """Enrich a ChatGH repo row with lightweight manifest and CLI evidence."""
 
     item = dict(row)
@@ -408,6 +559,8 @@ def enrich_repository(row: JsonDict, *, owner: str, fetcher: FetchText, pypi_fet
         item["category"] = baseline_category
 
     item["package"] = package
+    if actual_cli_tree_fetcher and package.get("python_name"):
+        enrich_actual_cli_tree(item, fetcher=actual_cli_tree_fetcher, timeout=cli_tree_timeout)
     item["evidence"] = evidence
     item["category_label"] = display_category(item)
     return item
@@ -420,6 +573,8 @@ def build_project_inventory(
     generated_at: str | None = None,
     fetcher: FetchText | None = None,
     pypi_fetcher: FetchJson | None = None,
+    actual_cli_tree_fetcher: ActualCliTreeFetcher | None = None,
+    cli_tree_timeout: int = 90,
     baseline_inventory: JsonDict | None = None,
     workers: int = 12,
 ) -> JsonDict:
@@ -438,6 +593,8 @@ def build_project_inventory(
                     fetcher=fetcher,
                     pypi_fetcher=pypi_fetcher,
                     baseline_item=baseline.get(str(row.get("name") or "").strip().lower()),
+                    actual_cli_tree_fetcher=actual_cli_tree_fetcher,
+                    cli_tree_timeout=cli_tree_timeout,
                 ),
                 rows,
             )
@@ -455,6 +612,8 @@ def build_project_inventory(
         "with_detected_version": sum(1 for item in repositories if isinstance(item.get("version"), dict) and bool(item["version"].get("value"))),
         "with_detected_cli_entries": sum(1 for item in repositories if isinstance(item.get("cli"), dict) and bool(item["cli"].get("commands"))),
         "with_detected_cli_commands": sum(1 for item in repositories if isinstance(item.get("cli"), dict) and bool(item["cli"].get("commands"))),
+        "with_actual_cli_tree": sum(1 for item in repositories if isinstance(item.get("cli"), dict) and isinstance(item["cli"].get("actual_tree"), dict) and item["cli"]["actual_tree"].get("status") == "ok"),
+        "with_actual_cli_business_commands": sum(1 for item in repositories if isinstance(item.get("cli"), dict) and isinstance(item["cli"].get("actual_tree"), dict) and int(item["cli"]["actual_tree"].get("business_command_count") or 0) > 0),
         "with_docs_candidates": sum(1 for item in repositories if item.get("docs")),
     }
     categories: dict[str, int] = {}
@@ -467,7 +626,7 @@ def build_project_inventory(
             "owner": owner,
             "repo_count": len(rows),
             "auth_source": "chatgh repo list + optional GitHub token environment",
-            "notes": "Repository list comes from ChatGH. Manifest and package entrypoint evidence is fetched read-only from default-branch repository files. Version display uses PyPI only. Optional baseline inventory preserves reviewed categories. Credentials are omitted.",
+            "notes": "Repository list comes from ChatGH. Manifest and package entrypoint evidence is fetched read-only from default-branch repository files. Version display uses PyPI only. When enabled, actual CLI tree evidence comes from installing the latest PyPI package with uvx and running each entrypoint's --tree/help output. Credentials are omitted.",
         },
         "counts": counts,
         "categories": categories,
@@ -482,7 +641,17 @@ def refresh_project_inventory(*, output_path: str | Path, options: RefreshOption
     token = resolve_token(options.token_env)
     fetcher = make_github_fetcher(token=token, timeout=options.timeout)
     baseline_inventory = load_baseline_inventory(baseline_data)
-    inventory = build_project_inventory(rows, owner=options.owner, generated_at=options.generated_at, fetcher=fetcher, baseline_inventory=baseline_inventory, workers=options.workers)
+    actual_cli_tree_fetcher = make_actual_cli_tree_fetcher(uvx_bin=options.uvx_bin) if options.collect_actual_cli_trees else None
+    inventory = build_project_inventory(
+        rows,
+        owner=options.owner,
+        generated_at=options.generated_at,
+        fetcher=fetcher,
+        baseline_inventory=baseline_inventory,
+        workers=options.workers,
+        actual_cli_tree_fetcher=actual_cli_tree_fetcher,
+        cli_tree_timeout=options.cli_tree_timeout,
+    )
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(inventory, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

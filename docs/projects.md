@@ -17,7 +17,7 @@ The page contains:
    - only repositories with open PRs or open issues.
 4. **分类**
    - reviewed project categories, including the short label `Python (early)` for early Python packages;
-   - refreshed data may preserve categories from a prior reviewed inventory via `--baseline-data`.
+   - Python package early/non-early classification is checked against the latest published package's actual CLI tree, not just entrypoint count or stale overrides.
 5. **一览表**
    - repository link;
    - open PR count;
@@ -25,6 +25,7 @@ The page contains:
    - version;
    - type/category;
    - package CLI entrypoint;
+   - actual CLI tree business-command evidence in the generated JSON/TSV review artifact;
    - docs link candidate;
    - latest commit date.
 
@@ -32,8 +33,10 @@ The page contains:
 
 - `ChatGlance` must appear on the project page when it is visible in the ChatArch repository list.
 - Version display is **PyPI-only**. Do not use GitHub tags, GitHub releases, `pyproject.toml`, `package.json`, or local manifests as version sources for the page.
-- CLI display is **entrypoint-only**. For Python packages this means `project.scripts` / `project.gui-scripts`; for Node packages this means `package.json` `bin` entries. Do not expand Click/Typer/npm subcommands into the project table.
-- A refresh must not use CLI command surface to promote or demote reviewed project categories. Use `--baseline-data` to preserve reviewed classifications such as `Python (early)`.
+- CLI display in the table remains **entrypoint-only**. For Python packages this means `project.scripts` / `project.gui-scripts`; for Node packages this means `package.json` `bin` entries. Do not expand Click/Typer/npm subcommands into the compact table cell.
+- Python package classification uses actual CLI tree evidence when available: the refresh installs the latest PyPI package with `uvx --from <package>@latest <entrypoint> --tree` and counts non-option business command nodes. `--help`, `--version`, and `--tree` are global options, not business commands.
+- `Python (early)` is for placeholder/scaffold/trivial packages: no business subcommands in the actual CLI tree, or explicit placeholder/scaffold/PyPI-name-registration evidence. A package with real business subcommands is `Python 包` even if an older baseline/override marked it as early.
+- `--baseline-data` may preserve reviewed categories for projects without stronger current tree evidence, but stale early overrides must not demote complex CLI packages such as ChatCRS.
 - Tokens, cookies, auth headers, password hashes, and credentials must stay out of generated JSON/YAML and repository docs.
 
 ## Refresh script
@@ -53,15 +56,16 @@ CHATGLANCE_RUNTIME_HOME=$HOME/.chatarch/glance \
 bash /home/zhihong/Playground/core/ChatGlance/scripts/refresh-projects-page.sh
 ```
 
-By default the script uses the current runtime inventory JSON as `--baseline-data` before writing the next snapshot. This preserves reviewed categories while updating current repo counts, PR/Issue counts, PyPI versions, entrypoints, and `generated_at`.
+By default the script uses the current runtime inventory JSON as `--baseline-data` before writing the next snapshot. This preserves reviewed categories only where current tree evidence does not contradict them, while updating repo counts, PR/Issue counts, PyPI versions, entrypoints, actual CLI tree counts, and `generated_at`.
 
-The script stages generated artifacts before touching the live files: it writes `chatarch-projects.json.next` and `projects-page.yml.next`, builds `glance.yml.projects-candidate`, validates the candidate with the Glance binary, then backs up and replaces the live JSON, page YAML, and config together. A failed validation must not leave a new page YAML paired with old data/config.
+The script stages generated artifacts before touching the live files: it writes `chatarch-projects.json.next`, `projects-page.yml.next`, and `project-cli-tree-report.tsv.next`, builds `glance.yml.projects-candidate`, validates the candidate with the Glance binary, then backs up and replaces the live JSON, page YAML, CLI-tree report, and config together. A failed validation must not leave a new page YAML paired with old data/config.
 
 The script writes:
 
 ```text
 $CHATGLANCE_RUNTIME_HOME/data/chatarch-projects.json
 $CHATGLANCE_RUNTIME_HOME/data/projects-page.yml
+$CHATGLANCE_RUNTIME_HOME/data/project-cli-tree-report.tsv
 $CHATGLANCE_RUNTIME_HOME/config/glance.yml.projects-candidate
 ```
 
@@ -71,7 +75,7 @@ It validates the candidate with:
 $CHATGLANCE_RUNTIME_HOME/bin/glance -config $CHATGLANCE_RUNTIME_HOME/config/glance.yml.projects-candidate config:validate
 ```
 
-If validation passes and the candidate differs, it backs up the live config, data, and page YAML, then replaces the live config/data/page artifacts. It intentionally does **not** restart or reload the Glance service; the operator or an outer wrapper owns service lifecycle.
+If validation passes and the candidate differs, it backs up the live config, data, page YAML, and CLI-tree report, then replaces the live config/data/page/report artifacts. It intentionally does **not** restart or reload the Glance service; the operator or an outer wrapper owns service lifecycle.
 
 ## Required review before live
 
@@ -80,9 +84,10 @@ After every refresh, check:
 1. `generated_at` is present and rendered as `刷新时间`.
 2. `ChatGlance` appears in `repositories` and in the rendered page.
 3. `counts.with_detected_version` is explainable under the PyPI-only rule.
-4. `counts.with_detected_cli_entries` is entrypoint count, not subcommand count.
-5. `categories.python-early` / `Python (early)` did not disappear unexpectedly.
-6. Sample rows: `ChatGlance`, `ChatCRS`, `ChatSMTP`, `ChatSync`, `ChatFlow`, `ChatExplore`.
-7. Secret scan for token/auth/password/header patterns returns no hits in project JSON/page YAML.
-8. Live page order remains `ChatArch` → `项目` → `服务器`.
-9. Public unauthenticated smoke still redirects to `/login`.
+4. `counts.with_detected_cli_entries` is entrypoint count, while `counts.with_actual_cli_tree` and `counts.with_actual_cli_business_commands` come from actual latest-PyPI CLI trees.
+5. `project-cli-tree-report.tsv` explains each Python package's entrypoint count, actual business command count, business command names, and resulting category.
+6. `categories.python-early` / `Python (early)` did not disappear unexpectedly, and no complex CLI tree package remains early just because of stale baseline data.
+7. Sample rows: `ChatCI` (trivial actual tree -> `Python (early)`), `ChatCRS` (complex actual tree -> `Python 包`), `ChatGlance`, `ChatSMTP`, `ChatSync`, `ChatFlow`, `ChatExplore`.
+8. Secret scan for token/auth/password/header patterns returns no hits in project JSON/page YAML/CLI-tree TSV.
+9. Live page order remains `ChatArch` → `项目` → `服务器`.
+10. Public unauthenticated smoke still redirects to `/login`.

@@ -76,6 +76,35 @@ def _cli_commands(item: dict[str, Any]) -> list[str]:
     return [str(command).strip() for command in commands if str(command).strip()]
 
 
+def _actual_cli_tree(item: dict[str, Any]) -> dict[str, Any]:
+    cli = _mapping(item.get("cli"))
+    return _mapping(cli.get("actual_tree"))
+
+
+def _actual_business_command_count(item: dict[str, Any]) -> int | None:
+    tree = _actual_cli_tree(item)
+    if text_value(tree.get("status"), "") != "ok":
+        return None
+    try:
+        return int(tree.get("business_command_count") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _description_is_placeholder(item: dict[str, Any]) -> bool:
+    description = text_value(item.get("description"), "").lower()
+    markers = [
+        "placeholder package",
+        "placeholder repository",
+        "pypi name registration",
+        "package scaffold",
+        "lightweight package scaffold",
+        "future chatarch",
+        "future tooling",
+    ]
+    return any(marker in description for marker in markers)
+
+
 def _is_python_package_like(item: dict[str, Any]) -> bool:
     category = _raw_category(item.get("category"))
     package = _mapping(item.get("package"))
@@ -112,6 +141,13 @@ def category_key(item: dict[str, Any]) -> str:
     raw = _raw_category(item.get("category"))
     mapped = CATEGORY_ALIASES.get(raw, raw)
     if _is_python_package_like(item):
+        actual_business_count = _actual_business_command_count(item)
+        if actual_business_count is not None and actual_business_count > 0:
+            return "python-package"
+        if actual_business_count == 0 and _cli_commands(item):
+            return "python-early"
+        if _description_is_placeholder(item):
+            return "python-early"
         if raw in EARLY_PYTHON_CATEGORY_ALIASES or _cli_surface_is_early(item):
             return "python-early"
         if mapped == "python-package":
