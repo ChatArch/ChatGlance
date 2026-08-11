@@ -189,9 +189,9 @@ def servers() -> None:
 def server_candidates(ssh_config: Path | None) -> None:
     """Print default server aliases after internal exclusions."""
 
-    from chatglance.servers import ssh_config_aliases
+    from chatglance.servers import dedupe_aliases_by_target, ssh_config_aliases
 
-    aliases = default_candidate_aliases(ssh_config_aliases(ssh_config) if ssh_config else None)
+    aliases = dedupe_aliases_by_target(default_candidate_aliases(ssh_config_aliases(ssh_config) if ssh_config else None))
     for alias in aliases:
         click.echo(alias)
 

@@ -26,7 +26,7 @@ def sample_status() -> dict:
                 "display_name": "hitk",
                 "group": "cube",
                 "connection_kind": "内网连接",
-                "ip": "192.168.98.21",
+                "ip": "172.23.148.35",
                 "status": "online",
                 "hostname": "hitk",
                 "user": "zhihong",
@@ -61,6 +61,7 @@ def sample_status() -> dict:
                         "device": "/dev/nvme0n1",
                         "drive_type": "固态",
                         "size": "1T",
+                        "power_on": "26993 h (3.08 年)",
                         "logical_volume": "None",
                         "mountpoints": "/",
                     }
@@ -73,9 +74,11 @@ def sample_status() -> dict:
 
 def test_render_servers_html_contains_required_card_fields() -> None:
     html = render_servers_html(sample_status())
-    assert "192.168.98.21" in html
+    assert "172.23.148.35" in html
     assert "NULL" in html
+    assert "展开 GPU、挂载目录和 devices" in html
     assert "挂载目录容量" in html
+    assert "使用时间" in html
     assert "getdevices 摘要" in html
     assert "/dev/nvme0n1" in html
     assert "服务器 1 台" in html
@@ -103,6 +106,10 @@ def test_default_candidate_aliases_excludes_user_excluded_targets() -> None:
         "hitk.cube",
         "auc.cube",
         "tencent.am",
+        "azure.cn",
+        "essay.newaliyun",
+        "rex.ctyun",
+        "zhihong.tencent",
         "random.host",
     ]
     assert default_candidate_aliases(aliases) == ["hitk.cube", "auc.cube", "tencent.am"]
@@ -133,14 +140,18 @@ tmpfs tmpfs 100 1 99 1% /run
 @@chatglance:lsblk@@
 NAME="sda" TYPE="disk" SIZE="1000" MOUNTPOINT="" FSTYPE="" MODEL="SSD" TRAN="sata" ROTA="0" RM="0"
 NAME="sda1" TYPE="part" SIZE="1000" MOUNTPOINT="/" FSTYPE="ext4" MODEL="" TRAN="" ROTA="0" RM="0"
+NAME="loop0" TYPE="loop" SIZE="1000" MOUNTPOINT="/snap/core" FSTYPE="squashfs" MODEL="" TRAN="" ROTA="0" RM="0"
 @@chatglance:readonly_devices@@
 device=sda rotational=0 size=1T lvm= mountpoints=/
 @@chatglance:gpu@@
 @@chatglance:lspci@@
+01:00.0 VGA compatible controller: NVIDIA Corporation TU104 [GeForce RTX 2070 SUPER]
+01:00.1 Audio device: NVIDIA Corporation TU104 HD Audio Controller
 """
-    server = parse_probe_output("hitk.cube", output, {"hostname": "hitk.cube", "port": "22", "user": "zhihong"})
-    assert server["ip"] == "192.168.98.21"
-    assert server["gpus"] == []
+    server = parse_probe_output("hitk.cube", output, {"hostname": "172.23.148.35", "port": "22", "user": "zhihong"})
+    assert server["ip"] == "172.23.148.35"
+    assert len(server["gpus"]) == 1
+    assert "Audio" not in server["gpus"][0]["name"]
     assert server["disks"] == [
         {
             "filesystem": "/dev/sda1",
@@ -152,6 +163,7 @@ device=sda rotational=0 size=1T lvm= mountpoints=/
             "used_percent": 25.0,
         }
     ]
+    assert [device["name"] for device in server["devices"]] == ["sda", "sda1"]
     assert server["getdevices"][0]["drive_type"] == "固态"
 
 
@@ -183,4 +195,4 @@ def test_cli_servers_render_and_update_config(tmp_path) -> None:
     assert "name: ChatArch" in rendered
     assert "name: 项目" in rendered
     assert "name: 服务器" in rendered
-    assert "192.168.98.21" in rendered
+    assert "172.23.148.35" in rendered

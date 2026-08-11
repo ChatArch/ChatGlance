@@ -105,7 +105,7 @@ The live dashboard has three pages:
 2. `项目` — generated project dashboard.
 3. `服务器` — server-status cards generated from a static JSON snapshot.
 
-The `服务器` page is rendered from `/home/zhihong/.chatarch/glance/data/server-status.json` through an `html` widget. The snapshot was collected manually by read-only SSH probes. It records IP, CPU, memory, GPU, mounted filesystem capacity, `lsblk` devices, and a read-only equivalent of the cube `getdevices.sh` fields.
+The `服务器` page is rendered from `/home/zhihong/.chatarch/glance/data/server-status.json` through an `html` widget. The snapshot is collected manually by SSH probes and audited against the local SSH configuration. It records IP, CPU, memory, GPU, mounted filesystem capacity, filtered `lsblk` devices, and the cube `getdevices.sh` disk summary when it can run without installing packages.
 
 Collection boundaries:
 
@@ -113,7 +113,11 @@ Collection boundaries:
 - no `sudo` writes;
 - no server restart except the final Glance user service restart after config validation;
 - no token, private key, proxy, or full SSH config exposure;
-- common virtual VGA adapters on ordinary public VMs are not counted as GPUs, so those cards render `GPU: NULL`.
+- displayed IPs follow the SSH connection endpoint: cube aliases use the locally resolved `172.*` target, public hosts use their configured public HostName IP;
+- common virtual VGA adapters on ordinary public VMs are not counted as GPUs, so those cards render `GPU: NULL`;
+- GPU details are kept in the card's expandable details section;
+- `lsblk` loop/rom/zram/snap/tmpfs/proc/sysfs noise is filtered;
+- `azure.cn`, `essay.newaliyun`, `rex.ctyun`, and `zhihong.tencent` are excluded from the default server page inventory.
 
 Manual update flow for the static snapshot:
 

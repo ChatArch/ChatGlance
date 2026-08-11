@@ -59,6 +59,18 @@ for sysdev in /sys/block/*; do
   printf 'device=%s rotational=%s size=%s lvm=%s mountpoints=%s\n' "$dev" "$rotational" "$size" "$lvm" "$mountpoints"
 done
 
+printf '@@chatglance:getdevices_script@@\n'
+getdevices_script="$(find "$HOME" /opt /usr/local/bin -maxdepth 5 -type f -name getdevices.sh 2>/dev/null | head -n 1 || true)"
+if [ -n "$getdevices_script" ]; then
+  if command -v smartctl >/dev/null 2>&1; then
+    timeout 25 bash "$getdevices_script" 2>/dev/null || true
+  else
+    printf 'SKIPPED smartctl unavailable\n'
+  fi
+else
+  printf 'SKIPPED getdevices.sh unavailable\n'
+fi
+
 printf '@@chatglance:gpu@@\n'
 if command -v nvidia-smi >/dev/null 2>&1; then
   nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu,temperature.gpu --format=csv,noheader,nounits 2>/dev/null || true
@@ -79,6 +91,11 @@ EXCLUDED_ALIASES = {
     "rexwzh.oray",
     "cubebot.oray",
     "zhihong.lean4web",
+    "azure.cn",
+    "essay.newaliyun",
+    "root.ctyun",
+    "rex.ctyun",
+    "zhihong.tencent",
 }
 
 PUBLIC_ALIAS_MARKERS = ("tencent", "aliyun", "ctyun", "azure", "newazure", "newaliyun", "tencent.am")
@@ -207,12 +224,26 @@ def parse_df(lines: Iterable[str]) -> list[dict[str, Any]]:
 
 def parse_lsblk(lines: Iterable[str]) -> list[dict[str, Any]]:
     devices: list[dict[str, Any]] = []
+    skipped_types = {"loop", "rom", "zram", "ram"}
+    skipped_name_prefixes = ("loop", "ram", "zram", "fd", "sr")
+    skipped_fstypes = {"squashfs", "tracefs", "debugfs", "cgroup", "cgroup2", "proc", "sysfs", "devtmpfs", "tmpfs"}
+    skipped_mount_prefixes = ("/snap", "/var/lib/snapd", "/run", "/dev", "/proc", "/sys")
     for line in lines:
         if not line.strip():
             continue
         try:
             fields = dict(part.split("=", 1) for part in shlex.split(line) if "=" in part)
         except ValueError:
+            continue
+        name = fields.get("NAME", "").strip()
+        device_type = fields.get("TYPE", "").strip()
+        fstype = fields.get("FSTYPE", "").strip()
+        mountpoint = fields.get("MOUNTPOINT", "").strip()
+        if device_type in skipped_types or name.startswith(skipped_name_prefixes):
+            continue
+        if fstype in skipped_fstypes:
+            continue
+        if any(mountpoint.startswith(prefix) for prefix in skipped_mount_prefixes):
             continue
         item: dict[str, Any] = {}
         for key, mapped in {
@@ -234,6 +265,28 @@ def parse_lsblk(lines: Iterable[str]) -> list[dict[str, Any]]:
         if item:
             devices.append(item)
     return devices
+
+
+def parse_getdevices_script(lines: Iterable[str]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped.startswith("| /dev/"):
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) < 6:
+            continue
+        rows.append(
+            {
+                "device": cells[0],
+                "drive_type": cells[1],
+                "size": cells[2],
+                "power_on": cells[3],
+                "logical_volume": cells[4] or "None",
+                "mountpoints": cells[5] or "None",
+            }
+        )
+    return rows
 
 
 def parse_shell_key_values(line: str) -> dict[str, str]:
@@ -262,6 +315,7 @@ def parse_readonly_devices(lines: Iterable[str]) -> list[dict[str, str]]:
                 "device": f"/dev/{name}",
                 "drive_type": drive_type,
                 "size": values.get("size", ""),
+                "power_on": "—",
                 "logical_volume": values.get("lvm", "").strip(",") or "None",
                 "mountpoints": values.get("mountpoints", "").strip(",") or "None",
             }
@@ -298,6 +352,8 @@ def parse_gpus(gpu_lines: Iterable[str], lspci_lines: Iterable[str]) -> list[dic
         lowered = line.lower()
         if any(marker in lowered for marker in ignored_display_adapters):
             continue
+        if not any(kind in lowered for kind in ("vga compatible controller", "3d controller", "display controller")):
+            continue
         if any(marker in lowered for marker in real_gpu_markers):
             gpus.append({"name": line.strip()})
     return gpus
@@ -333,6 +389,31 @@ def primary_ip(ips: Iterable[str], *, prefer_private: bool) -> str:
         if parsed.is_global:
             return ip
     return values[0] if values else ""
+
+
+def connection_ip(target: dict[str, str]) -> str:
+    host = target.get("hostname", "").strip()
+    if not host:
+        return ""
+    try:
+        ipaddress.ip_address(host)
+        return host
+    except ValueError:
+        pass
+    try:
+        rows = socket.getaddrinfo(host, None, family=socket.AF_INET, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return ""
+    seen: list[str] = []
+    for row in rows:
+        ip = cast(str, row[4][0])
+        if ip not in seen:
+            seen.append(ip)
+    for prefix in ("172.", "10.", "192.168."):
+        for ip in seen:
+            if ip.startswith(prefix):
+                return ip
+    return seen[0] if seen else ""
 
 
 def ssh_target(alias: str) -> dict[str, str]:
@@ -407,14 +488,8 @@ def default_candidate_aliases(aliases: Iterable[str] | None = None) -> list[str]
     selected: list[str] = []
     public_exact = {
         "tencent.am",
-        "zhihong.tencent",
-        "zhihong.aliyun",
         "rex.aliyun",
-        "root.ctyun",
-        "rex.ctyun",
         "rex.newazure",
-        "azure.cn",
-        "essay.newaliyun",
         "elion.newaliyun",
     }
     for alias in values:
@@ -493,10 +568,14 @@ def parse_probe_output(alias: str, output: str, target: dict[str, str]) -> dict[
     group = alias_group(alias)
     kind = connection_kind(alias, target)
     ips = split_ips(meta.get("ips", ""))
+    display_ip = connection_ip(target)
+    if not display_ip:
+        display_ip = primary_ip(ips, prefer_private=(kind == "内网连接"))
     prefer_private = kind == "内网连接"
-    display_ip = primary_ip(ips, prefer_private=prefer_private)
     if not display_ip and kind == "公网连接":
         display_ip = resolve_global_ip(target.get("hostname", alias))
+    getdevices_script = parse_getdevices_script(sections.get("getdevices_script", []))
+    getdevices = getdevices_script or parse_readonly_devices(sections.get("readonly_devices", []))
     return {
         "alias": alias,
         "display_name": meta.get("hostname") or alias,
@@ -512,7 +591,7 @@ def parse_probe_output(alias: str, output: str, target: dict[str, str]) -> dict[
         "memory": _memory_from_sections(sections),
         "disks": parse_df(sections.get("df", [])),
         "devices": parse_lsblk(sections.get("lsblk", [])),
-        "getdevices": parse_readonly_devices(sections.get("readonly_devices", [])),
+        "getdevices": getdevices,
         "gpus": parse_gpus(sections.get("gpu", []), sections.get("lspci", [])),
     }
 
@@ -523,7 +602,7 @@ def probe_alias(alias: str, *, timeout: int = 18) -> dict[str, Any]:
     except Exception:
         target = {"alias": alias, "hostname": alias, "port": "22", "user": ""}
     kind = connection_kind(alias, target)
-    fallback_ip = resolve_global_ip(target.get("hostname", alias)) if kind == "公网连接" else target.get("hostname", "")
+    fallback_ip = connection_ip(target) or (resolve_global_ip(target.get("hostname", alias)) if kind == "公网连接" else target.get("hostname", ""))
     try:
         completed = subprocess.run(
             ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", alias, "bash -s"],
@@ -576,20 +655,44 @@ def _status_label(status: str) -> str:
     return {"online": "在线", "unreachable": "不可达", "error": "错误"}.get(status, status or "未知")
 
 
-def _gpu_html(gpus: list[dict[str, Any]]) -> str:
+def _gpu_summary(gpus: list[dict[str, Any]]) -> str:
     if not gpus:
         return "NULL"
+    names = [text_value(gpu.get("name"), "GPU") for gpu in gpus]
+    unique_names = []
+    for name in names:
+        if name not in unique_names:
+            unique_names.append(name)
+    util_values = []
+    for gpu in gpus:
+        value = gpu.get("utilization_percent")
+        if value is None:
+            continue
+        try:
+            util_values.append(float(value))
+        except (TypeError, ValueError):
+            continue
+    max_util = max(util_values) if util_values else None
+    suffix = f" · max {max_util:.0f}%" if max_util is not None else ""
+    return f"{len(gpus)} GPU · {', '.join(unique_names[:2])}{'…' if len(unique_names) > 2 else ''}{suffix}"
+
+
+def _gpu_table(gpus: list[dict[str, Any]]) -> str:
     rows = []
     for gpu in gpus:
-        name = html_text(gpu.get("name"), "GPU")
         total = gpu.get("memory_total_mib")
         used = gpu.get("memory_used_mib")
-        util = format_percent(gpu.get("utilization_percent"))
-        if total is not None:
-            rows.append(f"{name} · {used or 0:.0f}/{total:.0f} MiB · {html_text(util)}")
-        else:
-            rows.append(name)
-    return "<br>".join(rows)
+        memory = f"{used or 0:.0f}/{total:.0f} MiB" if total is not None else "—"
+        rows.append(
+            "<tr>"
+            f"<td>{html_text(gpu.get('name'), 'GPU')}</td>"
+            f"<td>{html_text(memory)}</td>"
+            f"<td>{html_text(format_percent(gpu.get('utilization_percent')))}</td>"
+            f"<td>{html_text(gpu.get('temperature_c'))}</td>"
+            "</tr>"
+        )
+    body = "".join(rows) or '<tr><td colspan="4">GPU: NULL</td></tr>'
+    return "<table><thead><tr><th>GPU</th><th>显存</th><th>利用率</th><th>温度 °C</th></tr></thead><tbody>" + body + "</tbody></table>"
 
 
 def _disk_table(disks: list[dict[str, Any]]) -> str:
@@ -636,12 +739,13 @@ def _getdevices_table(rows_data: list[dict[str, str]]) -> str:
             f"<td>{html_text(item.get('device'))}</td>"
             f"<td>{html_text(item.get('drive_type'))}</td>"
             f"<td>{html_text(item.get('size'))}</td>"
+            f"<td>{html_text(item.get('power_on'))}</td>"
             f"<td>{html_text(item.get('logical_volume'))}</td>"
             f"<td>{html_text(item.get('mountpoints'))}</td>"
             "</tr>"
         )
-    body = "".join(rows) or '<tr><td colspan="5">暂无 getdevices 摘要</td></tr>'
-    return "<table><thead><tr><th>硬盘设备</th><th>类型</th><th>容量</th><th>逻辑卷</th><th>挂载目录</th></tr></thead><tbody>" + body + "</tbody></table>"
+    body = "".join(rows) or '<tr><td colspan="6">暂无 getdevices 摘要</td></tr>'
+    return "<table><thead><tr><th>硬盘设备</th><th>类型</th><th>容量</th><th>使用时间</th><th>逻辑卷</th><th>挂载目录</th></tr></thead><tbody>" + body + "</tbody></table>"
 
 
 def _server_card(server: dict[str, Any]) -> str:
@@ -668,10 +772,11 @@ def _server_card(server: dict[str, Any]) -> str:
     <div><span>CPU</span><strong>{html_text(format_percent(cpu.get('usage_percent')))} · {html_text(cpu.get('cores'))} cores · load {html_text(cpu.get('load1'))}</strong></div>
     <div><span>内存</span><strong>{html_text(format_percent(memory.get('used_percent')))} · {html_text(format_bytes(memory.get('available_bytes')))} 可用 / {html_text(format_bytes(memory.get('total_bytes')))}</strong></div>
     <div><span>硬盘</span><strong>{html_text(primary_disk.get('mountpoint'))} {html_text(format_percent(primary_disk.get('used_percent')))} · {html_text(format_bytes(primary_disk.get('available_bytes')))} 可用</strong></div>
-    <div><span>GPU</span><strong>{_gpu_html(gpus)}</strong></div>
+    <div><span>GPU</span><strong>{html_text(_gpu_summary(gpus))}</strong></div>
   </div>
   <details>
-    <summary>展开挂载目录和 devices</summary>
+    <summary>展开 GPU、挂载目录和 devices</summary>
+    <div class="detail-section"><h4>GPU 详情</h4>{_gpu_table(gpus)}</div>
     <div class="detail-section"><h4>挂载目录容量</h4>{_disk_table(disks)}</div>
     <div class="detail-section"><h4>getdevices 摘要</h4>{_getdevices_table(getdevices)}</div>
     <div class="detail-section"><h4>lsblk devices</h4>{_device_table(devices)}</div>
