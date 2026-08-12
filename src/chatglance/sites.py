@@ -115,6 +115,10 @@ def _status_label(status: str) -> str:
     return {"healthy": "健康", "unhealthy": "异常", "unknown": "未知"}.get(status or "unknown", status or "未知")
 
 
+def _is_visual_card(site: dict[str, Any]) -> bool:
+    return bool(site.get("visual_card")) or text_value(site.get("card_mode")).lower() == "visual"
+
+
 def _site_card(site: dict[str, Any]) -> str:
     status = text_value(site.get("status"), "unknown")
     public_url = text_value(site.get("public_url"))
@@ -126,12 +130,15 @@ def _site_card(site: dict[str, Any]) -> str:
         if uptime_url
         else ""
     )
+    visual_card = _is_visual_card(site)
+    title_and_description = "" if visual_card else f"""
+    <div class="site-card-head"><h3>{html_text(site.get('title') or site.get('name'))}</h3></div>
+    <p class="site-description">{html_text(site.get('description'), '—')}</p>"""
     return f"""
 <article class="site-card status-{html_text(status, 'unknown')}">
   <div class="site-cover-wrap"><img class="site-cover" src="{html_text(site.get('cover_url') or cover_data_uri(site))}" alt="{html_text(site.get('title') or site.get('name'))} cover" loading="lazy"></div>
-  <div class="site-card-body">
-    <div class="site-card-head"><h3>{html_text(site.get('title') or site.get('name'))}</h3></div>
-    <p class="site-description">{html_text(site.get('description'), '—')}</p>
+  <div class="site-card-body{' visual-card-body' if visual_card else ''}">
+{title_and_description}
     <div class="site-card-footer">
       <div class="site-meta"><span class="site-pill">{html_text(_status_label(status))}</span><span>{html_text(status_piece)}</span><span>更新 {html_text(site.get('checked_at') or site.get('generated_at'), '—')}</span></div>
       <div class="site-actions">
