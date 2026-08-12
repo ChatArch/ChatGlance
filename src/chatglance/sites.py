@@ -75,10 +75,12 @@ def _uptime_url(name: str, base_url: str = DEFAULT_UPTIME_BASE_URL) -> str:
 def _cover_svg(site: dict[str, Any]) -> str:
     name = text_value(site.get("name"), "site")
     title = text_value(site.get("title"), name)
+    summary = text_value(site.get("cover_summary"), text_value(site.get("description"), "ChatArch service"))
     label = (text_value(site.get("cover_label")) or title[:2]).upper()
     palette = PALETTE[sum(ord(ch) for ch in name) % len(PALETTE)]
     safe_title = html.escape(title)
     safe_name = html.escape(name)
+    safe_summary = html.escape(summary[:42])
     safe_label = html.escape(label[:4])
     return f"""<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"640\" height=\"280\" viewBox=\"0 0 640 280\" role=\"img\" aria-label=\"{safe_title} cover\">
   <defs>
@@ -100,7 +102,7 @@ def _cover_svg(site: dict[str, Any]) -> str:
   <text x=\"230\" y=\"112\" font-family=\"Inter, ui-sans-serif, system-ui, sans-serif\" font-size=\"42\" font-weight=\"800\" fill=\"#ffffff\">{safe_title}</text>
   <text x=\"232\" y=\"160\" font-family=\"Inter, ui-sans-serif, system-ui, sans-serif\" font-size=\"22\" font-weight=\"600\" fill=\"#ffffff\" opacity=\"0.82\">{safe_name}.public.wzhecnu.cn</text>
   <path d=\"M232 194 H500\" stroke=\"#fff\" stroke-width=\"3\" stroke-linecap=\"round\" opacity=\"0.38\"/>
-  <text x=\"232\" y=\"230\" font-family=\"Inter, ui-sans-serif, system-ui, sans-serif\" font-size=\"18\" fill=\"#ffffff\" opacity=\"0.78\">ChatArch Service Entry</text>
+  <text x="232" y="230" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="18" fill="#ffffff" opacity="0.78">{safe_summary}</text>
 </svg>"""
 
 
@@ -128,18 +130,14 @@ def _site_card(site: dict[str, Any]) -> str:
 <article class="site-card status-{html_text(status, 'unknown')}">
   <div class="site-cover-wrap"><img class="site-cover" src="{html_text(site.get('cover_url') or cover_data_uri(site))}" alt="{html_text(site.get('title') or site.get('name'))} cover" loading="lazy"></div>
   <div class="site-card-body">
-    <div class="site-card-head">
-      <div>
-        <h3>{html_text(site.get('title') or site.get('name'))}</h3>
-        <p class="site-kind">{html_text(site.get('kind'), 'ChatArch service')}</p>
-      </div>
-      <span class="site-pill">{html_text(_status_label(status))}</span>
-    </div>
+    <div class="site-card-head"><h3>{html_text(site.get('title') or site.get('name'))}</h3></div>
     <p class="site-description">{html_text(site.get('description'), '—')}</p>
-    <div class="site-meta"><span>{html_text(status_piece)}</span><span>更新 {html_text(site.get('checked_at') or site.get('generated_at'), '—')}</span></div>
-    <div class="site-actions">
-      <a class="site-btn primary" href="{html_text(public_url)}" target="_blank" rel="noreferrer">打开 <span aria-hidden="true">↗</span></a>
-      {uptime_button}
+    <div class="site-card-footer">
+      <div class="site-meta"><span class="site-pill">{html_text(_status_label(status))}</span><span>{html_text(status_piece)}</span><span>更新 {html_text(site.get('checked_at') or site.get('generated_at'), '—')}</span></div>
+      <div class="site-actions">
+        <a class="site-btn primary" href="{html_text(public_url)}" target="_blank" rel="noreferrer">打开 <span aria-hidden="true">↗</span></a>
+        {uptime_button}
+      </div>
     </div>
   </div>
 </article>"""
@@ -156,18 +154,18 @@ def render_sites_html(data: dict[str, Any]) -> str:
 <style>
 .site-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); }}
 .site-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 0.9rem; }}
-.site-card {{ border: 1px solid var(--color-separator); border-radius: 18px; overflow: hidden; background: var(--color-widget-background); box-shadow: 0 8px 28px rgba(15,23,42,0.08); }}
+.site-card {{ border: 1px solid var(--color-separator); border-radius: 18px; overflow: hidden; background: var(--color-widget-background); box-shadow: 0 8px 28px rgba(15,23,42,0.08); display: flex; flex-direction: column; }}
 .site-cover-wrap {{ aspect-ratio: 16 / 7; overflow: hidden; background: rgba(148,163,184,0.12); }}
 .site-cover {{ width: 100%; height: 100%; object-fit: cover; display: block; }}
-.site-card-body {{ padding: 0.82rem; }}
+.site-card-body {{ padding: 0.82rem; display: flex; flex-direction: column; flex: 1; }}
 .site-card-head {{ display: flex; justify-content: space-between; gap: 0.6rem; align-items: flex-start; }}
 .site-card h3 {{ margin: 0; font-size: 1.05rem; }}
-.site-kind {{ margin: 0.15rem 0 0; font-size: 0.78rem; color: var(--color-text-subdue); }}
 .site-pill {{ border: 1px solid var(--color-separator); border-radius: 999px; padding: 0.12rem 0.5rem; font-size: 0.76rem; white-space: nowrap; }}
 .status-healthy .site-pill {{ color: var(--color-positive); }}
 .status-unhealthy .site-pill {{ color: var(--color-negative); }}
 .site-description {{ min-height: 2.7em; margin: 0.65rem 0; color: var(--color-text); line-height: 1.45; }}
-.site-meta {{ display: flex; flex-wrap: wrap; gap: 0.45rem; color: var(--color-text-subdue); font-size: 0.76rem; margin-bottom: 0.75rem; }}
+.site-card-footer {{ margin-top: auto; padding-top: 0.35rem; }}
+.site-meta {{ display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; color: var(--color-text-subdue); font-size: 0.76rem; margin-bottom: 0.75rem; }}
 .site-actions {{ display: flex; flex-wrap: wrap; gap: 0.5rem; }}
 .site-btn {{ display: inline-flex; align-items: center; gap: 0.28rem; border: 1px solid var(--color-separator); border-radius: 999px; padding: 0.32rem 0.68rem; font-size: 0.82rem; text-decoration: none; }}
 .site-btn.primary {{ background: var(--color-primary); color: var(--color-widget-background); border-color: var(--color-primary); }}

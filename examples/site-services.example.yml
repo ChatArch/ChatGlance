@@ -9,59 +9,74 @@ sites:
     title: BiliSum
     kind: Media intelligence
     description: Bilibili 视频摘要与内容理解入口。
+    cover_summary: Video Summary & Insight
   - name: chattea
     title: ChatTea
     kind: Collaboration workflow
     description: ChatArch 的 Gitea 协作、任务流与实践工作台入口。
+    cover_summary: Gitea Practice Flow
   - name: discourse
     title: Discourse
     kind: Community topics
     description: 长讨论、决策记录与社区主题空间。
+    cover_summary: Long-form Community Threads
   - name: game
     title: Game
     kind: Game service
     description: 游戏与社区互动相关的网页服务入口。
+    cover_summary: Interactive Play Space
   - name: gitea
     title: Gitea
     kind: Git service
     description: ChatArch 自托管 Git、Issue、PR 与 Pages 能力入口。
+    cover_summary: Git, Issues & Reviews
   - name: glance
     title: Glance
     kind: Dashboard
     description: ChatArch 项目、服务器与网站服务状态总览。
+    cover_summary: Status Dashboard Hub
   - name: localboard
     title: LocalBoard
     kind: Workspace board
     description: ChatBoard 本地工作区视图与健康状态入口。
+    cover_summary: Workspace Board View
   - name: matter
     title: Matter
     kind: Realtime workspace
     description: Matter 实时协作、频道和 Agent 房间入口。
+    cover_summary: Realtime Team Rooms
   - name: nas
     title: NAS
     kind: File share
     description: NAS 与静态文件共享入口。
+    cover_summary: Shared Files & Storage
   - name: overleaf
     title: Overleaf
     kind: LaTeX writing
     description: 协作式 LaTeX 文档与论文写作环境。
+    cover_summary: Collaborative LaTeX Writing
   - name: revolt
     title: Revolt
     kind: Discord-like chat
     description: 自托管 Discord-like 实时社区与 Agent 试验空间。
+    cover_summary: Open Community Chat
   - name: share
     title: Share
     kind: Temporary file share
     description: 临时文件分享与轻量图床入口。
+    cover_summary: Temporary File Handoff
   - name: speakr
     title: Speakr
     kind: Recording and ASR
     description: 录音、上传、转写与 AI 笔记服务入口。
+    cover_summary: Recording, ASR & Notes
   - name: uptime
     title: Uptime
     kind: Status monitoring
     description: Gatus 站点可用性与服务健康状态看板。
+    cover_summary: Service Availability Monitor
   - name: zulip
     title: Zulip
     kind: Structured chat
     description: Stream/Topic 结构化实时讨论和 Agent 协作空间。
+    cover_summary: Stream & Topic Collaboration
