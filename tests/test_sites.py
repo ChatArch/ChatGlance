@@ -23,6 +23,8 @@ def sample_sites_data() -> dict:
             {
                 "name": "glance",
                 "title": "Glance",
+                "kind": "Dashboard",
+                "cover_summary": "Status dashboard",
                 "description": "ChatArch dashboard.",
                 "public_url": "https://glance.public.wzhecnu.cn/",
                 "local_host": "glance.local.wzhecnu.cn",
@@ -68,6 +70,27 @@ def test_render_sites_html_prefers_external_cover_url_when_present() -> None:
     assert "https://share.public.wzhecnu.cn/covers/glance.svg" in html
     first_card = html.split("</article>", 1)[0]
     assert "data:image/svg+xml;base64," not in first_card
+
+
+def test_site_card_keeps_repeated_kind_out_of_body_and_health_at_bottom() -> None:
+    html = render_sites_html(sample_sites_data())
+    first_card = "<article" + html.split("<article", 1)[1].split("</article>", 1)[0]
+
+    assert "site-kind" not in first_card
+    assert "Dashboard" not in first_card
+    assert first_card.index("ChatArch dashboard.") < first_card.index("site-card-footer")
+    assert first_card.index("site-card-footer") < first_card.index("健康")
+    assert first_card.index("健康") < first_card.index("打开")
+
+
+def test_generated_cover_uses_service_specific_summary_not_generic_entry_label(tmp_path) -> None:
+    data = sample_sites_data()
+
+    export_site_covers(data, tmp_path)
+    cover = (tmp_path / "glance.svg").read_text(encoding="utf-8")
+
+    assert "Status dashboard" in cover
+    assert "ChatArch Service Entry" not in cover
 
 
 def test_build_sites_page_creates_wide_html_page() -> None:
