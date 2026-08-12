@@ -83,6 +83,25 @@ def test_site_card_keeps_repeated_kind_out_of_body_and_health_at_bottom() -> Non
     assert first_card.index("健康") < first_card.index("打开")
 
 
+def test_site_visual_card_mode_uses_image_as_whole_card_and_keeps_footer_actions() -> None:
+    data = sample_sites_data()
+    data["sites"][0]["card_mode"] = "visual"
+    data["sites"][0]["cover_url"] = "https://share.public.wzhecnu.cn/covers/bilisum.png"
+    data["sites"][0]["title"] = "BiliSum"
+    data["sites"][0]["description"] = "Bilibili 视频摘要与内容理解入口。"
+
+    html = render_sites_html(data)
+    first_card = "<article" + html.split("<article", 1)[1].split("</article>", 1)[0]
+
+    assert "https://share.public.wzhecnu.cn/covers/bilisum.png" in first_card
+    assert "<h3>" not in first_card
+    assert "site-description" not in first_card
+    assert "Bilibili 视频摘要与内容理解入口。" not in first_card
+    assert "site-card-footer" in first_card
+    assert "打开" in first_card
+    assert "Uptime" in first_card
+
+
 def test_generated_cover_uses_service_specific_summary_not_generic_entry_label(tmp_path) -> None:
     data = sample_sites_data()
 
