@@ -13,6 +13,16 @@ from typing import NoReturn
 import click
 
 from chatglance import __version__
+from chatglance.account_limits import (
+    ACCOUNT_LIMITS_PAGE_NAME,
+    DEFAULT_PAGE_SLUG as ACCOUNT_LIMITS_DEFAULT_PAGE_SLUG,
+    DEFAULT_WIDGET_TITLE as ACCOUNT_LIMITS_DEFAULT_WIDGET_TITLE,
+    build_account_limits_page,
+    dump_json as dump_account_limits_json,
+    dump_yaml as dump_account_limits_yaml,
+    load_account_limits_data,
+    replace_account_limits_page,
+)
 from chatglance.glance_config import load_yaml, patch_disks_from_files, update_projects_page_from_files, write_yaml
 from chatglance.projects import PAGE_NAME, build_projects_page, dump_yaml, load_inventory
 from chatglance.project_inventory import RefreshOptions, refresh_project_inventory
@@ -466,6 +476,68 @@ def update_sites_config(data_path: Path, config_path: Path, output_path: Path, p
     data = load_sites_data(data_path)
     config = load_yaml(config_path)
     updated = replace_sites_page(config, data, page_name=page_name, page_slug=page_slug, widget_title=widget_title)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    write_yaml(output_path, updated)
+    click.echo(f"wrote {output_path}")
+
+
+@main.group("account-limits")
+def account_limits() -> None:
+    """Render the `账号额度` Glance page."""
+
+
+@account_limits.command("json")
+@click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Raw account-limits JSON to normalize and redact.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Output normalized account-limits JSON path.")
+def normalize_account_limits_json(data_path: Path, output_path: Path) -> None:
+    """Normalize account/quota data for the dashboard."""
+
+    data = load_account_limits_data(data_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(dump_account_limits_json(data), encoding="utf-8")
+    counts = data.get("counts") if isinstance(data.get("counts"), dict) else {}
+    click.echo(
+        " ".join(
+            [
+                f"wrote {output_path}",
+                f"generated_at={data.get('generated_at')}",
+                f"accounts={counts.get('accounts', 0)}",
+                f"codex_profiles={counts.get('codex_profiles', 0)}",
+                f"codex_windows={counts.get('codex_windows', 0)}",
+            ]
+        )
+    )
+
+
+@account_limits.command("render-page")
+@click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Account-limits JSON generated from account/quota collectors.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="YAML file to write the generated Glance page object to.")
+@click.option("--page-name", default=ACCOUNT_LIMITS_PAGE_NAME, show_default=True, help="Generated Glance page name.")
+@click.option("--page-slug", default=ACCOUNT_LIMITS_DEFAULT_PAGE_SLUG, show_default=True, help="Generated Glance page slug.")
+@click.option("--widget-title", default=ACCOUNT_LIMITS_DEFAULT_WIDGET_TITLE, show_default=True, help="Generated Glance HTML widget title.")
+def render_account_limits_page(data_path: Path, output_path: Path, page_name: str, page_slug: str, widget_title: str) -> None:
+    """Render the `账号额度` page YAML from account-limits JSON."""
+
+    data = load_account_limits_data(data_path)
+    page = build_account_limits_page(data, page_name=page_name, page_slug=page_slug, widget_title=widget_title)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(dump_account_limits_yaml(page), encoding="utf-8")
+    click.echo(f"wrote {output_path}")
+
+
+@account_limits.command("update-config")
+@click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Account-limits JSON generated from account/quota collectors.")
+@click.option("--config", "config_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Existing Glance YAML config.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Output path for the updated Glance YAML config.")
+@click.option("--page-name", default=ACCOUNT_LIMITS_PAGE_NAME, show_default=True, help="Generated Glance page name.")
+@click.option("--page-slug", default=ACCOUNT_LIMITS_DEFAULT_PAGE_SLUG, show_default=True, help="Generated Glance page slug.")
+@click.option("--widget-title", default=ACCOUNT_LIMITS_DEFAULT_WIDGET_TITLE, show_default=True, help="Generated Glance HTML widget title.")
+def update_account_limits_config(data_path: Path, config_path: Path, output_path: Path, page_name: str, page_slug: str, widget_title: str) -> None:
+    """Write a config copy with the generated account-limits page replaced."""
+
+    data = load_account_limits_data(data_path)
+    config = load_yaml(config_path)
+    updated = replace_account_limits_page(config, data, page_name=page_name, page_slug=page_slug, widget_title=widget_title)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     write_yaml(output_path, updated)
     click.echo(f"wrote {output_path}")

@@ -30,4 +30,7 @@ def test_tree_option_prints_registered_cli_tree():
     assert "servers" in result.output
     assert "sites" in result.output
     assert "export-covers" in result.output
+    assert "account-limits" in result.output
+    assert "render-page" in result.output
+    assert "update-config" in result.output
     assert "status" in result.output
