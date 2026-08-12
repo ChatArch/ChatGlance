@@ -81,7 +81,12 @@ def sample_account_limits_data() -> dict:
 def test_normalize_account_limits_dedupes_crs_accounts_and_counts_codex_windows() -> None:
     normalized = normalize_account_limits_data(sample_account_limits_data())
 
-    assert normalized["counts"] == {"accounts": 2, "codex_profiles": 1, "codex_windows": 2}
+    assert normalized["counts"] == {
+        "accounts": 2,
+        "codex_profiles": 1,
+        "codex_windows": 2,
+        "codex_reset_events": 0,
+    }
     wzh = normalized["accounts"][0]
     assert wzh["account_name"] == "wzh"
     assert wzh["profiles"] == ["default", "wzh"]
@@ -192,9 +197,49 @@ def test_normalize_account_limits_accepts_chatcrs_display_rows_shape() -> None:
     normalized = normalize_account_limits_data(data)
     html = render_account_limits_html(data)
 
-    assert normalized["counts"] == {"accounts": 1, "codex_profiles": 1, "codex_windows": 0}
+    assert normalized["counts"] == {
+        "accounts": 1,
+        "codex_profiles": 1,
+        "codex_windows": 0,
+        "codex_reset_events": 0,
+    }
     assert normalized["accounts"][0]["profiles"] == ["default", "wzh"]
     assert normalized["accounts"][0]["usage"]["total_requests"] == 1786
     assert normalized["accounts"][0]["usage"]["total_all_tokens"] == 200671051
     assert "No Codex credentials stored" in html
     assert "AuthError" in html
+
+
+def test_render_account_limits_html_shows_codex_reset_history_calendar() -> None:
+    data = sample_account_limits_data()
+    data["codex"][0]["reset_history"] = [
+        {
+            "label": "Session",
+            "reset_at": "2026-08-10T18:30:00+08:00",
+            "observed_at": "2026-08-10T13:30:00+08:00",
+            "used_percent": 91.2,
+        },
+        {
+            "label": "Session",
+            "reset_at": "2026-08-11T18:30:00+08:00",
+            "observed_at": "2026-08-11T13:30:00+08:00",
+            "used_percent": 88.0,
+        },
+        {
+            "label": "Weekly",
+            "reset_at": "2026-08-18T09:00:00+08:00",
+            "observed_at": "2026-08-12T13:30:00+08:00",
+            "used_percent": 3,
+        },
+    ]
+
+    normalized = normalize_account_limits_data(data)
+    html = render_account_limits_html(data)
+
+    assert normalized["counts"]["codex_reset_events"] == 3
+    assert "Codex 重置日历" in html
+    assert "2026-08-10" in html
+    assert "2026-08-11" in html
+    assert "Session" in html
+    assert "91.2%" in html
+    assert "Weekly" in html

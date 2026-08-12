@@ -81,6 +81,13 @@ def _fmt_reset(value: Any) -> str:
     return local.strftime("%Y-%m-%d %H:%M %Z").strip()
 
 
+def _reset_date(value: Any) -> str:
+    formatted = _fmt_reset(value)
+    if formatted == "—":
+        return "—"
+    return formatted.split()[0] if " " in formatted else formatted
+
+
 def _list_text(values: Any) -> str:
     if isinstance(values, list):
         return ", ".join(text_value(value) for value in values if text_value(value)) or "—"
@@ -201,6 +208,9 @@ def normalize_account_limits_data(data: dict[str, Any]) -> dict[str, Any]:
             accounts.append(account)
     codex_profiles = [item for item in safe.get("codex", []) if isinstance(item, dict)]
     codex_windows = sum(len(item.get("windows") or []) for item in codex_profiles if isinstance(item.get("windows"), list))
+    codex_reset_events = sum(
+        len(item.get("reset_history") or []) for item in codex_profiles if isinstance(item.get("reset_history"), list)
+    )
     return {
         "generated_at": generated_at,
         "accounts": accounts,
@@ -209,6 +219,7 @@ def normalize_account_limits_data(data: dict[str, Any]) -> dict[str, Any]:
             "accounts": len(accounts),
             "codex_profiles": len(codex_profiles),
             "codex_windows": codex_windows,
+            "codex_reset_events": codex_reset_events,
         },
     }
 
@@ -252,6 +263,7 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 </tr>"""
         )
     codex_cards = []
+    reset_events = []
     for profile in normalized["codex"]:
         windows = profile.get("windows") if isinstance(profile.get("windows"), list) else []
         window_rows = []
@@ -281,6 +293,24 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
   {detail_html}
 </article>"""
         )
+        history = profile.get("reset_history") if isinstance(profile.get("reset_history"), list) else []
+        for event in history:
+            if not isinstance(event, dict):
+                continue
+            reset_events.append({
+                "profile": text_value(profile.get("profile"), "default"),
+                "label": text_value(event.get("label"), "Reset"),
+                "reset_at": event.get("reset_at"),
+                "observed_at": event.get("observed_at"),
+                "used_percent": event.get("used_percent"),
+            })
+    reset_events.sort(key=lambda item: text_value(item.get("reset_at")), reverse=True)
+    reset_rows = []
+    for event in reset_events[:30]:
+        reset_rows.append(
+            f"""
+<li><time>{html_text(_reset_date(event.get('reset_at')))}</time><strong>{html_text(event.get('label'))}</strong><span>{html_text(event.get('profile'))}</span><em>{html_text(_fmt_percent(event.get('used_percent')))} used · observed {html_text(_fmt_reset(event.get('observed_at')))}</em></li>"""
+        )
     return f"""
 <style>
 .limit-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); }}
@@ -293,6 +323,11 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 .codex-limit-card ul {{ list-style: none; padding: 0; margin: 0.55rem 0; }}
 .codex-limit-card li {{ display: grid; grid-template-columns: 1fr auto; gap: 0.45rem; border-top: 1px solid var(--color-separator); padding: 0.45rem 0; }}
 .codex-limit-card li em {{ grid-column: 1 / -1; color: var(--color-text-subdue); font-style: normal; font-size: 0.78rem; }}
+.codex-reset-calendar {{ margin-top: 1rem; }}
+.codex-reset-calendar ul {{ list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.55rem; }}
+.codex-reset-calendar li {{ border: 1px solid var(--color-separator); border-radius: 12px; padding: 0.55rem; display: grid; gap: 0.18rem; }}
+.codex-reset-calendar time {{ color: var(--color-text-subdue); font-size: 0.78rem; }}
+.codex-reset-calendar em {{ color: var(--color-text-subdue); font-style: normal; font-size: 0.76rem; }}
 </style>
 <div class="limit-summary">账号额度 · 最新整理：{html_text(normalized.get('generated_at'))} · CRS 账号 {counts['accounts']} 个 · Codex profile {counts['codex_profiles']} 个 · reset window {counts['codex_windows']} 个</div>
 <table class="limit-table">
@@ -300,6 +335,7 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
   <tbody>{''.join(account_rows) or '<tr><td colspan="8">暂无 CRS account 数据。</td></tr>'}</tbody>
 </table>
 <div class="codex-limit-grid">{''.join(codex_cards) or '<p>暂无 Codex reset 数据。</p>'}</div>
+<section class="codex-reset-calendar"><h2>Codex 重置日历</h2><ul>{''.join(reset_rows) or '<li>暂无历史 reset 记录；等待周期刷新脚本采样。</li>'}</ul></section>
 """
 
 
