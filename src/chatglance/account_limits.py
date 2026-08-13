@@ -96,12 +96,18 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
     normalized = text.replace("Z", "+00:00")
     # The public Codex reset tracker keeps Beijing time as
-    # ``YYYY-MM-DD HH:MM:SS +0800``. ``fromisoformat`` accepts the same value
-    # with a ``T`` separator, so normalize that shape as well.
+    # ``YYYY-MM-DD HH:MM:SS +0800``. Python 3.10's ``fromisoformat`` is stricter
+    # than newer versions, so normalize both the separator and timezone offset.
     if " " in normalized and "T" not in normalized:
         parts = normalized.split()
-        if len(parts) >= 2:
-            normalized = "T".join(parts[:2]) + (" " + " ".join(parts[2:]) if len(parts) > 2 else "")
+        if len(parts) == 1:
+            normalized = parts[0]
+        elif len(parts) == 2:
+            normalized = "T".join(parts)
+        else:
+            normalized = f"{parts[0]}T{parts[1]}{''.join(parts[2:])}"
+    if len(normalized) >= 5 and normalized[-5] in "+-" and normalized[-2] != ":":
+        normalized = f"{normalized[:-2]}:{normalized[-2:]}"
     try:
         dt = datetime.fromisoformat(normalized)
     except ValueError:
