@@ -15,6 +15,7 @@ def test_refresh_account_limits_script_lives_in_chatglance_scripts_with_proxy_an
     assert "CHATGLANCE_CHATCLASH_BIN" in text
     assert "proxy env --no-mask" in text
     assert "set +x" in text
+    assert "eval" not in text
     assert "chatcrs" in text
     assert "codex" in text
     assert "usage" in text

@@ -165,7 +165,7 @@ def parse_public_reset_events(page_html: str) -> list[dict[str, Any]]:
             elif label == "source":
                 source_label = strip_html(dd_html)
         bjt = reset_dt.astimezone(timezone(timedelta(hours=8)))
-        source_url = html.unescape(match.group("source_url"))
+        source_url = safe_url(html.unescape(match.group("source_url")))
         status_id = ""
         status_match = re.search(r"/status/(\d+)", source_url)
         if status_match:
@@ -209,11 +209,32 @@ def fetch_public_codex_reset(timeout: int) -> dict[str, Any]:
     }
 
 
+SECRET_PATTERN = re.compile(
+    r"(access_token|refresh_token|id_token|authorization|cookie|api[_-]?key|proxy|password|secret)"
+    r"(\s*[:=]\s*)([^\s]+)",
+    re.I,
+)
+BEARER_PATTERN = re.compile(r"Bearer\s+[^\s]+", re.I)
+PROXY_AUTH_PATTERN = re.compile(r"(https?://)[^\s/@:]+:[^\s/@]+@", re.I)
+
+
+def safe_url(value: Any) -> str:
+    text = str(value or "").strip()
+    return text if text.startswith(("https://", "http://")) else ""
+
+
+def redact_text(value: Any) -> str:
+    text = str(value or "")
+    text = PROXY_AUTH_PATTERN.sub(r"\1[REDACTED]@", text)
+    text = BEARER_PATTERN.sub("Bearer [REDACTED]", text)
+    text = SECRET_PATTERN.sub(lambda match: f"{match.group(1)}{match.group(2)}[REDACTED]", text)
+    return text
+
+
 def safe_error(result: dict[str, Any]) -> str:
-    text = str(result.get("stderr") or "").strip()
+    text = redact_text(result.get("stderr") or "").strip()
     if not text:
         return ""
-    # ChatCRS errors should already be redacted; keep only short operational error.
     return text[:300]
 
 

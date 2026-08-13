@@ -47,16 +47,29 @@ fi
 proxy_enabled=false
 if [[ "$ENABLE_PROXY" != "0" && "$ENABLE_PROXY" != "false" ]]; then
   if [[ -x "$CHATCLASH_BIN" ]]; then
-    # Do not print proxy values. The helper may output shell exports; evaluate them in-memory only.
+    # Do not print proxy values. Import only known proxy variable assignments.
     PROXY_EXPORTS="$($CHATCLASH_BIN proxy env --no-mask 2>/dev/null || true)"
     if [[ -n "$PROXY_EXPORTS" ]]; then
-      eval "$PROXY_EXPORTS"
-      proxy_enabled=true
+      while IFS= read -r proxy_line; do
+        proxy_line="${proxy_line#export }"
+        proxy_key="${proxy_line%%=*}"
+        proxy_value="${proxy_line#*=}"
+        case "$proxy_key" in
+          HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY|http_proxy|https_proxy|all_proxy|no_proxy)
+            proxy_value="${proxy_value%\"}"
+            proxy_value="${proxy_value#\"}"
+            proxy_value="${proxy_value%\'}"
+            proxy_value="${proxy_value#\'}"
+            export "$proxy_key=$proxy_value"
+            proxy_enabled=true
+            ;;
+        esac
+      done <<< "$PROXY_EXPORTS"
     elif [[ "$ENABLE_PROXY" == "1" || "$ENABLE_PROXY" == "true" ]]; then
       echo "proxy helper returned no environment" >&2
       exit 3
     fi
-    unset PROXY_EXPORTS
+    unset PROXY_EXPORTS proxy_line proxy_key proxy_value
   elif [[ "$ENABLE_PROXY" == "1" || "$ENABLE_PROXY" == "true" ]]; then
     echo "missing proxy helper=$CHATCLASH_BIN" >&2
     exit 3

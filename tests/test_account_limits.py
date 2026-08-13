@@ -103,7 +103,7 @@ def sample_account_limits_data() -> dict:
             ],
         },
         "secrets": {
-            "api_key": "sk-should-not-render",
+            "api_key": "«redacted:sk-…»",
             "access_token": "access-secret",
             "cookie": "session-secret",
         },
@@ -130,18 +130,18 @@ def test_render_account_limits_html_shows_current_usage_and_reset_dates_without_
     html = render_account_limits_html(sample_account_limits_data())
 
     assert "账号额度" in html
-    assert "CRS 账号 2 个" in html
-    assert "wzh" in html
-    assert "default, wzh" in html
-    assert "1,786" in html
-    assert "64,963" in html
+    assert "default, wzh" not in html
+    assert "1,786" not in html
+    assert "64,963" not in html
     assert "Codex" in html
-    assert "Primary" in html
+    assert "使用额度" in html
+    assert "重置时间" in html
+    assert "Primary" not in html
+    assert "Secondary" not in html
     assert "12.5%" in html
     assert "2026-08-12 18:30" in html
-    assert "Secondary" in html
-    assert "2026-08-18 09:00" in html
-    assert "sk-should-not-render" not in html
+    assert "2026-08-18 09:00" not in html
+    assert "«redacted:sk-…»" not in html
     assert "access-secret" not in html
     assert "session-secret" not in html
 
@@ -173,9 +173,11 @@ def test_replace_account_limits_page_appends_after_sites_page_and_removes_old_sl
     assert updated["pages"][-1]["slug"] == "account-limits"
     assert config["pages"][-1]["old"] is True
     rendered = yaml.safe_dump(updated, allow_unicode=True, sort_keys=False)
-    assert "default, wzh" in rendered
-    assert "gpt-5.5" in rendered
-    assert "sk-should-not-render" not in rendered
+    assert "使用额度" in rendered
+    assert "重置时间" in rendered
+    assert "default, wzh" not in rendered
+    assert "gpt-5.5" not in rendered
+    assert "«redacted:sk-…»" not in rendered
 
 
 def test_render_account_limits_html_uses_beijing_time_when_host_timezone_is_utc(monkeypatch) -> None:
@@ -187,7 +189,7 @@ def test_render_account_limits_html_uses_beijing_time_when_host_timezone_is_utc(
         html = render_account_limits_html(data)
 
         assert "2026-08-12 18:30" in html
-        assert "2026-08-18 09:00" in html
+        assert "2026-08-18 09:00" not in html
     finally:
         monkeypatch.delenv("TZ", raising=False)
         if hasattr(time, "tzset"):
@@ -199,9 +201,10 @@ def test_render_account_limits_html_is_idempotent_for_normalized_data() -> None:
 
     html = render_account_limits_html(normalized)
 
-    assert "default, wzh" in html
-    assert "gpt-5.5" in html
-    assert "2026-08-18 09:00" in html
+    assert "使用额度" in html
+    assert "重置时间" in html
+    assert "2026-08-12 18:30" in html
+    assert "2026-08-18 09:00" not in html
 
 
 def test_normalize_account_limits_accepts_chatcrs_display_rows_shape() -> None:
@@ -283,6 +286,55 @@ def test_render_account_limits_html_uses_compact_codex_card_titles_without_repea
     assert "<h3>73-wzh</h3>" in html
 
 
+def test_render_account_limits_html_uses_small_left_calendar_right_primary_usage_layout() -> None:
+    html = render_account_limits_html(sample_account_limits_data())
+
+    assert 'class="account-limits-resource-layout"' in html
+    assert 'class="codex-reset-panel"' in html
+    assert 'class="codex-accounts-panel"' in html
+    assert 'class="codex-reset-carousel"' in html
+    assert 'class="limit-progress"' in html
+    assert html.index('class="codex-reset-panel"') < html.index('class="codex-accounts-panel"')
+    assert "使用额度" in html
+    assert "重置时间" in html
+    assert "Primary" not in html
+    assert "Secondary" not in html
+    assert "2026-08-18 09:00" not in html
+
+
+def test_render_account_limits_html_uses_recent_public_reset_months() -> None:
+    data = sample_account_limits_data()
+    data["codex_reset"]["events"] = []
+    for month in range(4, 9):
+        data["codex_reset"]["events"].append(
+            {
+                "event_id": f"month-{month}",
+                "time_bjt": f"2026-{month:02d}-02 10:00:00 +0800",
+                "date_bjt": f"2026-{month:02d}-02",
+                "scope": "Recent reset",
+                "source_url": f"https://x.com/example/status/month-{month}",
+            }
+        )
+
+    html = render_account_limits_html(data)
+
+    assert "2026 年 08 月" in html
+    assert "2026 年 07 月" in html
+    assert "2026 年 06 月" in html
+    assert "2026 年 05 月" in html
+    assert "2026 年 04 月" not in html
+
+
+def test_render_account_limits_html_does_not_render_unsafe_reset_source_urls() -> None:
+    data = sample_account_limits_data()
+    data["codex_reset"]["source"] = "javascript:alert(1)"
+    data["codex_reset"]["latest"]["source_url"] = "javascript:alert(2)"
+
+    html = render_account_limits_html(data)
+
+    assert "javascript:alert" not in html
+
+
 def test_render_account_limits_html_omits_probe_diagnostics_from_cards() -> None:
     data = sample_account_limits_data()
     data["codex"][0]["details"] = [
@@ -349,7 +401,7 @@ def test_render_account_limits_html_shows_global_codex_reset_calendar_from_publi
     assert normalized["counts"]["codex_reset_events"] == 2
     assert "Codex 官方重置日历" in html
     assert "codexreset.org" in html
-    assert "example/status/cross-bjt-1" in html
+    assert "example/status/cross-bjt-1" not in html
     assert "All paid ChatGPT Work and Codex users" in html
     assert "2026 年 08 月" in html
     assert "codex-reset-day is-reset" in html
