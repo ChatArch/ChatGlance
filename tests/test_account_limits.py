@@ -286,13 +286,31 @@ def test_render_account_limits_html_uses_compact_codex_card_titles_without_repea
     assert "<h3>73-wzh</h3>" in html
 
 
-def test_render_account_limits_html_uses_small_left_calendar_right_primary_usage_layout() -> None:
-    html = render_account_limits_html(sample_account_limits_data())
+def test_render_account_limits_html_uses_single_month_calendar_card_and_account_card_grid() -> None:
+    data = sample_account_limits_data()
+    data["codex_reset"]["events"].append(
+        {
+            "event_id": "previous-month",
+            "time_bjt": "2026-07-20 09:00:00 +0800",
+            "date_bjt": "2026-07-20",
+            "scope": "Previous reset",
+            "source_url": "https://x.com/example/status/previous-month",
+        }
+    )
+    html = render_account_limits_html(data)
 
     assert 'class="account-limits-resource-layout"' in html
     assert 'class="codex-reset-panel"' in html
     assert 'class="codex-accounts-panel"' in html
-    assert 'class="codex-reset-carousel"' in html
+    assert 'class="codex-calendar-card"' in html
+    assert 'class="codex-calendar-month-switcher"' in html
+    assert 'class="codex-calendar-option is-active"' in html
+    assert '#codex-reset-month-1:checked ~ .codex-calendar-panels .codex-calendar-month { display: none; }' in html
+    assert '#codex-reset-month-1:checked ~ .codex-calendar-panels .codex-reset-month-panel-1 { display: block; }' in html
+    assert 'class="codex-account-card-grid"' in html
+    assert 'class="codex-account-card site-style-card"' in html
+    assert 'class="codex-reset-carousel"' not in html
+    assert 'class="codex-account-list"' not in html
     assert 'class="limit-progress"' in html
     assert html.index('class="codex-reset-panel"') < html.index('class="codex-accounts-panel"')
     assert "使用额度" in html
