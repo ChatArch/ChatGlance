@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import time
+
 import yaml
 
 from chatglance.account_limits import (
@@ -173,6 +176,22 @@ def test_replace_account_limits_page_appends_after_sites_page_and_removes_old_sl
     assert "default, wzh" in rendered
     assert "gpt-5.5" in rendered
     assert "sk-should-not-render" not in rendered
+
+
+def test_render_account_limits_html_uses_beijing_time_when_host_timezone_is_utc(monkeypatch) -> None:
+    monkeypatch.setenv("TZ", "UTC")
+    if hasattr(time, "tzset"):
+        time.tzset()
+    try:
+        data = sample_account_limits_data()
+        html = render_account_limits_html(data)
+
+        assert "2026-08-12 18:30" in html
+        assert "2026-08-18 09:00" in html
+    finally:
+        monkeypatch.delenv("TZ", raising=False)
+        if hasattr(time, "tzset"):
+            time.tzset()
 
 
 def test_render_account_limits_html_is_idempotent_for_normalized_data() -> None:

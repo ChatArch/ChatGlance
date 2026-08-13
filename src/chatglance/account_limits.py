@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import html
 import json
 import calendar
@@ -17,6 +17,7 @@ ACCOUNT_LIMITS_PAGE_NAME = "账号额度"
 LEGACY_ACCOUNT_LIMITS_PAGE_NAMES = {"Account Limits", "账号用量", "额度", "Codex 额度"}
 DEFAULT_PAGE_SLUG = "account-limits"
 DEFAULT_WIDGET_TITLE = "账号额度"
+BEIJING_TIMEZONE = timezone(timedelta(hours=8))
 
 SECRET_KEYS = {
     "api_key",
@@ -79,8 +80,8 @@ def _fmt_reset(value: Any) -> str:
         return text
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    local = dt.astimezone()
-    return local.strftime("%Y-%m-%d %H:%M %Z").strip()
+    local = dt.astimezone(BEIJING_TIMEZONE)
+    return local.strftime("%Y-%m-%d %H:%M").strip()
 
 
 def _reset_date(value: Any) -> str:
@@ -114,7 +115,7 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone()
+    return dt.astimezone(BEIJING_TIMEZONE)
 
 
 def _list_text(values: Any) -> str:
