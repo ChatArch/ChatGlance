@@ -13,10 +13,10 @@ from typing import Any
 
 import yaml
 
-ACCOUNT_LIMITS_PAGE_NAME = "账号额度"
-LEGACY_ACCOUNT_LIMITS_PAGE_NAMES = {"Account Limits", "账号用量", "额度", "Codex 额度"}
+ACCOUNT_LIMITS_PAGE_NAME = "订阅详情"
+LEGACY_ACCOUNT_LIMITS_PAGE_NAMES = {"Account Limits", "账号额度", "账号用量", "额度", "Codex 额度"}
 DEFAULT_PAGE_SLUG = "account-limits"
-DEFAULT_WIDGET_TITLE = "账号额度"
+DEFAULT_WIDGET_TITLE = "订阅详情"
 BEIJING_TIMEZONE = timezone(timedelta(hours=8))
 
 SECRET_KEYS = {
@@ -517,7 +517,7 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 .limit-progress span {{ display: block; height: 100%; border-radius: inherit; background: var(--color-primary); }}
 @media (max-width: 720px) {{ .account-limits-resource-layout {{ grid-template-columns: 1fr; }} }}
 </style>
-<div class="limit-summary">账号额度 · 最新整理：{html_text(normalized.get('generated_at'))} · Codex 账号 {counts['codex_profiles']} 个</div>
+<div class="limit-summary">订阅详情 · 最新整理：{html_text(normalized.get('generated_at'))} · Codex 账号 {counts['codex_profiles']} 个</div>
 <div class="account-limits-resource-layout">
   <section class="codex-reset-panel"><h2>Codex 官方重置日历</h2><p class="limit-muted">{reset_intro}</p>{reset_calendar}</section>
   <section class="codex-accounts-panel"><h2>账号使用额度</h2><div class="codex-account-card-grid">{''.join(codex_cards) or '<p>暂无 Codex 账号数据。</p>'}</div></section>

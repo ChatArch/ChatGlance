@@ -503,7 +503,7 @@ def update_sites_config(data_path: Path, config_path: Path, output_path: Path, p
 
 @main.group("account-limits")
 def account_limits() -> None:
-    """Render the `账号额度` Glance page."""
+    """Render the `订阅详情` Glance page."""
 
 
 @account_limits.command("json")
@@ -536,7 +536,7 @@ def normalize_account_limits_json(data_path: Path, output_path: Path) -> None:
 @click.option("--page-slug", default=ACCOUNT_LIMITS_DEFAULT_PAGE_SLUG, show_default=True, help="Generated Glance page slug.")
 @click.option("--widget-title", default=ACCOUNT_LIMITS_DEFAULT_WIDGET_TITLE, show_default=True, help="Generated Glance HTML widget title.")
 def render_account_limits_page(data_path: Path, output_path: Path, page_name: str, page_slug: str, widget_title: str) -> None:
-    """Render the `账号额度` page YAML from account-limits JSON."""
+    """Render the `订阅详情` page YAML from account-limits JSON."""
 
     data = load_account_limits_data(data_path)
     page = build_account_limits_page(data, page_name=page_name, page_slug=page_slug, widget_title=widget_title)

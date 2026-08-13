@@ -129,7 +129,8 @@ def test_normalize_account_limits_dedupes_crs_accounts_and_counts_codex_windows(
 def test_render_account_limits_html_shows_current_usage_and_reset_dates_without_secrets() -> None:
     html = render_account_limits_html(sample_account_limits_data())
 
-    assert "账号额度" in html
+    assert "订阅详情" in html
+    assert "账号额度" not in html
     assert "default, wzh" not in html
     assert "1,786" not in html
     assert "64,963" not in html
@@ -153,7 +154,7 @@ def test_build_account_limits_page_creates_wide_html_page() -> None:
     assert page["slug"] == "account-limits"
     assert page["width"] == "wide"
     assert page["columns"][0]["widgets"][0]["type"] == "html"
-    assert page["columns"][0]["widgets"][0]["title"] == "账号额度"
+    assert page["columns"][0]["widgets"][0]["title"] == "订阅详情"
 
 
 def test_replace_account_limits_page_appends_after_sites_page_and_removes_old_slug() -> None:
@@ -169,9 +170,24 @@ def test_replace_account_limits_page_appends_after_sites_page_and_removes_old_sl
 
     updated = replace_account_limits_page(config, sample_account_limits_data())
 
-    assert [page["name"] for page in updated["pages"]] == ["ChatArch", "项目", "服务器", "网站服务", "账号额度"]
+    assert [page["name"] for page in updated["pages"]] == ["ChatArch", "项目", "服务器", "网站服务", "订阅详情"]
     assert updated["pages"][-1]["slug"] == "account-limits"
     assert config["pages"][-1]["old"] is True
+
+
+def test_replace_account_limits_page_removes_old_account_quota_name_after_subscription_rename() -> None:
+    config = {
+        "pages": [
+            {"name": "ChatArch"},
+            {"name": "账号额度", "slug": "old-account-quota", "old": True},
+            {"name": "订阅详情", "slug": "account-limits", "old": True},
+        ]
+    }
+
+    updated = replace_account_limits_page(config, sample_account_limits_data())
+
+    assert [page["name"] for page in updated["pages"]] == ["ChatArch", "订阅详情"]
+    assert updated["pages"][-1]["slug"] == "account-limits"
     rendered = yaml.safe_dump(updated, allow_unicode=True, sort_keys=False)
     assert "使用额度" in rendered
     assert "重置时间" in rendered

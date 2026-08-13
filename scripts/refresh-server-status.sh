@@ -6,6 +6,7 @@
 # Required inputs are paths and SSH config on the control machine.
 
 set -euo pipefail
+set +x
 
 RUNTIME_HOME="${CHATGLANCE_RUNTIME_HOME:-$HOME/.chatarch/glance}"
 CHATGLANCE_BIN="${CHATGLANCE_BIN:-chatglance}"
@@ -21,7 +22,7 @@ NEXT_DATA_PATH="${CHATGLANCE_SERVER_STATUS_NEXT_JSON:-$DATA_PATH.next}"
 NEXT_PAGE_PATH="${CHATGLANCE_SERVER_PAGE_NEXT_YML:-$PAGE_PATH.next}"
 ALLOW_OFFLINE_REGRESSION="${CHATGLANCE_ALLOW_SERVER_OFFLINE_REGRESSION:-0}"
 
-mkdir -p "$(dirname "$DATA_PATH")" "$(dirname "$PAGE_PATH")" "$BACKUP_DIR"
+mkdir -p "$(dirname "$DATA_PATH")" "$(dirname "$PAGE_PATH")" "$(dirname "$CANDIDATE_PATH")" "$BACKUP_DIR"
 
 if [[ ! -f "$INVENTORY_CONFIG" ]]; then
   echo "missing inventory_config=$INVENTORY_CONFIG; set CHATGLANCE_INFRA_CONFIG or create the runtime inventory file" >&2
@@ -51,14 +52,14 @@ fi
 
 "$GLANCE_BIN" -config "$CANDIDATE_PATH" config:validate
 
-if cmp -s "$CANDIDATE_PATH" "$CONFIG_PATH"; then
+if cmp -s "$NEXT_DATA_PATH" "$DATA_PATH" 2>/dev/null && cmp -s "$NEXT_PAGE_PATH" "$PAGE_PATH" 2>/dev/null && cmp -s "$CANDIDATE_PATH" "$CONFIG_PATH" 2>/dev/null; then
   unchanged="$BACKUP_DIR/glance.unchanged.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%S+0800).yml"
   mv "$CANDIDATE_PATH" "$unchanged"
   unchanged_data="$BACKUP_DIR/server-status.unchanged.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%S+0800).json"
   unchanged_page="$BACKUP_DIR/server-page.unchanged.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%S+0800).yml"
   mv "$NEXT_DATA_PATH" "$unchanged_data"
   mv "$NEXT_PAGE_PATH" "$unchanged_page"
-  echo "changed=false data=$DATA_PATH page=$PAGE_PATH config=$CONFIG_PATH candidate=$unchanged data_candidate=$unchanged_data page_candidate=$unchanged_page"
+  echo "changed=false data=$DATA_PATH page=$PAGE_PATH config=$CONFIG_PATH candidate=$unchanged data_candidate=$unchanged_data page_candidate=$unchanged_page service_action=external"
   exit 0
 fi
 
