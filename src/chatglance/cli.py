@@ -23,7 +23,7 @@ from chatglance.account_limits import (
     load_account_limits_data,
     replace_account_limits_page,
 )
-from chatglance.glance_config import load_yaml, patch_disks_from_files, update_projects_page_from_files, write_yaml
+from chatglance.glance_config import load_yaml, patch_disks_from_files, remove_home_widget_types, update_projects_page_from_files, write_yaml
 from chatglance.projects import PAGE_NAME, build_projects_page, dump_yaml, load_inventory
 from chatglance.project_inventory import RefreshOptions, refresh_project_inventory
 from chatglance.runtime import discover_meaningful_mountpoints, maintain_config, runtime_path
@@ -272,6 +272,26 @@ def root_only_disk(config_path: Path, output_path: Path, mountpoint: str, mount_
     output_path.parent.mkdir(parents=True, exist_ok=True)
     patch_disks_from_files(config_path, output_path, mountpoint=mountpoint, name=mount_name)
     click.echo(f"wrote {output_path}")
+
+
+@main.group()
+def home() -> None:
+    """Patch ChatArch home-page widgets."""
+
+
+@home.command("remove-widget")
+@click.option("--config", "config_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Existing Glance YAML config.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Output path for the patched Glance YAML config.")
+@click.option("--type", "widget_types", multiple=True, required=True, help="Glance widget type to remove from the ChatArch home page. Repeat for multiple types.")
+@click.option("--home-page-name", default="ChatArch", show_default=True, help="Home page name to patch.")
+def remove_home_widget(config_path: Path, output_path: Path, widget_types: tuple[str, ...], home_page_name: str) -> None:
+    """Remove unavailable widgets from the ChatArch home page."""
+
+    config = load_yaml(config_path)
+    updated = remove_home_widget_types(config, set(widget_types), home_page_name=home_page_name)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    write_yaml(output_path, updated)
+    click.echo(f"wrote {output_path} removed={','.join(widget_types)}")
 
 
 @main.group()

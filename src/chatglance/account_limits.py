@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from collections import defaultdict
 from datetime import datetime, timezone
 import html
 import json
+import calendar
 from pathlib import Path
 from typing import Any
 
@@ -86,6 +88,27 @@ def _reset_date(value: Any) -> str:
     if formatted == "—":
         return "—"
     return formatted.split()[0] if " " in formatted else formatted
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    text = text_value(value)
+    if not text:
+        return None
+    normalized = text.replace("Z", "+00:00")
+    # The public Codex reset tracker keeps Beijing time as
+    # ``YYYY-MM-DD HH:MM:SS +0800``. ``fromisoformat`` accepts the same value
+    # with a ``T`` separator, so normalize that shape as well.
+    if " " in normalized and "T" not in normalized:
+        parts = normalized.split()
+        if len(parts) >= 2:
+            normalized = "T".join(parts[:2]) + (" " + " ".join(parts[2:]) if len(parts) > 2 else "")
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone()
 
 
 def _list_text(values: Any) -> str:
@@ -186,6 +209,122 @@ def _merge_account(existing: dict[str, Any], incoming: dict[str, Any]) -> None:
         existing["rate_limit"] = incoming.get("rate_limit")
 
 
+def _normalize_public_reset_event(event: dict[str, Any]) -> dict[str, Any] | None:
+    reset_at = event.get("time_bjt") or event.get("date_bjt") or event.get("time_utc") or event.get("reset_at")
+    if not reset_at:
+        return None
+    return {
+        "kind": "official",
+        "label": text_value(event.get("scope"), "Official reset"),
+        "reset_at": reset_at,
+        "date_bjt": text_value(event.get("date_bjt")),
+        "time_bjt": text_value(event.get("time_bjt")),
+        "event_id": text_value(event.get("event_id")),
+        "source_url": text_value(event.get("source_url")),
+        "source": text_value(event.get("source"), "codexreset.org"),
+    }
+
+
+def _normalize_account_reset_event(profile: dict[str, Any], event: dict[str, Any]) -> dict[str, Any] | None:
+    reset_at = event.get("reset_at")
+    if not reset_at:
+        return None
+    return {
+        "kind": "account-window",
+        "profile": text_value(profile.get("profile"), "default"),
+        "label": text_value(event.get("label"), "账号窗口采样"),
+        "reset_at": reset_at,
+        "observed_at": event.get("observed_at"),
+        "used_percent": event.get("used_percent"),
+        "source": "账号窗口采样",
+    }
+
+
+def _normalize_codex_reset(safe: dict[str, Any], codex_profiles: list[dict[str, Any]]) -> dict[str, Any]:
+    raw_reset = safe.get("codex_reset") if isinstance(safe.get("codex_reset"), dict) else {}
+    source = text_value(raw_reset.get("source"), "账号窗口采样") if isinstance(raw_reset, dict) else "账号窗口采样"
+    status = text_value(raw_reset.get("status"), "ok") if isinstance(raw_reset, dict) else "ok"
+    raw_events = raw_reset.get("events") if isinstance(raw_reset, dict) and isinstance(raw_reset.get("events"), list) else []
+    events: list[dict[str, Any]] = []
+    for raw_event in raw_events:
+        if not isinstance(raw_event, dict):
+            continue
+        event = _normalize_public_reset_event(raw_event)
+        if event is not None:
+            events.append(event)
+
+    used_fallback = False
+    if not events:
+        used_fallback = True
+        source = "账号窗口采样"
+        for profile in codex_profiles:
+            history = profile.get("reset_history") if isinstance(profile.get("reset_history"), list) else []
+            for raw_event in history:
+                if not isinstance(raw_event, dict):
+                    continue
+                event = _normalize_account_reset_event(profile, raw_event)
+                if event is not None:
+                    events.append(event)
+
+    events.sort(key=lambda item: text_value(item.get("reset_at")), reverse=True)
+    latest = raw_reset.get("latest") if isinstance(raw_reset, dict) and isinstance(raw_reset.get("latest"), dict) else {}
+    return {
+        "source": source,
+        "status": status,
+        "latest": latest,
+        "events": events,
+        "used_fallback": used_fallback,
+        "confirmed_reset_count": raw_reset.get("confirmed_reset_count", len(events)) if isinstance(raw_reset, dict) else len(events),
+    }
+
+
+def _render_reset_calendar(reset_events: list[dict[str, Any]]) -> str:
+    parsed_events: list[tuple[datetime, dict[str, Any]]] = []
+    for event in reset_events:
+        dt = _parse_datetime(event.get("reset_at"))
+        if dt is not None:
+            parsed_events.append((dt, event))
+    if not parsed_events:
+        return '<p class="limit-muted">暂无历史 reset 记录；等待周期刷新脚本采样。</p>'
+
+    events_by_month_day: dict[tuple[int, int], dict[int, list[tuple[datetime, dict[str, Any]]]]] = defaultdict(lambda: defaultdict(list))
+    for dt, event in parsed_events:
+        events_by_month_day[(dt.year, dt.month)][dt.day].append((dt, event))
+
+    month_blocks: list[str] = []
+    month_keys = sorted(events_by_month_day.keys())[:4]
+    for year, month in month_keys:
+        days = events_by_month_day[(year, month)]
+        cal = calendar.Calendar(firstweekday=0)
+        cells: list[str] = []
+        for day in cal.itermonthdays(year, month):
+            if day == 0:
+                cells.append('<div class="codex-reset-day is-empty"></div>')
+                continue
+            events = days.get(day, [])
+            if events:
+                labels = ", ".join(
+                    text_value(event.get("label") or event.get("source"), "Reset")
+                    for _, event in events[:3]
+                )
+                title = html_text(labels, "Reset")
+                dots = "".join('<span class="reset-dot"></span>' for _ in events[:4])
+                cells.append(
+                    f'<div class="codex-reset-day is-reset" title="{title}"><span class="day-number">{day}</span><span class="reset-dots">{dots}</span></div>'
+                )
+            else:
+                cells.append(f'<div class="codex-reset-day"><span class="day-number">{day}</span></div>')
+        month_blocks.append(
+            f"""
+<article class="codex-reset-month">
+  <h3>{year} 年 {month:02d} 月</h3>
+  <div class="codex-reset-weekdays"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+  <div class="codex-reset-grid">{''.join(cells)}</div>
+</article>"""
+        )
+    return "".join(month_blocks)
+
+
 def normalize_account_limits_data(data: dict[str, Any]) -> dict[str, Any]:
     safe = _strip_secrets(deepcopy(data))
     generated_at = text_value(safe.get("generated_at"))
@@ -208,13 +347,13 @@ def normalize_account_limits_data(data: dict[str, Any]) -> dict[str, Any]:
             accounts.append(account)
     codex_profiles = [item for item in safe.get("codex", []) if isinstance(item, dict)]
     codex_windows = sum(len(item.get("windows") or []) for item in codex_profiles if isinstance(item.get("windows"), list))
-    codex_reset_events = sum(
-        len(item.get("reset_history") or []) for item in codex_profiles if isinstance(item.get("reset_history"), list)
-    )
+    codex_reset = _normalize_codex_reset(safe, codex_profiles)
+    codex_reset_events = len(codex_reset["events"])
     return {
         "generated_at": generated_at,
         "accounts": accounts,
         "codex": codex_profiles,
+        "codex_reset": codex_reset,
         "counts": {
             "accounts": len(accounts),
             "codex_profiles": len(codex_profiles),
@@ -263,7 +402,6 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 </tr>"""
         )
     codex_cards = []
-    reset_events = []
     for profile in normalized["codex"]:
         windows = profile.get("windows") if isinstance(profile.get("windows"), list) else []
         window_rows = []
@@ -275,7 +413,12 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 <li><span>{html_text(window.get('label'))}</span><strong>{html_text(_fmt_percent(window.get('used_percent')))}</strong><em>重置 {html_text(_fmt_reset(window.get('reset_at')))}</em></li>"""
             )
         details = profile.get("details") if isinstance(profile.get("details"), list) else []
-        detail_html = "".join(f"<p class=\"limit-muted\">{html_text(item)}</p>" for item in details)
+        visible_details = [
+            item for item in details
+            if isinstance(item, str)
+            and not item.startswith(("usage_status=", "quota_status=", "quota_headers=", "refresh_attempted="))
+        ]
+        detail_html = "".join(f"<p class=\"limit-muted\">{html_text(item)}</p>" for item in visible_details)
         status_bits = [text_value(profile.get("status"))]
         if profile.get("error_type"):
             status_bits.append(text_value(profile.get("error_type")))
@@ -285,32 +428,44 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
         codex_cards.append(
             f"""
 <article class="codex-limit-card">
-  <h3>Codex · {html_text(profile.get('profile'), 'default')}</h3>
-  <p>{html_text(profile.get('account_name') or profile.get('account_id'), '—')} · {html_text(profile.get('plan'), '—')}</p>
+  <h3>{html_text(profile.get('account_name') or profile.get('profile'), 'default')}</h3>
   <ul>{''.join(window_rows) or '<li>暂无 Codex window 数据</li>'}</ul>
   {status_html}
   {error_html}
   {detail_html}
 </article>"""
         )
-        history = profile.get("reset_history") if isinstance(profile.get("reset_history"), list) else []
-        for event in history:
-            if not isinstance(event, dict):
-                continue
-            reset_events.append({
-                "profile": text_value(profile.get("profile"), "default"),
-                "label": text_value(event.get("label"), "Reset"),
-                "reset_at": event.get("reset_at"),
-                "observed_at": event.get("observed_at"),
-                "used_percent": event.get("used_percent"),
-            })
-    reset_events.sort(key=lambda item: text_value(item.get("reset_at")), reverse=True)
-    reset_rows = []
-    for event in reset_events[:30]:
-        reset_rows.append(
-            f"""
-<li><time>{html_text(_reset_date(event.get('reset_at')))}</time><strong>{html_text(event.get('label'))}</strong><span>{html_text(event.get('profile'))}</span><em>{html_text(_fmt_percent(event.get('used_percent')))} used · observed {html_text(_fmt_reset(event.get('observed_at')))}</em></li>"""
-        )
+    codex_reset = normalized["codex_reset"]
+    reset_events = codex_reset["events"]
+    reset_calendar = _render_reset_calendar(reset_events)
+    reset_source = text_value(codex_reset.get("source"), "账号窗口采样")
+    source_label = "codexreset.org" if "codexreset.org" in reset_source else reset_source
+    latest = codex_reset.get("latest") if isinstance(codex_reset.get("latest"), dict) else {}
+    latest_url = text_value(latest.get("source_url"))
+    latest_time = text_value(latest.get("time_bjt") or latest.get("date_bjt") or latest.get("time_utc"))
+    reset_intro_parts = [f"来源：{html_text(source_label)}"]
+    if latest_time:
+        reset_intro_parts.append(f"最新：{html_text(latest_time)}")
+    if codex_reset.get("used_fallback"):
+        reset_intro_parts.append("账号窗口采样")
+    reset_intro = " · ".join(reset_intro_parts)
+    reset_links = []
+    seen_urls: set[str] = set()
+    for event in reset_events[:6]:
+        url = text_value(event.get("source_url"))
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        label = text_value(event.get("event_id") or event.get("source"), "source")
+        reset_links.append(f'<a href="{html_text(url)}">{html_text(label)}</a>')
+    reset_links_html = f'<p class="limit-muted">证据链接：{" · ".join(reset_links)}</p>' if reset_links else ""
+    accounts_table = ""
+    if account_rows:
+        accounts_table = f"""
+<table class="limit-table">
+  <thead><tr><th>账号</th><th>Profiles</th><th>Models</th><th>Rate limit</th><th>Total req</th><th>Daily req</th><th>Monthly req</th><th>Total tokens</th></tr></thead>
+  <tbody>{''.join(account_rows)}</tbody>
+</table>"""
     return f"""
 <style>
 .limit-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); }}
@@ -324,18 +479,20 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 .codex-limit-card li {{ display: grid; grid-template-columns: 1fr auto; gap: 0.45rem; border-top: 1px solid var(--color-separator); padding: 0.45rem 0; }}
 .codex-limit-card li em {{ grid-column: 1 / -1; color: var(--color-text-subdue); font-style: normal; font-size: 0.78rem; }}
 .codex-reset-calendar {{ margin-top: 1rem; }}
-.codex-reset-calendar ul {{ list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.55rem; }}
-.codex-reset-calendar li {{ border: 1px solid var(--color-separator); border-radius: 12px; padding: 0.55rem; display: grid; gap: 0.18rem; }}
-.codex-reset-calendar time {{ color: var(--color-text-subdue); font-size: 0.78rem; }}
-.codex-reset-calendar em {{ color: var(--color-text-subdue); font-style: normal; font-size: 0.76rem; }}
+.codex-reset-month {{ border: 1px solid var(--color-separator); border-radius: 16px; padding: 0.8rem; margin-top: 0.65rem; }}
+.codex-reset-month h3 {{ margin: 0 0 0.55rem; font-size: 0.98rem; }}
+.codex-reset-weekdays, .codex-reset-grid {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.28rem; }}
+.codex-reset-weekdays span {{ color: var(--color-text-subdue); font-size: 0.72rem; text-align: center; }}
+.codex-reset-day {{ min-height: 2.25rem; border-radius: 999px; display: grid; place-items: center; color: var(--color-text-subdue); position: relative; }}
+.codex-reset-day.is-reset {{ border: 2px solid var(--color-primary); color: var(--color-text-base); font-weight: 700; background: color-mix(in srgb, var(--color-primary) 12%, transparent); }}
+.codex-reset-day.is-empty {{ visibility: hidden; }}
+.reset-dots {{ position: absolute; bottom: 0.18rem; display: flex; gap: 0.12rem; }}
+.reset-dot {{ width: 0.28rem; height: 0.28rem; border-radius: 999px; background: var(--color-primary); display: inline-block; }}
 </style>
 <div class="limit-summary">账号额度 · 最新整理：{html_text(normalized.get('generated_at'))} · CRS 账号 {counts['accounts']} 个 · Codex profile {counts['codex_profiles']} 个 · reset window {counts['codex_windows']} 个</div>
-<table class="limit-table">
-  <thead><tr><th>账号</th><th>Profiles</th><th>Models</th><th>Rate limit</th><th>Total req</th><th>Daily req</th><th>Monthly req</th><th>Total tokens</th></tr></thead>
-  <tbody>{''.join(account_rows) or '<tr><td colspan="8">暂无 CRS account 数据。</td></tr>'}</tbody>
-</table>
+{accounts_table}
 <div class="codex-limit-grid">{''.join(codex_cards) or '<p>暂无 Codex reset 数据。</p>'}</div>
-<section class="codex-reset-calendar"><h2>Codex 重置日历</h2><ul>{''.join(reset_rows) or '<li>暂无历史 reset 记录；等待周期刷新脚本采样。</li>'}</ul></section>
+<section class="codex-reset-calendar"><h2>Codex 官方重置日历</h2><p class="limit-muted">{reset_intro}</p>{reset_links_html}{reset_calendar}</section>
 """
 
 

@@ -55,13 +55,13 @@ def sample_account_limits_data() -> dict:
                 "status": "ok",
                 "windows": [
                     {
-                        "label": "Session",
+                        "label": "Primary",
                         "used_percent": 12.5,
                         "reset_at": "2026-08-12T18:30:00+08:00",
                         "window_minutes": 300,
                     },
                     {
-                        "label": "Weekly",
+                        "label": "Secondary",
                         "used_percent": 3,
                         "reset_at": "2026-08-18T09:00:00+08:00",
                         "window_minutes": 10080,
@@ -70,6 +70,35 @@ def sample_account_limits_data() -> dict:
                 "details": ["Credits balance: unlimited"],
             }
         ],
+        "codex_reset": {
+            "source": "https://codexreset.org/",
+            "confirmed_reset_count": 2,
+            "latest": {
+                "event_id": "2086972933566857393",
+                "time_utc": "2026-08-11T00:28:16Z",
+                "time_bjt": "2026-08-11 08:28:16 +0800",
+                "date_bjt": "2026-08-11",
+                "source_url": "https://x.com/thsottiaux/status/2086972933566857393",
+            },
+            "events": [
+                {
+                    "event_id": "2086972933566857393",
+                    "time_utc": "2026-08-11T00:28:16Z",
+                    "time_bjt": "2026-08-11 08:28:16 +0800",
+                    "date_bjt": "2026-08-11",
+                    "scope": "All paid ChatGPT Work and Codex users",
+                    "source_url": "https://x.com/thsottiaux/status/2086972933566857393",
+                },
+                {
+                    "event_id": "2079351779206668512",
+                    "time_utc": "2026-08-01T03:32:00Z",
+                    "time_bjt": "2026-08-01 11:32:00 +0800",
+                    "date_bjt": "2026-08-01",
+                    "scope": "All paid ChatGPT Work and Codex users",
+                    "source_url": "https://x.com/thsottiaux/status/2079351779206668512",
+                },
+            ],
+        },
         "secrets": {
             "api_key": "sk-should-not-render",
             "access_token": "access-secret",
@@ -85,8 +114,9 @@ def test_normalize_account_limits_dedupes_crs_accounts_and_counts_codex_windows(
         "accounts": 2,
         "codex_profiles": 1,
         "codex_windows": 2,
-        "codex_reset_events": 0,
+        "codex_reset_events": 2,
     }
+    assert normalized["codex_reset"]["source"] == "https://codexreset.org/"
     wzh = normalized["accounts"][0]
     assert wzh["account_name"] == "wzh"
     assert wzh["profiles"] == ["default", "wzh"]
@@ -103,10 +133,10 @@ def test_render_account_limits_html_shows_current_usage_and_reset_dates_without_
     assert "1,786" in html
     assert "64,963" in html
     assert "Codex" in html
-    assert "Session" in html
+    assert "Primary" in html
     assert "12.5%" in html
     assert "2026-08-12 18:30" in html
-    assert "Weekly" in html
+    assert "Secondary" in html
     assert "2026-08-18 09:00" in html
     assert "sk-should-not-render" not in html
     assert "access-secret" not in html
@@ -210,23 +240,114 @@ def test_normalize_account_limits_accepts_chatcrs_display_rows_shape() -> None:
     assert "AuthError" in html
 
 
-def test_render_account_limits_html_shows_codex_reset_history_calendar() -> None:
+def test_render_account_limits_html_omits_empty_crs_account_placeholder() -> None:
+    data = sample_account_limits_data()
+    data["accounts"] = []
+
+    html = render_account_limits_html(data)
+
+    assert "暂无 CRS account 数据" not in html
+    assert '<table class="limit-table">' not in html
+    assert "Codex" in html
+
+
+def test_render_account_limits_html_uses_compact_codex_card_titles_without_repeated_profile_plan() -> None:
+    data = sample_account_limits_data()
+    data["codex"][0]["profile"] = "73-wzh"
+    data["codex"][0]["account_name"] = "73-wzh"
+    data["codex"][0]["plan"] = "Codex"
+
+    html = render_account_limits_html(data)
+
+    assert "Codex · 73-wzh" not in html
+    assert "73-wzh · Codex" not in html
+    assert "<h3>73-wzh</h3>" in html
+
+
+def test_render_account_limits_html_omits_probe_diagnostics_from_cards() -> None:
+    data = sample_account_limits_data()
+    data["codex"][0]["details"] = [
+        "usage_status=200",
+        "quota_status=200",
+        "quota_headers=yes",
+        "refresh_attempted=no",
+    ]
+    data["codex"][0]["usage_status"] = 200
+    data["codex"][0]["quota_status"] = 200
+    data["codex"][0]["quota_headers_present"] = True
+    data["codex"][0]["refresh_attempted"] = False
+
+    html = render_account_limits_html(data)
+
+    assert "usage_status=200" not in html
+    assert "quota_status=200" not in html
+    assert "quota_headers=yes" not in html
+    assert "refresh_attempted=no" not in html
+
+
+def test_render_account_limits_html_shows_global_codex_reset_calendar_from_public_tracker() -> None:
     data = sample_account_limits_data()
     data["codex"][0]["reset_history"] = [
         {
-            "label": "Session",
-            "reset_at": "2026-08-10T18:30:00+08:00",
-            "observed_at": "2026-08-10T13:30:00+08:00",
-            "used_percent": 91.2,
+            "label": "Primary",
+            "reset_at": "2026-08-18T09:00:00+08:00",
+            "observed_at": "2026-08-12T13:30:00+08:00",
+            "used_percent": 3,
+        },
+    ]
+    # Public tracker timestamps must be rendered by their Beijing date, not by
+    # UTC or the server's local timezone. These two samples cross the UTC day
+    # boundary so the circled calendar days prove the BJT date was used.
+    data["codex_reset"]["latest"] = {
+        "event_id": "cross-bjt-1",
+        "time_utc": "2026-08-11T18:28:16Z",
+        "time_bjt": "2026-08-12 02:28:16 +0800",
+        "date_bjt": "2026-08-12",
+        "source_url": "https://x.com/example/status/cross-bjt-1",
+    }
+    data["codex_reset"]["events"] = [
+        {
+            "event_id": "cross-bjt-1",
+            "time_utc": "2026-08-11T18:28:16Z",
+            "time_bjt": "2026-08-12 02:28:16 +0800",
+            "date_bjt": "2026-08-12",
+            "scope": "All paid ChatGPT Work and Codex users",
+            "source_url": "https://x.com/example/status/cross-bjt-1",
         },
         {
-            "label": "Session",
-            "reset_at": "2026-08-11T18:30:00+08:00",
-            "observed_at": "2026-08-11T13:30:00+08:00",
-            "used_percent": 88.0,
+            "event_id": "cross-bjt-2",
+            "time_utc": "2026-08-01T18:32:00Z",
+            "time_bjt": "2026-08-02 02:32:00 +0800",
+            "date_bjt": "2026-08-02",
+            "scope": "All paid ChatGPT Work and Codex users",
+            "source_url": "https://x.com/example/status/cross-bjt-2",
         },
+    ]
+
+    normalized = normalize_account_limits_data(data)
+    html = render_account_limits_html(data)
+
+    assert normalized["counts"]["codex_reset_events"] == 2
+    assert "Codex 官方重置日历" in html
+    assert "codexreset.org" in html
+    assert "example/status/cross-bjt-1" in html
+    assert "All paid ChatGPT Work and Codex users" in html
+    assert "2026 年 08 月" in html
+    assert "codex-reset-day is-reset" in html
+    assert 'title="All paid ChatGPT Work and Codex users"><span class="day-number">12</span>' in html
+    assert 'title="All paid ChatGPT Work and Codex users"><span class="day-number">2</span>' in html
+    assert 'title="All paid ChatGPT Work and Codex users"><span class="day-number">11</span>' not in html
+    assert 'title="All paid ChatGPT Work and Codex users"><span class="day-number">1</span>' not in html
+    assert 'title="Primary"' not in html
+    assert "default Primary" not in html
+
+
+def test_render_account_limits_html_falls_back_to_account_reset_windows_when_public_tracker_missing() -> None:
+    data = sample_account_limits_data()
+    data.pop("codex_reset")
+    data["codex"][0]["reset_history"] = [
         {
-            "label": "Weekly",
+            "label": "Primary",
             "reset_at": "2026-08-18T09:00:00+08:00",
             "observed_at": "2026-08-12T13:30:00+08:00",
             "used_percent": 3,
@@ -236,10 +357,7 @@ def test_render_account_limits_html_shows_codex_reset_history_calendar() -> None
     normalized = normalize_account_limits_data(data)
     html = render_account_limits_html(data)
 
-    assert normalized["counts"]["codex_reset_events"] == 3
-    assert "Codex 重置日历" in html
-    assert "2026-08-10" in html
-    assert "2026-08-11" in html
-    assert "Session" in html
-    assert "91.2%" in html
-    assert "Weekly" in html
+    assert normalized["counts"]["codex_reset_events"] == 1
+    assert "Codex 官方重置日历" in html
+    assert "账号窗口采样" in html
+    assert "<span class=\"day-number\">18</span>" in html
