@@ -332,17 +332,15 @@ def _render_reset_calendar(reset_events: list[dict[str, Any]]) -> str:
         month_id = f"codex-reset-month-{index}"
         month_class = f"codex-reset-month-panel-{index}"
         active_attr = " checked" if index == 0 else ""
-        active_class = " is-active" if index == 0 else ""
         label = f"{year} 年 {month:02d} 月"
         radios.append(
             f'<input class="codex-calendar-radio" type="radio" name="codex-reset-month" id="{month_id}"{active_attr}>'
         )
-        options.append(
-            f'<label class="codex-calendar-option{active_class}" for="{month_id}">{html_text(label)}</label>'
-        )
+        options.append(f'<label class="codex-calendar-option" for="{month_id}">{html_text(label)}</label>')
         switch_rules.append(
             f"#{month_id}:checked ~ .codex-calendar-panels .codex-calendar-month {{ display: none; }}\n"
             f"#{month_id}:checked ~ .codex-calendar-panels .{month_class} {{ display: block; }}\n"
+            f"#{month_id}:checked ~ .codex-calendar-month-switcher label {{ background: transparent; color: var(--color-text-subdue); border-color: var(--color-separator); }}\n"
             f"#{month_id}:checked ~ .codex-calendar-month-switcher label[for='{month_id}'] {{ background: var(--color-primary); color: var(--color-widget-background); border-color: var(--color-primary); }}"
         )
         days = events_by_month_day[(year, month)]

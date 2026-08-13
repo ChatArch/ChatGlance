@@ -304,9 +304,13 @@ def test_render_account_limits_html_uses_single_month_calendar_card_and_account_
     assert 'class="codex-accounts-panel"' in html
     assert 'class="codex-calendar-card"' in html
     assert 'class="codex-calendar-month-switcher"' in html
-    assert 'class="codex-calendar-option is-active"' in html
+    assert 'class="codex-calendar-option is-active"' not in html
+    assert '#codex-reset-month-0:checked ~ .codex-calendar-month-switcher label { background: transparent; color: var(--color-text-subdue); border-color: var(--color-separator); }' in html
+    assert '#codex-reset-month-0:checked ~ .codex-calendar-month-switcher label[for=\'codex-reset-month-0\']' in html
     assert '#codex-reset-month-1:checked ~ .codex-calendar-panels .codex-calendar-month { display: none; }' in html
     assert '#codex-reset-month-1:checked ~ .codex-calendar-panels .codex-reset-month-panel-1 { display: block; }' in html
+    assert '#codex-reset-month-1:checked ~ .codex-calendar-month-switcher label { background: transparent; color: var(--color-text-subdue); border-color: var(--color-separator); }' in html
+    assert '#codex-reset-month-1:checked ~ .codex-calendar-month-switcher label[for=\'codex-reset-month-1\']' in html
     assert 'class="codex-account-card-grid"' in html
     assert 'class="codex-account-card site-style-card"' in html
     assert 'class="codex-reset-carousel"' not in html
