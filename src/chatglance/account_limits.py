@@ -1,0 +1,543 @@
+"""Build account/quota cards for the ChatArch Glance dashboard."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+import html
+import json
+import calendar
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+ACCOUNT_LIMITS_PAGE_NAME = "账号额度"
+LEGACY_ACCOUNT_LIMITS_PAGE_NAMES = {"Account Limits", "账号用量", "额度", "Codex 额度"}
+DEFAULT_PAGE_SLUG = "account-limits"
+DEFAULT_WIDGET_TITLE = "账号额度"
+BEIJING_TIMEZONE = timezone(timedelta(hours=8))
+
+SECRET_KEYS = {
+    "api_key",
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "token",
+    "cookie",
+    "authorization",
+    "password",
+    "secret",
+}
+
+
+def text_value(value: Any, fallback: str = "") -> str:
+    if value is None:
+        return fallback
+    text = str(value).strip()
+    return text or fallback
+
+
+def html_text(value: Any, fallback: str = "—") -> str:
+    return html.escape(text_value(value, fallback), quote=True)
+
+
+def _safe_number(value: Any) -> int | float | None:
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return int(number) if number.is_integer() else number
+
+
+def _fmt_number(value: Any) -> str:
+    number = _safe_number(value)
+    if number is None:
+        return "—"
+    if isinstance(number, int):
+        return f"{number:,}"
+    return f"{number:,.1f}"
+
+
+def _fmt_percent(value: Any) -> str:
+    number = _safe_number(value)
+    if number is None:
+        return "—"
+    return f"{float(number):.1f}%"
+
+
+def _fmt_reset(value: Any) -> str:
+    text = text_value(value)
+    if not text:
+        return "—"
+    normalized = text.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        return text
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    local = dt.astimezone(BEIJING_TIMEZONE)
+    return local.strftime("%Y-%m-%d %H:%M").strip()
+
+
+def _reset_date(value: Any) -> str:
+    formatted = _fmt_reset(value)
+    if formatted == "—":
+        return "—"
+    return formatted.split()[0] if " " in formatted else formatted
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    text = text_value(value)
+    if not text:
+        return None
+    normalized = text.replace("Z", "+00:00")
+    # The public Codex reset tracker keeps Beijing time as
+    # ``YYYY-MM-DD HH:MM:SS +0800``. Python 3.10's ``fromisoformat`` is stricter
+    # than newer versions, so normalize both the separator and timezone offset.
+    if " " in normalized and "T" not in normalized:
+        parts = normalized.split()
+        if len(parts) == 1:
+            normalized = parts[0]
+        elif len(parts) == 2:
+            normalized = "T".join(parts)
+        else:
+            normalized = f"{parts[0]}T{parts[1]}{''.join(parts[2:])}"
+    if len(normalized) >= 5 and normalized[-5] in "+-" and normalized[-2] != ":":
+        normalized = f"{normalized[:-2]}:{normalized[-2:]}"
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(BEIJING_TIMEZONE)
+
+
+def _list_text(values: Any) -> str:
+    if isinstance(values, list):
+        return ", ".join(text_value(value) for value in values if text_value(value)) or "—"
+    return text_value(values, "—")
+
+
+def _usage_value(account: dict[str, Any], key: str) -> Any:
+    usage = account.get("usage") if isinstance(account.get("usage"), dict) else {}
+    if key in usage:
+        return usage.get(key)
+    if key == "total_requests":
+        if "requests_total" in account:
+            return account.get("requests_total")
+        return (usage.get("total") or {}).get("requests") if isinstance(usage.get("total"), dict) else None
+    if key == "daily_requests":
+        if "requests_daily" in account:
+            return account.get("requests_daily")
+        return (usage.get("daily") or {}).get("requests") if isinstance(usage.get("daily"), dict) else None
+    if key == "monthly_requests":
+        if "requests_monthly" in account:
+            return account.get("requests_monthly")
+        return (usage.get("monthly") or {}).get("requests") if isinstance(usage.get("monthly"), dict) else None
+    if key == "total_all_tokens":
+        if "all_tokens_total" in account:
+            return account.get("all_tokens_total")
+        if "tokens_used" in account:
+            return account.get("tokens_used")
+        return (usage.get("total") or {}).get("allTokens") if isinstance(usage.get("total"), dict) else None
+    return None
+
+
+def _is_secret_key(key: Any) -> bool:
+    lowered = str(key or "").strip().lower().replace("-", "_")
+    return lowered in SECRET_KEYS or lowered.endswith("_token") or lowered.endswith("_key") or "cookie" in lowered
+
+
+def _strip_secrets(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _strip_secrets(item) for key, item in value.items() if not _is_secret_key(key)}
+    if isinstance(value, list):
+        return [_strip_secrets(item) for item in value]
+    return value
+
+
+def _account_id(account: dict[str, Any]) -> str:
+    return text_value(account.get("account_id") or account.get("id"))
+
+
+def _account_name(account: dict[str, Any]) -> str:
+    return text_value(account.get("account_name") or account.get("name"), "unknown")
+
+
+def _normalize_text_list(value: Any, fallback_value: Any = None) -> list[str]:
+    candidates = value if isinstance(value, list) else [fallback_value if value is None else value]
+    return [text_value(item) for item in candidates if text_value(item)]
+
+
+def _normalize_account_entry(account: dict[str, Any]) -> dict[str, Any]:
+    usage = {
+        "total_requests": _usage_value(account, "total_requests"),
+        "daily_requests": _usage_value(account, "daily_requests"),
+        "monthly_requests": _usage_value(account, "monthly_requests"),
+        "total_all_tokens": _usage_value(account, "total_all_tokens"),
+    }
+    return {
+        "account_id": _account_id(account),
+        "account_name": _account_name(account),
+        "profiles": _normalize_text_list(account.get("profiles"), account.get("profile")),
+        "models": _normalize_text_list(account.get("models"), account.get("model")),
+        "permissions": account.get("permissions") if isinstance(account.get("permissions"), list) else [],
+        "rate_limit": account.get("rate_limit") if isinstance(account.get("rate_limit"), dict) else {},
+        "usage": usage,
+        "source": text_value(account.get("source"), "crs-key-info"),
+    }
+
+
+def _merge_unique_list(existing: list[str], values: list[str]) -> list[str]:
+    merged = list(existing)
+    for value in values:
+        if value and value not in merged:
+            merged.append(value)
+    return merged
+
+
+def _merge_account(existing: dict[str, Any], incoming: dict[str, Any]) -> None:
+    existing["profiles"] = _merge_unique_list(existing.get("profiles", []), incoming.get("profiles", []))
+    existing["models"] = _merge_unique_list(existing.get("models", []), incoming.get("models", []))
+    existing["permissions"] = _merge_unique_list(existing.get("permissions", []), incoming.get("permissions", []))
+    existing_usage = existing.setdefault("usage", {})
+    for key, value in incoming.get("usage", {}).items():
+        current = _safe_number(existing_usage.get(key))
+        candidate = _safe_number(value)
+        if candidate is not None and (current is None or candidate > current):
+            existing_usage[key] = candidate
+    if not existing.get("rate_limit") and incoming.get("rate_limit"):
+        existing["rate_limit"] = incoming.get("rate_limit")
+
+
+def _normalize_public_reset_event(event: dict[str, Any]) -> dict[str, Any] | None:
+    reset_at = event.get("time_bjt") or event.get("date_bjt") or event.get("time_utc") or event.get("reset_at")
+    if not reset_at:
+        return None
+    return {
+        "kind": "official",
+        "label": text_value(event.get("scope"), "Official reset"),
+        "reset_at": reset_at,
+        "date_bjt": text_value(event.get("date_bjt")),
+        "time_bjt": text_value(event.get("time_bjt")),
+        "event_id": text_value(event.get("event_id")),
+        "source_url": text_value(event.get("source_url")),
+        "source": text_value(event.get("source"), "codexreset.org"),
+    }
+
+
+def _normalize_account_reset_event(profile: dict[str, Any], event: dict[str, Any]) -> dict[str, Any] | None:
+    reset_at = event.get("reset_at")
+    if not reset_at:
+        return None
+    return {
+        "kind": "account-window",
+        "profile": text_value(profile.get("profile"), "default"),
+        "label": text_value(event.get("label"), "账号窗口采样"),
+        "reset_at": reset_at,
+        "observed_at": event.get("observed_at"),
+        "used_percent": event.get("used_percent"),
+        "source": "账号窗口采样",
+    }
+
+
+def _normalize_codex_reset(safe: dict[str, Any], codex_profiles: list[dict[str, Any]]) -> dict[str, Any]:
+    raw_reset = safe.get("codex_reset") if isinstance(safe.get("codex_reset"), dict) else {}
+    source = text_value(raw_reset.get("source"), "账号窗口采样") if isinstance(raw_reset, dict) else "账号窗口采样"
+    status = text_value(raw_reset.get("status"), "ok") if isinstance(raw_reset, dict) else "ok"
+    raw_events = raw_reset.get("events") if isinstance(raw_reset, dict) and isinstance(raw_reset.get("events"), list) else []
+    events: list[dict[str, Any]] = []
+    for raw_event in raw_events:
+        if not isinstance(raw_event, dict):
+            continue
+        event = _normalize_public_reset_event(raw_event)
+        if event is not None:
+            events.append(event)
+
+    used_fallback = False
+    if not events:
+        used_fallback = True
+        source = "账号窗口采样"
+        for profile in codex_profiles:
+            history = profile.get("reset_history") if isinstance(profile.get("reset_history"), list) else []
+            for raw_event in history:
+                if not isinstance(raw_event, dict):
+                    continue
+                event = _normalize_account_reset_event(profile, raw_event)
+                if event is not None:
+                    events.append(event)
+
+    events.sort(key=lambda item: text_value(item.get("reset_at")), reverse=True)
+    latest = raw_reset.get("latest") if isinstance(raw_reset, dict) and isinstance(raw_reset.get("latest"), dict) else {}
+    return {
+        "source": source,
+        "status": status,
+        "latest": latest,
+        "events": events,
+        "used_fallback": used_fallback,
+        "confirmed_reset_count": raw_reset.get("confirmed_reset_count", len(events)) if isinstance(raw_reset, dict) else len(events),
+    }
+
+
+def _safe_http_url(value: Any) -> str:
+    text = text_value(value)
+    if text.startswith(("https://", "http://")):
+        return text
+    return ""
+
+
+def _progress_percent(value: Any) -> float | None:
+    number = _safe_number(value)
+    if number is None:
+        return None
+    return max(0.0, min(100.0, float(number)))
+
+
+def _primary_window(profile: dict[str, Any]) -> dict[str, Any] | None:
+    windows = profile.get("windows") if isinstance(profile.get("windows"), list) else []
+    candidates = [window for window in windows if isinstance(window, dict)]
+    for window in candidates:
+        if text_value(window.get("label")).lower() == "primary":
+            return window
+    return candidates[0] if candidates else None
+
+
+def _render_reset_calendar(reset_events: list[dict[str, Any]]) -> str:
+    parsed_events: list[tuple[datetime, dict[str, Any]]] = []
+    for event in reset_events:
+        dt = _parse_datetime(event.get("reset_at"))
+        if dt is not None:
+            parsed_events.append((dt, event))
+    if not parsed_events:
+        return '<p class="limit-muted">暂无 reset 记录。</p>'
+
+    events_by_month_day: dict[tuple[int, int], dict[int, list[tuple[datetime, dict[str, Any]]]]] = defaultdict(lambda: defaultdict(list))
+    for dt, event in parsed_events:
+        events_by_month_day[(dt.year, dt.month)][dt.day].append((dt, event))
+
+    month_blocks: list[str] = []
+    # Show the most recent months first. The calendar is intentionally compact
+    # and horizontally scrollable, matching Glance's small home calendar feel.
+    month_keys = sorted(events_by_month_day.keys(), reverse=True)[:4]
+    for year, month in month_keys:
+        days = events_by_month_day[(year, month)]
+        cal = calendar.Calendar(firstweekday=0)
+        cells: list[str] = []
+        for day in cal.itermonthdays(year, month):
+            if day == 0:
+                cells.append('<div class="codex-reset-day is-empty"></div>')
+                continue
+            events = days.get(day, [])
+            if events:
+                labels = ", ".join(
+                    text_value(event.get("label") or event.get("source"), "Reset")
+                    for _, event in events[:3]
+                )
+                title = html_text(labels, "Reset")
+                cells.append(
+                    f'<div class="codex-reset-day is-reset" title="{title}"><span class="day-number">{day}</span></div>'
+                )
+            else:
+                cells.append(f'<div class="codex-reset-day"><span class="day-number">{day}</span></div>')
+        month_blocks.append(
+            f"""
+<article class="codex-reset-month">
+  <h3>{year} 年 {month:02d} 月</h3>
+  <div class="codex-reset-weekdays"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+  <div class="codex-reset-grid">{''.join(cells)}</div>
+</article>"""
+        )
+    return f'<div class="codex-reset-carousel">{"".join(month_blocks)}</div>'
+
+
+def normalize_account_limits_data(data: dict[str, Any]) -> dict[str, Any]:
+    safe = _strip_secrets(deepcopy(data))
+    generated_at = text_value(safe.get("generated_at"))
+    accounts: list[dict[str, Any]] = []
+    by_key: dict[str, dict[str, Any]] = {}
+    raw_accounts: list[Any] = []
+    for key in ("accounts", "rows"):
+        values = safe.get(key)
+        if isinstance(values, list):
+            raw_accounts.extend(values)
+    for raw in raw_accounts:
+        if not isinstance(raw, dict):
+            continue
+        account = _normalize_account_entry(raw)
+        key = account["account_id"] or account["account_name"]
+        if key in by_key:
+            _merge_account(by_key[key], account)
+        else:
+            by_key[key] = account
+            accounts.append(account)
+    codex_profiles = [item for item in safe.get("codex", []) if isinstance(item, dict)]
+    codex_windows = sum(len(item.get("windows") or []) for item in codex_profiles if isinstance(item.get("windows"), list))
+    codex_reset = _normalize_codex_reset(safe, codex_profiles)
+    codex_reset_events = len(codex_reset["events"])
+    return {
+        "generated_at": generated_at,
+        "accounts": accounts,
+        "codex": codex_profiles,
+        "codex_reset": codex_reset,
+        "counts": {
+            "accounts": len(accounts),
+            "codex_profiles": len(codex_profiles),
+            "codex_windows": codex_windows,
+            "codex_reset_events": codex_reset_events,
+        },
+    }
+
+
+def load_account_limits_data(path: str | Path) -> dict[str, Any]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("account-limits JSON must be an object")
+    return normalize_account_limits_data(payload)
+
+
+def dump_json(data: dict[str, Any]) -> str:
+    return json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+
+
+def dump_yaml(data: dict[str, Any]) -> str:
+    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+
+
+def render_account_limits_html(data: dict[str, Any]) -> str:
+    normalized = normalize_account_limits_data(data)
+    counts = normalized["counts"]
+
+    codex_cards = []
+    for profile in normalized["codex"]:
+        primary = _primary_window(profile)
+        used_percent = _fmt_percent(primary.get("used_percent")) if primary else "—"
+        reset_time = _fmt_reset(primary.get("reset_at")) if primary else "—"
+        progress_value = _progress_percent(primary.get("used_percent")) if primary else None
+        progress_width = f"{progress_value:.1f}%" if progress_value is not None else "0%"
+        status = text_value(profile.get("status"))
+        error_bits = []
+        if status and status != "ok":
+            error_bits.append(status)
+        if profile.get("error_type"):
+            error_bits.append(text_value(profile.get("error_type")))
+        error_label = " · ".join(bit for bit in error_bits if bit)
+        error_html = ""
+        if error_label:
+            error_html += f'<p class="limit-muted">状态：{html_text(error_label)}</p>'
+        if profile.get("error"):
+            error_html += f'<p class="limit-muted">{html_text(profile.get("error"))}</p>'
+        codex_cards.append(
+            f"""
+<article class="codex-account-card">
+  <h3>{html_text(profile.get('account_name') or profile.get('profile'), 'default')}</h3>
+  <div class="usage-row"><span>使用额度</span><strong>{html_text(used_percent)}</strong></div>
+  <div class="limit-progress" aria-label="使用额度 {html_text(used_percent)}"><span style="width: {html_text(progress_width)}"></span></div>
+  <div class="reset-row"><span>重置时间</span><strong>{html_text(reset_time)}</strong></div>
+  {error_html}
+</article>"""
+        )
+
+    codex_reset = normalized["codex_reset"]
+    reset_events = codex_reset["events"]
+    reset_calendar = _render_reset_calendar(reset_events)
+    reset_source = text_value(codex_reset.get("source"), "账号窗口采样")
+    source_label = "codexreset.org" if "codexreset.org" in reset_source else reset_source
+    source_url = _safe_http_url(reset_source)
+    source_html = f'<a href="{html_text(source_url)}">{html_text(source_label)}</a>' if source_url else "未知来源"
+    latest = codex_reset.get("latest") if isinstance(codex_reset.get("latest"), dict) else {}
+    latest_time = text_value(latest.get("time_bjt") or latest.get("date_bjt") or latest.get("time_utc"))
+    reset_intro_parts = [f"来源：{source_html}"]
+    if latest_time:
+        reset_intro_parts.append(f"最新：{html_text(latest_time)}")
+    if codex_reset.get("used_fallback"):
+        reset_intro_parts.append("账号窗口采样")
+    reset_intro = " · ".join(reset_intro_parts)
+
+    return f"""
+<style>
+.limit-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); }}
+.limit-muted {{ color: var(--color-text-subdue); font-size: 0.76rem; margin-top: 0.18rem; }}
+.account-limits-resource-layout {{ display: grid; grid-template-columns: minmax(240px, 0.9fr) minmax(320px, 1.25fr); gap: 0.9rem; align-items: start; }}
+.codex-reset-panel, .codex-accounts-panel {{ border: 1px solid var(--color-separator); border-radius: 16px; padding: 0.8rem; background: var(--color-widget-background); }}
+.codex-reset-panel h2, .codex-accounts-panel h2 {{ margin: 0 0 0.45rem; font-size: 1rem; }}
+.codex-reset-carousel {{ display: flex; gap: 0.65rem; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 0.2rem; }}
+.codex-reset-month {{ flex: 0 0 220px; scroll-snap-align: start; }}
+.codex-reset-month h3 {{ margin: 0 0 0.42rem; font-size: 0.88rem; }}
+.codex-reset-weekdays, .codex-reset-grid {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.12rem; }}
+.codex-reset-weekdays span {{ color: var(--color-text-subdue); font-size: 0.62rem; text-align: center; }}
+.codex-reset-day {{ min-height: 1.45rem; border-radius: 8px; display: grid; place-items: center; color: var(--color-text-subdue); font-size: 0.7rem; }}
+.codex-reset-day.is-reset {{ border: 1px solid var(--color-primary); color: var(--color-text-base); font-weight: 700; background: color-mix(in srgb, var(--color-primary) 14%, transparent); }}
+.codex-reset-day.is-empty {{ visibility: hidden; }}
+.codex-account-list {{ display: grid; gap: 0.65rem; }}
+.codex-account-card {{ border: 1px solid var(--color-separator); border-radius: 14px; padding: 0.75rem; background: color-mix(in srgb, var(--color-widget-background) 92%, var(--color-primary) 8%); }}
+.codex-account-card h3 {{ margin: 0 0 0.5rem; font-size: 0.98rem; }}
+.usage-row, .reset-row {{ display: flex; justify-content: space-between; gap: 0.8rem; align-items: baseline; }}
+.usage-row span, .reset-row span {{ color: var(--color-text-subdue); font-size: 0.78rem; }}
+.limit-progress {{ height: 0.5rem; border-radius: 999px; overflow: hidden; margin: 0.45rem 0 0.55rem; background: color-mix(in srgb, var(--color-text-subdue) 18%, transparent); }}
+.limit-progress span {{ display: block; height: 100%; border-radius: inherit; background: var(--color-primary); }}
+@media (max-width: 720px) {{ .account-limits-resource-layout {{ grid-template-columns: 1fr; }} }}
+</style>
+<div class="limit-summary">账号额度 · 最新整理：{html_text(normalized.get('generated_at'))} · Codex 账号 {counts['codex_profiles']} 个</div>
+<div class="account-limits-resource-layout">
+  <section class="codex-reset-panel"><h2>Codex 官方重置日历</h2><p class="limit-muted">{reset_intro}</p>{reset_calendar}</section>
+  <section class="codex-accounts-panel"><h2>账号使用额度</h2><div class="codex-account-list">{''.join(codex_cards) or '<p>暂无 Codex 账号数据。</p>'}</div></section>
+</div>
+"""
+
+
+def build_account_limits_page(
+    data: dict[str, Any],
+    *,
+    page_name: str = ACCOUNT_LIMITS_PAGE_NAME,
+    page_slug: str = DEFAULT_PAGE_SLUG,
+    widget_title: str = DEFAULT_WIDGET_TITLE,
+) -> dict[str, Any]:
+    return {
+        "name": page_name,
+        "slug": page_slug,
+        "width": "wide",
+        "columns": [
+            {
+                "size": "full",
+                "widgets": [
+                    {"type": "html", "title": widget_title, "source": render_account_limits_html(data)}
+                ],
+            }
+        ],
+    }
+
+
+def replace_account_limits_page(
+    config: dict[str, Any],
+    data: dict[str, Any],
+    *,
+    page_name: str = ACCOUNT_LIMITS_PAGE_NAME,
+    page_slug: str = DEFAULT_PAGE_SLUG,
+    widget_title: str = DEFAULT_WIDGET_TITLE,
+) -> dict[str, Any]:
+    updated = deepcopy(config)
+    pages = updated.setdefault("pages", [])
+    if not isinstance(pages, list):
+        raise ValueError("Glance config `pages` must be a list")
+    legacy = set(LEGACY_ACCOUNT_LIMITS_PAGE_NAMES) | {page_name}
+    pages[:] = [page for page in pages if not (isinstance(page, dict) and (page.get("name") in legacy or page.get("slug") == page_slug))]
+    new_page = build_account_limits_page(data, page_name=page_name, page_slug=page_slug, widget_title=widget_title)
+    insert_after = None
+    for index, page in enumerate(pages):
+        if isinstance(page, dict) and (page.get("slug") == "sites" or page.get("name") == "网站服务"):
+            insert_after = index
+    if insert_after is None:
+        for index, page in enumerate(pages):
+            if isinstance(page, dict) and (page.get("slug") == "servers" or page.get("name") == "服务器"):
+                insert_after = index
+    if insert_after is None:
+        pages.append(new_page)
+    else:
+        pages.insert(insert_after + 1, new_page)
+    return updated

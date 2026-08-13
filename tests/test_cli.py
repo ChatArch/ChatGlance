@@ -22,6 +22,8 @@ def test_tree_option_prints_registered_cli_tree():
     assert "update-config" in result.output
     assert "disks" in result.output
     assert "root-only" in result.output
+    assert "home" in result.output
+    assert "remove-widget" in result.output
     assert "runtime" in result.output
     assert "maintain" in result.output
     assert "render-systemd" in result.output
@@ -30,4 +32,7 @@ def test_tree_option_prints_registered_cli_tree():
     assert "servers" in result.output
     assert "sites" in result.output
     assert "export-covers" in result.output
+    assert "account-limits" in result.output
+    assert "render-page" in result.output
+    assert "update-config" in result.output
     assert "status" in result.output

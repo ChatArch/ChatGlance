@@ -63,6 +63,50 @@ def iter_widgets(value: Any) -> Iterator[dict[str, Any]]:
             yield from iter_widgets(item)
 
 
+def _remove_widget_types_from_sequence(values: list[Any], widget_types: set[str]) -> list[Any]:
+    cleaned: list[Any] = []
+    for item in values:
+        if not isinstance(item, dict):
+            cleaned.append(item)
+            continue
+        if item.get("type") in widget_types:
+            continue
+        new_item = deepcopy(item)
+        for key in ("widgets", "columns"):
+            nested = new_item.get(key)
+            if isinstance(nested, list):
+                new_item[key] = _remove_widget_types_from_sequence(nested, widget_types)
+        cleaned.append(new_item)
+    return cleaned
+
+
+def remove_home_widget_types(
+    config: dict[str, Any],
+    widget_types: set[str],
+    *,
+    home_page_name: str = "ChatArch",
+) -> dict[str, Any]:
+    """Return a config copy with selected widget types removed from the home page.
+
+    This is intentionally narrow: it only modifies the ChatArch home page, and it
+    recurses through Glance columns/groups without touching other pages.
+    """
+
+    updated = deepcopy(config)
+    pages = updated.get("pages")
+    if not isinstance(pages, list):
+        return updated
+    for page in pages:
+        if not isinstance(page, dict) or page.get("name") != home_page_name:
+            continue
+        for key in ("widgets", "columns"):
+            nested = page.get(key)
+            if isinstance(nested, list):
+                page[key] = _remove_widget_types_from_sequence(nested, widget_types)
+        break
+    return updated
+
+
 def patch_server_stats_mountpoints(
     config: dict[str, Any],
     mountpoints: Mapping[str, str],
