@@ -21,6 +21,7 @@ DATA_PATH="${CHATGLANCE_ACCOUNT_LIMITS_JSON:-$RUNTIME_HOME/data/account-limits.j
 PAGE_PATH="${CHATGLANCE_ACCOUNT_LIMITS_PAGE_YML:-$RUNTIME_HOME/data/account-limits-page.yml}"
 CONFIG_PATH="${CHATGLANCE_CONFIG:-$RUNTIME_HOME/config/glance.yml}"
 CANDIDATE_PATH="${CHATGLANCE_CANDIDATE_CONFIG:-$RUNTIME_HOME/config/glance.yml.account-limits-candidate}"
+INTERMEDIATE_CANDIDATE_PATH="${CANDIDATE_PATH}.account-limits"
 BACKUP_DIR="${CHATGLANCE_BACKUP_DIR:-$RUNTIME_HOME/config/backups}"
 NEXT_DATA_PATH="${CHATGLANCE_ACCOUNT_LIMITS_NEXT_JSON:-$DATA_PATH.next}"
 NEXT_PAGE_PATH="${CHATGLANCE_ACCOUNT_LIMITS_NEXT_PAGE_YML:-$PAGE_PATH.next}"
@@ -29,6 +30,11 @@ TIMEOUT="${CHATGLANCE_ACCOUNT_LIMITS_TIMEOUT:-60}"
 ENABLE_PROXY="${CHATGLANCE_ENABLE_PROXY:-auto}"
 
 mkdir -p "$(dirname "$DATA_PATH")" "$(dirname "$PAGE_PATH")" "$(dirname "$CANDIDATE_PATH")" "$BACKUP_DIR"
+
+cleanup_intermediate_candidate() {
+  rm -f "$INTERMEDIATE_CANDIDATE_PATH"
+}
+trap cleanup_intermediate_candidate EXIT
 
 if [[ ! -x "$COLLECTOR" ]]; then
   if [[ -f "$COLLECTOR" ]]; then
@@ -94,10 +100,10 @@ fi
 "$CHATGLANCE_BIN" account-limits update-config \
   --data "$NEXT_DATA_PATH" \
   --config "$CONFIG_PATH" \
-  --output "$CANDIDATE_PATH.account-limits"
+  --output "$INTERMEDIATE_CANDIDATE_PATH"
 
 "$CHATGLANCE_BIN" home remove-widget \
-  --config "$CANDIDATE_PATH.account-limits" \
+  --config "$INTERMEDIATE_CANDIDATE_PATH" \
   --output "$CANDIDATE_PATH" \
   --type hacker-news
 

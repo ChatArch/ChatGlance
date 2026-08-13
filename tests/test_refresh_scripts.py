@@ -52,3 +52,14 @@ def test_refresh_scripts_run_with_xtrace_disabled_before_credential_or_proxy_hel
     assert account_text.index("set +x") < account_text.index("proxy env --no-mask")
     project_text = read_script("refresh-projects-page.sh")
     assert project_text.index("set +x") < project_text.index("$CHATGH_BIN")
+
+
+def test_refresh_account_limits_script_cleans_intermediate_config_candidate() -> None:
+    text = read_script("refresh-account-limits-page.sh")
+
+    assert 'INTERMEDIATE_CANDIDATE_PATH="${CANDIDATE_PATH}.account-limits"' in text
+    assert "cleanup_intermediate_candidate" in text
+    assert "trap cleanup_intermediate_candidate EXIT" in text
+    assert '--output "$INTERMEDIATE_CANDIDATE_PATH"' in text
+    assert '--config "$INTERMEDIATE_CANDIDATE_PATH"' in text
+    assert '"$CANDIDATE_PATH.account-limits"' not in text
