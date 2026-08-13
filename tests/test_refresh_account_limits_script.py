@@ -17,6 +17,7 @@ def test_refresh_account_limits_script_lives_in_chatglance_scripts_with_proxy_an
     assert "set +x" in text
     assert "eval" not in text
     assert "chatcrs" in text
+    assert "${CHATCRS_BIN:-$HOME/.chatarch/venv/bin/chatcrs}" in text
     assert "codex" in text
     assert "usage" in text
     assert "quota" in text

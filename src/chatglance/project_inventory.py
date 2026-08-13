@@ -354,6 +354,8 @@ def parse_python_project_cli(pyproject: JsonDict, *, fetch_file: Callable[[str],
     }
 
 
+PLACEHOLDER_CLI_COMMANDS = {"hello", "demo", "example", "sample"}
+
 TREE_NODE_RE = re.compile(r"(?:├──|└──)\s+(.+)$")
 
 
@@ -363,16 +365,38 @@ def _tree_token(text: str) -> str:
     return parts[0].strip() if parts else ""
 
 
+def _is_option_like_token(token: str) -> bool:
+    return token.lstrip("([{<").startswith("-")
+
+
+def _tree_root(output: str) -> str | None:
+    for raw_line in output.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        if stripped.lower().startswith(("usage:", "options:", "commands:")):
+            continue
+        token = _tree_token(stripped)
+        return token or None
+    return None
+
+
 def parse_actual_cli_tree_output(output: str) -> JsonDict:
-    """Parse a ChatArch-style ``--tree`` output into business command counts.
+    """Parse a CLI tree/help output into compact substantive command evidence.
 
     The dashboard classification uses real installed CLI trees. Global options
-    such as ``--help``/``--version``/``--tree`` are not business commands; every
-    non-option tree node is counted as a substantive CLI command node.
+    such as ``--help``/``--version``/``--tree`` are not business commands. Trivial
+    placeholder nodes such as ``hello``/``demo`` are kept as placeholder evidence
+    but do not promote a package out of ``Python (early)``.
     """
 
     business_commands: list[str] = []
+    placeholder_commands: list[str] = []
     global_options: list[str] = []
+    compact_lines: list[str] = []
+    root = _tree_root(output)
+    if root:
+        compact_lines.append(root)
     for line in output.splitlines():
         match = TREE_NODE_RE.search(line)
         if not match:
@@ -380,12 +404,18 @@ def parse_actual_cli_tree_output(output: str) -> JsonDict:
         token = _tree_token(match.group(1))
         if not token:
             continue
-        if token.startswith("-"):
+        if _is_option_like_token(token):
             if token not in global_options:
                 global_options.append(token)
             continue
+        if token.lower() in PLACEHOLDER_CLI_COMMANDS:
+            if token not in placeholder_commands:
+                placeholder_commands.append(token)
+            compact_lines.append(f"{line[:match.start(1)]}{token}".rstrip())
+            continue
         business_commands.append(token)
-    if not business_commands:
+        compact_lines.append(f"{line[:match.start(1)]}{token}".rstrip())
+    if not business_commands and not placeholder_commands:
         in_commands = False
         for raw_line in output.splitlines():
             stripped = raw_line.strip()
@@ -401,14 +431,28 @@ def parse_actual_cli_tree_output(output: str) -> JsonDict:
             if raw_line[:1] and not raw_line.startswith((" ", "\t")):
                 break
             token = stripped.split()[0] if stripped.split() else ""
-            if token and not token.startswith("-") and token not in business_commands:
+            if not token:
+                continue
+            if _is_option_like_token(token):
+                if token not in global_options:
+                    global_options.append(token)
+                continue
+            if token.lower() in PLACEHOLDER_CLI_COMMANDS:
+                if token not in placeholder_commands:
+                    placeholder_commands.append(token)
+                continue
+            if token not in business_commands:
                 business_commands.append(token)
+                compact_lines.append(("└── " if len(business_commands) == 1 else "├── ") + token)
     return {
         "status": "ok",
         "business_commands": business_commands,
         "business_command_count": len(business_commands),
+        "placeholder_commands": placeholder_commands,
+        "placeholder_command_count": len(placeholder_commands),
         "global_options": global_options,
         "global_option_count": len(global_options),
+        "compact_tree": "\n".join(compact_lines),
     }
 
 
@@ -460,6 +504,8 @@ def enrich_actual_cli_tree(item: JsonDict, *, fetcher: ActualCliTreeFetcher, tim
     per_entrypoint: dict[str, JsonDict] = {}
     all_business: list[str] = []
     all_options: list[str] = []
+    all_placeholders: list[str] = []
+    compact_trees: dict[str, str] = {}
     statuses: list[str] = []
     for command in commands:
         output = fetcher(package_name, command, timeout)
@@ -470,6 +516,13 @@ def enrich_actual_cli_tree(item: JsonDict, *, fetcher: ActualCliTreeFetcher, tim
         per_entrypoint[command] = tree
         statuses.append(str(tree.get("status") or "unknown"))
         all_business.extend(str(cmd) for cmd in tree.get("business_commands", []) if str(cmd).strip())
+        for placeholder in tree.get("placeholder_commands", []):
+            text = str(placeholder).strip()
+            if text and text not in all_placeholders:
+                all_placeholders.append(text)
+        compact_tree = str(tree.get("compact_tree") or "").strip()
+        if compact_tree:
+            compact_trees[command] = compact_tree
         for option in tree.get("global_options", []):
             text = str(option).strip()
             if text and text not in all_options:
@@ -485,8 +538,11 @@ def enrich_actual_cli_tree(item: JsonDict, *, fetcher: ActualCliTreeFetcher, tim
         "status": status,
         "business_commands": all_business,
         "business_command_count": len(all_business),
+        "placeholder_commands": all_placeholders,
+        "placeholder_command_count": len(all_placeholders),
         "global_options": all_options,
         "global_option_count": len(all_options),
+        "compact_trees": compact_trees,
         "entrypoints": per_entrypoint,
     }
     item["cli"] = cli

@@ -91,6 +91,10 @@ def _actual_business_command_count(item: dict[str, Any]) -> int | None:
         return 0
 
 
+def _actual_tree_status(item: dict[str, Any]) -> str:
+    return text_value(_actual_cli_tree(item).get("status"), "")
+
+
 def _description_is_placeholder(item: dict[str, Any]) -> bool:
     description = text_value(item.get("description"), "").lower()
     markers = [
@@ -145,6 +149,8 @@ def category_key(item: dict[str, Any]) -> str:
         if actual_business_count is not None and actual_business_count > 0:
             return "python-package"
         if actual_business_count == 0 and _cli_commands(item):
+            return "python-early"
+        if _actual_tree_status(item) in {"no-entrypoint", "unavailable"}:
             return "python-early"
         if _description_is_placeholder(item):
             return "python-early"
@@ -262,13 +268,55 @@ def make_categories_widget(data: dict[str, Any]) -> dict[str, Any]:
     return {"type": "bookmarks", "title": "分类", "collapse-after": 12, "groups": make_category_groups(data)}
 
 
+def _cli_tree_lines(item: dict[str, Any], command: str) -> list[str]:
+    cli = _mapping(item.get("cli"))
+    tree = _mapping(cli.get("actual_tree"))
+    compact_trees = _mapping(tree.get("compact_trees"))
+    compact = text_value(compact_trees.get(command), "")
+    if not compact:
+        entrypoints = _mapping(tree.get("entrypoints"))
+        entry = _mapping(entrypoints.get(command))
+        compact = text_value(entry.get("compact_tree"), "")
+        if not compact:
+            commands = entry.get("business_commands") if isinstance(entry.get("business_commands"), list) else tree.get("business_commands")
+            placeholders = entry.get("placeholder_commands") if isinstance(entry.get("placeholder_commands"), list) else tree.get("placeholder_commands")
+            nodes = [str(value).strip() for value in (commands or []) if str(value).strip() and not str(value).strip().lstrip("([{<").startswith("-")]
+            nodes.extend(str(value).strip() for value in (placeholders or []) if str(value).strip() and not str(value).strip().lstrip("([{<").startswith("-"))
+            compact = "\n".join([command, *(f"└── {node}" if index == len(nodes) - 1 else f"├── {node}" for index, node in enumerate(nodes))]) if nodes else command
+    lines: list[str] = []
+    for raw_line in compact.splitlines():
+        line = raw_line.rstrip()
+        token = line.split("#", 1)[0].strip().split()
+        if token and token[-1].lstrip("([{<").startswith("-"):
+            continue
+        if line.strip():
+            lines.append(line)
+    return lines[:24]
+
+
+def cli_cell(item: dict[str, Any]) -> str:
+    commands = [command for command in _cli_commands(item) if not command.lstrip("([{<").startswith("-")]
+    if not commands:
+        return "—"
+    chips: list[str] = []
+    for command in commands[:3]:
+        tree_lines = _cli_tree_lines(item, command)
+        tree_html = html.escape("\n".join(tree_lines), quote=True)
+        chips.append(
+            '<span class="projects-cli-hover" tabindex="0">'
+            f'<code>{html_text(command)}</code>'
+            f'<pre class="projects-cli-tree">{tree_html}</pre>'
+            '</span>'
+        )
+    if len(commands) > 3:
+        chips.append(f'<span class="projects-cli-extra">+{len(commands) - 3}</span>')
+    return " ".join(chips)
+
+
 def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
     rows: list[str] = []
     for item in sorted_repos(data, "name"):
-        commands = ((item.get("cli") or {}).get("commands") if isinstance(item.get("cli"), dict) else []) or []
-        cli = ", ".join(str(command) for command in commands[:3])
-        if len(commands) > 3:
-            cli += f" +{len(commands) - 3}"
+        cli = cli_cell(item)
         docs = item.get("docs") if isinstance(item.get("docs"), list) else []
         docs_url = docs[0].get("url") if docs and isinstance(docs[0], dict) else ""
         docs_cell = f'<a href="{html_text(docs_url)}" target="_blank" rel="noreferrer">文档</a>' if docs_url else "—"
@@ -279,7 +327,7 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
             f'<td class="num">{int(item.get("open_issues") or 0)}</td>'
             f'<td>{html_text(version_display(item.get("version") if isinstance(item.get("version"), dict) else None))}</td>'
             f'<td>{html_text(display_category(item))}</td>'
-            f'<td>{html_text(cli)}</td>'
+            f'<td class="projects-cli-cell">{cli}</td>'
             f'<td>{docs_cell}</td>'
             f'<td>{html_text(safe_date(item.get("pushed_at") or item.get("updated_at")))}</td>'
             "</tr>"
@@ -293,6 +341,12 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
 .projects-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .projects-table a { color: inherit; text-decoration: none; }
 .projects-table a:hover { text-decoration: underline; }
+.projects-cli-cell { min-width: 8rem; }
+.projects-cli-hover { position: relative; display: inline-block; margin: 0 0.25rem 0.25rem 0; }
+.projects-cli-hover code { border: 1px solid var(--color-separator); border-radius: 999px; padding: 0.08rem 0.42rem; background: var(--color-background); font-size: 0.82em; cursor: help; }
+.projects-cli-tree { display: none; position: absolute; z-index: 20; left: 0; top: 1.65rem; min-width: 14rem; max-width: min(34rem, 70vw); max-height: 18rem; overflow: auto; white-space: pre; margin: 0; padding: 0.65rem 0.75rem; border: 1px solid var(--color-separator); border-radius: 0.75rem; background: var(--color-widget-background); color: var(--color-text); box-shadow: 0 18px 42px rgba(0,0,0,0.34); font-size: 0.82em; line-height: 1.45; }
+.projects-cli-hover:hover .projects-cli-tree, .projects-cli-hover:focus-within .projects-cli-tree { display: block; }
+.projects-cli-extra { color: var(--color-text-subdued); font-size: 0.85em; }
 </style>
 <div class="projects-table-wrap">
 <table class="projects-table">

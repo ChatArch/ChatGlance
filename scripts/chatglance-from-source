@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Run chatglance from this repository checkout so live refresh timers track the
+# reviewed source branch instead of an older globally installed package.
+
+set -euo pipefail
+set +x
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m chatglance.cli "$@"

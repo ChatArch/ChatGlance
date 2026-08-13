@@ -103,12 +103,36 @@ def test_parse_python_project_cli_keeps_only_package_entrypoints():
     assert cli["commands"] == ["chatglance"]
 
 
-def test_parse_actual_cli_tree_output_counts_business_commands_not_global_options():
+CHATDRAW_TREE = '''
+chatdraw  # ChatDraw command-line interface.
+├── --help  # Show this help message.
+├── --version  # Show the installed package version.
+├── --tree  # Print the registered command tree.
+└── hello  # Placeholder smoke command.
+'''
+
+CHATLINUX_TREE_WITH_OPTION_NODE = '''
+chatlinux  # ChatLinux CLI.
+├── fleet  # Manage fleet config.
+│   ├── [--home TEXT]  # Override home directory.
+│   ├── init  # Initialize config.
+│   └── refresh  # Refresh cache.
+└── status  # Show status.
+'''
+
+
+def test_parse_actual_cli_tree_output_counts_business_commands_not_global_options_or_placeholder_nodes():
     trivial = parse_actual_cli_tree_output(CHATCI_TREE)
+    placeholder = parse_actual_cli_tree_output(CHATDRAW_TREE)
+    option_node = parse_actual_cli_tree_output(CHATLINUX_TREE_WITH_OPTION_NODE)
     complex_tree = parse_actual_cli_tree_output(CHATCRS_TREE)
 
     assert trivial["business_command_count"] == 0
     assert trivial["global_options"] == ["--help", "--version", "--tree"]
+    assert placeholder["business_command_count"] == 0
+    assert placeholder["placeholder_commands"] == ["hello"]
+    assert option_node["business_commands"] == ["fleet", "init", "refresh", "status"]
+    assert "[--home" in option_node["global_options"]
     assert complex_tree["business_command_count"] == 8
     assert complex_tree["business_commands"] == ["health", "models", "apikey", "list", "create", "account", "list", "refresh"]
 

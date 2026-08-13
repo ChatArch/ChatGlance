@@ -17,7 +17,23 @@ def sample_inventory():
                 "pushed_at": "2026-08-01T00:00:00Z",
                 "category": "python-package",
                 "version": {"value": "0.1.0", "source": "pyproject.toml"},
-                "cli": {"commands": ["alpha"]},
+                "cli": {
+                    "commands": ["alpha"],
+                    "actual_tree": {
+                        "status": "ok",
+                        "business_commands": ["projects", "collect", "render-page"],
+                        "business_command_count": 3,
+                        "global_options": ["--help", "--version", "--tree"],
+                        "entrypoints": {
+                            "alpha": {
+                                "status": "ok",
+                                "business_commands": ["projects", "collect", "render-page"],
+                                "business_command_count": 3,
+                                "global_options": ["--help", "--version", "--tree"],
+                            }
+                        },
+                    },
+                },
                 "docs": [{"url": "https://example.invalid/alpha"}],
             },
             {
@@ -135,6 +151,27 @@ def test_project_category_treats_reviewed_early_python_cli_as_early():
         assert display_category(item) == "Python (early)"
 
 
+def test_project_category_treats_no_entrypoint_python_repo_as_early() -> None:
+    item = {
+        "name": "ChatStyle",
+        "category": "python-package",
+        "language": "Python",
+        "package": {"python_name": "ChatStyle"},
+        "cli": {
+            "commands": [],
+            "actual_tree": {
+                "status": "no-entrypoint",
+                "business_commands": [],
+                "business_command_count": 0,
+            },
+        },
+        "evidence": {"has_pyproject": True},
+    }
+
+    assert category_key(item) == "python-early"
+    assert display_category(item) == "Python (early)"
+
+
 def test_project_overview_shows_inventory_refresh_time():
     page = build_projects_page(sample_inventory())
     rendered = yaml.safe_dump(page, allow_unicode=True, sort_keys=False)
@@ -163,6 +200,24 @@ def test_replace_projects_page_keeps_projects_after_home_before_servers():
     updated = replace_projects_page(config, sample_inventory())
 
     assert [page["name"] for page in updated["pages"]] == ["ChatArch", "项目", "服务器"]
+
+
+def test_projects_table_cli_cell_exposes_compact_hover_tree_without_options() -> None:
+    page = build_projects_page(sample_inventory())
+    table_widget = page["columns"][1]["widgets"][0]["widgets"][3]
+    source = table_widget["source"]
+
+    assert "projects-cli-hover" in source
+    assert "projects-cli-tree" in source
+    assert "alpha" in source
+    assert "projects" in source
+    assert "collect" in source
+    assert "render-page" in source
+    assert "--help" not in source
+    assert "--version" not in source
+    assert "--tree" not in source
+    assert "max-height" in source
+    assert "overflow: auto" in source
 
 
 def test_patch_server_stats_root_only_hides_default_mountpoints():
