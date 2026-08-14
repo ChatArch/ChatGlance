@@ -14,12 +14,23 @@ set +x
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNTIME_HOME="${CHATGLANCE_RUNTIME_HOME:-$HOME/.chatarch/glance}"
 SERVICE_NAME="${CHATGLANCE_SERVICE_NAME:-chatarch-glance.service}"
+LOCK_FILE="${CHATGLANCE_REFRESH_LOCK:-$RUNTIME_HOME/logs/refresh-live-pages.lock}"
+mkdir -p "$(dirname "$LOCK_FILE")"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "changed_any=false failed_any=true service=$SERVICE_NAME service_action=skipped_locked lock=$LOCK_FILE"
+  exit 0
+fi
 export CHATGLANCE_RUNTIME_HOME="$RUNTIME_HOME"
 export CHATGLANCE_BIN="${CHATGLANCE_BIN:-$SCRIPT_DIR/chatglance-from-source}"
 export CHATGH_BIN="${CHATGH_BIN:-$HOME/.chatarch/venv/bin/chatgh}"
 export CHATCRS_BIN="${CHATCRS_BIN:-$HOME/.chatarch/venv/bin/chatcrs}"
 export CHATGLANCE_CHATCLASH_BIN="${CHATGLANCE_CHATCLASH_BIN:-$HOME/.chatarch/venv/bin/chatclash}"
 export GLANCE_BIN="${GLANCE_BIN:-$RUNTIME_HOME/bin/glance}"
+# The live dashboard should publish the current reviewed server state, including
+# real outages. The lower-level server refresh script still supports fail-closed
+# runs by explicitly setting CHATGLANCE_ALLOW_SERVER_OFFLINE_REGRESSION=0.
+export CHATGLANCE_ALLOW_SERVER_OFFLINE_REGRESSION="${CHATGLANCE_ALLOW_SERVER_OFFLINE_REGRESSION:-1}"
 
 changed_any=0
 failed_any=0

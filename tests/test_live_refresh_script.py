@@ -28,6 +28,20 @@ def test_live_refresh_script_runs_three_page_refreshers_hourly_ready_and_restart
     assert "export CHATCRS_BIN" in text
     assert "${CHATCRS_BIN:-$HOME/.chatarch/venv/bin/chatcrs}" in text
     assert "export CHATGLANCE_CHATCLASH_BIN" in text
+    assert "export CHATGLANCE_ALLOW_SERVER_OFFLINE_REGRESSION" in text
+    assert "${CHATGLANCE_ALLOW_SERVER_OFFLINE_REGRESSION:-1}" in text
+    assert "CHATGLANCE_REFRESH_LOCK" in text
+    assert "flock -n 9" in text
+    assert "service_action=skipped_locked" in text
+
+
+def test_live_refresh_script_publishes_reviewed_server_outages_by_default() -> None:
+    assert SCRIPT_PATH.exists(), "missing combined live refresh script"
+    text = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert "CHATGLANCE_ALLOW_SERVER_OFFLINE_REGRESSION" in text
+    assert "including\n# real outages" in text
+    assert text.index("CHATGLANCE_ALLOW_SERVER_OFFLINE_REGRESSION") < text.index("run_refresh refresh-server-status.sh")
 
 
 def test_live_refresh_script_continues_after_one_page_refresh_fails() -> None:
