@@ -36,6 +36,7 @@ EXPECTED_QUOTA_KEYS = {
 }
 
 PUBLIC_RESET_SOURCE = "https://codexreset.org/"
+BEIJING_TIMEZONE = timezone(timedelta(hours=8))
 
 
 def short_hash(value: Any) -> str:
@@ -111,11 +112,11 @@ def iso_from_epoch(value: Any) -> str:
         seconds = int(float(value))
     except (TypeError, ValueError):
         return ""
-    return datetime.fromtimestamp(seconds, tz=timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.fromtimestamp(seconds, tz=timezone.utc).astimezone(BEIJING_TIMEZONE).replace(microsecond=0).isoformat()
 
 
 def iso_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(BEIJING_TIMEZONE).replace(microsecond=0).isoformat()
 
 
 def parse_datetime_utc(value: str) -> datetime | None:
@@ -257,7 +258,10 @@ def usage_window(profile: str, usage_payload: Any, quota_payload: Any) -> tuple[
             reset_at = ""
             if reset_after not in (None, ""):
                 try:
-                    reset_at = datetime.fromtimestamp(datetime.now(timezone.utc).timestamp() + float(reset_after), tz=timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+                    reset_at = datetime.fromtimestamp(
+                        datetime.now(timezone.utc).timestamp() + float(reset_after),
+                        tz=timezone.utc,
+                    ).astimezone(BEIJING_TIMEZONE).replace(microsecond=0).isoformat()
                 except (TypeError, ValueError):
                     reset_at = ""
             entry = {

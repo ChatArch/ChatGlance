@@ -212,6 +212,16 @@ def test_render_account_limits_html_uses_beijing_time_when_host_timezone_is_utc(
             time.tzset()
 
 
+def test_render_account_limits_html_converts_top_refresh_time_to_beijing() -> None:
+    data = sample_account_limits_data()
+    data["generated_at"] = "2026-08-14T03:42:07Z"
+
+    html = render_account_limits_html(data)
+
+    assert "最新整理：2026-08-14T11:42:07+08:00" in html
+    assert "2026-08-14T03:42:07Z" not in html
+
+
 def test_render_account_limits_html_is_idempotent_for_normalized_data() -> None:
     normalized = normalize_account_limits_data(sample_account_limits_data())
 

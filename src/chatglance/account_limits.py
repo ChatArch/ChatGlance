@@ -84,6 +84,13 @@ def _fmt_reset(value: Any) -> str:
     return local.strftime("%Y-%m-%d %H:%M").strip()
 
 
+def _fmt_beijing_iso(value: Any) -> str:
+    dt = _parse_datetime(value)
+    if dt is None:
+        return text_value(value)
+    return dt.replace(microsecond=0).isoformat()
+
+
 def _reset_date(value: Any) -> str:
     formatted = _fmt_reset(value)
     if formatted == "—":
@@ -381,7 +388,7 @@ def _render_reset_calendar(reset_events: list[dict[str, Any]]) -> str:
 
 def normalize_account_limits_data(data: dict[str, Any]) -> dict[str, Any]:
     safe = _strip_secrets(deepcopy(data))
-    generated_at = text_value(safe.get("generated_at"))
+    generated_at = _fmt_beijing_iso(safe.get("generated_at"))
     accounts: list[dict[str, Any]] = []
     by_key: dict[str, dict[str, Any]] = {}
     raw_accounts: list[Any] = []
