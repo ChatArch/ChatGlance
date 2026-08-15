@@ -172,6 +172,29 @@ def test_project_category_treats_no_entrypoint_python_repo_as_early() -> None:
     assert display_category(item) == "Python (early)"
 
 
+def test_project_category_preserves_current_category_when_actual_tree_unavailable() -> None:
+    item = {
+        "name": "ChatCRS",
+        "category": "python-package",
+        "reviewed_category": "python-early",
+        "language": "Python",
+        "package": {"python_name": "ChatCRS"},
+        "version": {"value": "0.2.5", "source": "pypi"},
+        "cli": {
+            "commands": ["chatcrs"],
+            "actual_tree": {
+                "status": "unavailable",
+                "business_commands": [],
+                "business_command_count": 0,
+            },
+        },
+        "evidence": {"has_pyproject": True},
+    }
+
+    assert category_key(item) == "python-package"
+    assert display_category(item) == "Python 包"
+
+
 def test_project_overview_shows_inventory_refresh_time():
     page = build_projects_page(sample_inventory())
     rendered = yaml.safe_dump(page, allow_unicode=True, sort_keys=False)
