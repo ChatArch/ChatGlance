@@ -246,6 +246,7 @@ def host_connection_overrides_from_inventory_config(config: dict[str, Any]) -> d
             ("port", "port"),
             ("user", "user"),
             ("strict_host_key_checking", "strict_host_key_checking"),
+            ("identities_only", "identities_only"),
         ):
             raw = item.get(source)
             value = str(raw).strip() if raw is not None else ""
@@ -636,7 +637,7 @@ def ssh_target(alias: str, override: dict[str, str] | None = None) -> dict[str, 
                 target[key] = value.strip()
     if override:
         ssh_options: dict[str, str] = {}
-        for key in ("hostname", "port", "user", "strict_host_key_checking"):
+        for key in ("hostname", "port", "user", "strict_host_key_checking", "identities_only"):
             value = str(override.get(key, "")).strip()
             if not value:
                 continue
@@ -650,20 +651,23 @@ def ssh_target(alias: str, override: dict[str, str] | None = None) -> dict[str, 
 
 def _ssh_option_args(target: dict[str, str]) -> list[str]:
     raw = target.get("_ssh_options", "")
-    if not raw:
-        return []
-    try:
-        options = json.loads(raw)
-    except json.JSONDecodeError:
-        return []
-    if not isinstance(options, dict):
-        return []
+    options: dict[str, Any] = {}
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = {}
+        if isinstance(parsed, dict):
+            options = cast(dict[str, Any], parsed)
     args: list[str] = []
+    if "identities_only" not in {str(key) for key in options.keys()}:
+        args.extend(["-o", "IdentitiesOnly=yes"])
     mapping = {
         "hostname": "HostName",
         "port": "Port",
         "user": "User",
         "strict_host_key_checking": "StrictHostKeyChecking",
+        "identities_only": "IdentitiesOnly",
     }
     for key, option_name in mapping.items():
         value = str(options.get(key, "")).strip()

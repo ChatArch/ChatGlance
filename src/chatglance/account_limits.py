@@ -13,10 +13,10 @@ from typing import Any
 
 import yaml
 
-ACCOUNT_LIMITS_PAGE_NAME = "账号额度"
-LEGACY_ACCOUNT_LIMITS_PAGE_NAMES = {"Account Limits", "账号用量", "额度", "Codex 额度"}
+ACCOUNT_LIMITS_PAGE_NAME = "订阅详情"
+LEGACY_ACCOUNT_LIMITS_PAGE_NAMES = {"Account Limits", "账号额度", "账号用量", "额度", "Codex 额度"}
 DEFAULT_PAGE_SLUG = "account-limits"
-DEFAULT_WIDGET_TITLE = "账号额度"
+DEFAULT_WIDGET_TITLE = "订阅详情"
 BEIJING_TIMEZONE = timezone(timedelta(hours=8))
 
 SECRET_KEYS = {
@@ -82,6 +82,13 @@ def _fmt_reset(value: Any) -> str:
         dt = dt.replace(tzinfo=timezone.utc)
     local = dt.astimezone(BEIJING_TIMEZONE)
     return local.strftime("%Y-%m-%d %H:%M").strip()
+
+
+def _fmt_beijing_iso(value: Any) -> str:
+    dt = _parse_datetime(value)
+    if dt is None:
+        return text_value(value)
+    return dt.replace(microsecond=0).isoformat()
 
 
 def _reset_date(value: Any) -> str:
@@ -315,17 +322,34 @@ def _render_reset_calendar(reset_events: list[dict[str, Any]]) -> str:
         if dt is not None:
             parsed_events.append((dt, event))
     if not parsed_events:
-        return '<p class="limit-muted">暂无 reset 记录。</p>'
+        return '<div class="codex-calendar-card"><p class="limit-muted">暂无 reset 记录。</p></div>'
 
     events_by_month_day: dict[tuple[int, int], dict[int, list[tuple[datetime, dict[str, Any]]]]] = defaultdict(lambda: defaultdict(list))
     for dt, event in parsed_events:
         events_by_month_day[(dt.year, dt.month)][dt.day].append((dt, event))
 
-    month_blocks: list[str] = []
-    # Show the most recent months first. The calendar is intentionally compact
-    # and horizontally scrollable, matching Glance's small home calendar feel.
+    # Keep the UI as a real Calendar: one visible month at a time, with compact
+    # month options for looking back through recent reset history.
     month_keys = sorted(events_by_month_day.keys(), reverse=True)[:4]
-    for year, month in month_keys:
+    radios: list[str] = []
+    options: list[str] = []
+    month_panels: list[str] = []
+    switch_rules: list[str] = []
+    for index, (year, month) in enumerate(month_keys):
+        month_id = f"codex-reset-month-{index}"
+        month_class = f"codex-reset-month-panel-{index}"
+        active_attr = " checked" if index == 0 else ""
+        label = f"{year} 年 {month:02d} 月"
+        radios.append(
+            f'<input class="codex-calendar-radio" type="radio" name="codex-reset-month" id="{month_id}"{active_attr}>'
+        )
+        options.append(f'<label class="codex-calendar-option" for="{month_id}">{html_text(label)}</label>')
+        switch_rules.append(
+            f"#{month_id}:checked ~ .codex-calendar-panels .codex-calendar-month {{ display: none; }}\n"
+            f"#{month_id}:checked ~ .codex-calendar-panels .{month_class} {{ display: block; }}\n"
+            f"#{month_id}:checked ~ .codex-calendar-month-switcher label {{ background: transparent; color: var(--color-text-subdue); border-color: var(--color-separator); }}\n"
+            f"#{month_id}:checked ~ .codex-calendar-month-switcher label[for='{month_id}'] {{ background: var(--color-primary); color: var(--color-widget-background); border-color: var(--color-primary); }}"
+        )
         days = events_by_month_day[(year, month)]
         cal = calendar.Calendar(firstweekday=0)
         cells: list[str] = []
@@ -345,20 +369,26 @@ def _render_reset_calendar(reset_events: list[dict[str, Any]]) -> str:
                 )
             else:
                 cells.append(f'<div class="codex-reset-day"><span class="day-number">{day}</span></div>')
-        month_blocks.append(
+        month_panels.append(
             f"""
-<article class="codex-reset-month">
-  <h3>{year} 年 {month:02d} 月</h3>
+<article class="codex-calendar-month {month_class}">
+  <div class="codex-calendar-heading"><h3>{html_text(label)}</h3><span>{len(days)} 次 reset</span></div>
   <div class="codex-reset-weekdays"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
   <div class="codex-reset-grid">{''.join(cells)}</div>
 </article>"""
         )
-    return f'<div class="codex-reset-carousel">{"".join(month_blocks)}</div>'
+    return f"""
+<div class="codex-calendar-card">
+  <style>{''.join(switch_rules)}</style>
+  {''.join(radios)}
+  <div class="codex-calendar-month-switcher" aria-label="选择 reset 月份">{''.join(options)}</div>
+  <div class="codex-calendar-panels">{''.join(month_panels)}</div>
+</div>"""
 
 
 def normalize_account_limits_data(data: dict[str, Any]) -> dict[str, Any]:
     safe = _strip_secrets(deepcopy(data))
-    generated_at = text_value(safe.get("generated_at"))
+    generated_at = _fmt_beijing_iso(safe.get("generated_at"))
     accounts: list[dict[str, Any]] = []
     by_key: dict[str, dict[str, Any]] = {}
     raw_accounts: list[Any] = []
@@ -434,12 +464,14 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
             error_html += f'<p class="limit-muted">{html_text(profile.get("error"))}</p>'
         codex_cards.append(
             f"""
-<article class="codex-account-card">
-  <h3>{html_text(profile.get('account_name') or profile.get('profile'), 'default')}</h3>
-  <div class="usage-row"><span>使用额度</span><strong>{html_text(used_percent)}</strong></div>
-  <div class="limit-progress" aria-label="使用额度 {html_text(used_percent)}"><span style="width: {html_text(progress_width)}"></span></div>
-  <div class="reset-row"><span>重置时间</span><strong>{html_text(reset_time)}</strong></div>
-  {error_html}
+<article class="codex-account-card site-style-card">
+  <div class="codex-account-card-body">
+    <div class="codex-account-card-head"><h3>{html_text(profile.get('account_name') or profile.get('profile'), 'default')}</h3></div>
+    <div class="usage-row"><span>使用额度</span><strong>{html_text(used_percent)}</strong></div>
+    <div class="limit-progress" aria-label="使用额度 {html_text(used_percent)}"><span style="width: {html_text(progress_width)}"></span></div>
+    <div class="reset-row"><span>重置时间</span><strong>{html_text(reset_time)}</strong></div>
+    {error_html}
+  </div>
 </article>"""
         )
 
@@ -463,30 +495,39 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 <style>
 .limit-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); }}
 .limit-muted {{ color: var(--color-text-subdue); font-size: 0.76rem; margin-top: 0.18rem; }}
-.account-limits-resource-layout {{ display: grid; grid-template-columns: minmax(240px, 0.9fr) minmax(320px, 1.25fr); gap: 0.9rem; align-items: start; }}
-.codex-reset-panel, .codex-accounts-panel {{ border: 1px solid var(--color-separator); border-radius: 16px; padding: 0.8rem; background: var(--color-widget-background); }}
+.account-limits-resource-layout {{ display: grid; grid-template-columns: minmax(250px, 0.86fr) minmax(360px, 1.35fr); gap: 0.9rem; align-items: start; }}
+.codex-reset-panel, .codex-accounts-panel {{ border: 1px solid var(--color-separator); border-radius: 18px; padding: 0.85rem; background: var(--color-widget-background); box-shadow: 0 8px 28px rgba(15,23,42,0.08); }}
 .codex-reset-panel h2, .codex-accounts-panel h2 {{ margin: 0 0 0.45rem; font-size: 1rem; }}
-.codex-reset-carousel {{ display: flex; gap: 0.65rem; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 0.2rem; }}
-.codex-reset-month {{ flex: 0 0 220px; scroll-snap-align: start; }}
-.codex-reset-month h3 {{ margin: 0 0 0.42rem; font-size: 0.88rem; }}
-.codex-reset-weekdays, .codex-reset-grid {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.12rem; }}
+.codex-calendar-card {{ border: 1px solid var(--color-separator); border-radius: 18px; margin-top: 0.65rem; padding: 0.7rem; background: color-mix(in srgb, var(--color-widget-background) 94%, var(--color-primary) 6%); overflow: hidden; }}
+.codex-calendar-radio {{ position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }}
+.codex-calendar-month-switcher {{ display: flex; gap: 0.35rem; overflow-x: auto; padding-bottom: 0.45rem; margin-bottom: 0.45rem; }}
+.codex-calendar-option {{ flex: 0 0 auto; border: 1px solid var(--color-separator); border-radius: 999px; padding: 0.24rem 0.58rem; font-size: 0.72rem; color: var(--color-text-subdue); cursor: pointer; user-select: none; }}
+.codex-calendar-option.is-active {{ background: var(--color-primary); color: var(--color-widget-background); border-color: var(--color-primary); }}
+.codex-calendar-month {{ display: none; }}
+.codex-calendar-month:first-child {{ display: block; }}
+.codex-calendar-heading {{ display: flex; justify-content: space-between; gap: 0.7rem; align-items: center; margin-bottom: 0.45rem; }}
+.codex-calendar-heading h3 {{ margin: 0; font-size: 0.92rem; }}
+.codex-calendar-heading span {{ color: var(--color-text-subdue); font-size: 0.72rem; }}
+.codex-reset-weekdays, .codex-reset-grid {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.14rem; }}
 .codex-reset-weekdays span {{ color: var(--color-text-subdue); font-size: 0.62rem; text-align: center; }}
-.codex-reset-day {{ min-height: 1.45rem; border-radius: 8px; display: grid; place-items: center; color: var(--color-text-subdue); font-size: 0.7rem; }}
-.codex-reset-day.is-reset {{ border: 1px solid var(--color-primary); color: var(--color-text-base); font-weight: 700; background: color-mix(in srgb, var(--color-primary) 14%, transparent); }}
+.codex-reset-day {{ min-height: 1.55rem; border-radius: 9px; display: grid; place-items: center; color: var(--color-text-subdue); font-size: 0.7rem; }}
+.codex-reset-day.is-reset {{ border: 1px solid var(--color-primary); color: var(--color-text-base); font-weight: 700; background: color-mix(in srgb, var(--color-primary) 16%, transparent); }}
 .codex-reset-day.is-empty {{ visibility: hidden; }}
-.codex-account-list {{ display: grid; gap: 0.65rem; }}
-.codex-account-card {{ border: 1px solid var(--color-separator); border-radius: 14px; padding: 0.75rem; background: color-mix(in srgb, var(--color-widget-background) 92%, var(--color-primary) 8%); }}
-.codex-account-card h3 {{ margin: 0 0 0.5rem; font-size: 0.98rem; }}
+.codex-account-card-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 0.85rem; }}
+.codex-account-card.site-style-card {{ border: 1px solid var(--color-separator); border-radius: 18px; overflow: hidden; background: var(--color-widget-background); box-shadow: 0 8px 28px rgba(15,23,42,0.08); display: flex; flex-direction: column; }}
+.codex-account-card-body {{ padding: 0.82rem; display: flex; flex-direction: column; flex: 1; }}
+.codex-account-card-head {{ display: flex; justify-content: space-between; gap: 0.6rem; align-items: flex-start; }}
+.codex-account-card h3 {{ margin: 0 0 0.7rem; font-size: 1.05rem; }}
 .usage-row, .reset-row {{ display: flex; justify-content: space-between; gap: 0.8rem; align-items: baseline; }}
 .usage-row span, .reset-row span {{ color: var(--color-text-subdue); font-size: 0.78rem; }}
-.limit-progress {{ height: 0.5rem; border-radius: 999px; overflow: hidden; margin: 0.45rem 0 0.55rem; background: color-mix(in srgb, var(--color-text-subdue) 18%, transparent); }}
+.limit-progress {{ height: 0.56rem; border-radius: 999px; overflow: hidden; margin: 0.5rem 0 0.65rem; background: color-mix(in srgb, var(--color-text-subdue) 18%, transparent); }}
 .limit-progress span {{ display: block; height: 100%; border-radius: inherit; background: var(--color-primary); }}
 @media (max-width: 720px) {{ .account-limits-resource-layout {{ grid-template-columns: 1fr; }} }}
 </style>
-<div class="limit-summary">账号额度 · 最新整理：{html_text(normalized.get('generated_at'))} · Codex 账号 {counts['codex_profiles']} 个</div>
+<div class="limit-summary">订阅详情 · 最新整理：{html_text(normalized.get('generated_at'))} · Codex 账号 {counts['codex_profiles']} 个</div>
 <div class="account-limits-resource-layout">
   <section class="codex-reset-panel"><h2>Codex 官方重置日历</h2><p class="limit-muted">{reset_intro}</p>{reset_calendar}</section>
-  <section class="codex-accounts-panel"><h2>账号使用额度</h2><div class="codex-account-list">{''.join(codex_cards) or '<p>暂无 Codex 账号数据。</p>'}</div></section>
+  <section class="codex-accounts-panel"><h2>账号使用额度</h2><div class="codex-account-card-grid">{''.join(codex_cards) or '<p>暂无 Codex 账号数据。</p>'}</div></section>
 </div>
 """
 

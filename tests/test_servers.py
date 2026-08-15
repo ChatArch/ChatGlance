@@ -184,6 +184,7 @@ def test_collect_server_status_uses_inventory_endpoint_override(monkeypatch) -> 
         assert "Port=3322" in cmd
         assert "User=zhihong" in cmd
         assert "StrictHostKeyChecking=accept-new" in cmd
+        assert "IdentitiesOnly=yes" in cmd
         return SimpleNamespace(returncode=0, stdout="probe output", stderr="")
 
     monkeypatch.setattr(servers_module.subprocess, "run", fake_run)

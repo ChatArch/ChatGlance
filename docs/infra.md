@@ -137,10 +137,14 @@ The bundled refresh script intentionally does not call the service manager. It p
 
 The `validate-refresh` gate fails closed by default when a host that is still in
 the new inventory would change from `online` to a non-online status. This avoids
-publishing stale controller SSH/DNS/key problems as live server outages. Set
-`CHATGLANCE_ALLOW_SERVER_OFFLINE_REGRESSION=1` only for an intentional offline
-publication. If a host is removed from the runtime inventory, its absence is
-treated as an intentional membership change rather than an outage regression.
+publishing stale controller SSH/DNS/key problems as live server outages during
+manual one-off runs. Set `CHATGLANCE_ALLOW_SERVER_OFFLINE_REGRESSION=1` for an
+intentional offline publication. The bundled `refresh-live-pages.sh` orchestrator
+sets this to `1` by default because the live dashboard should show the current
+reviewed server state, including real outages such as a timed-out server; set it
+to `0` explicitly if you need a temporary fail-closed maintenance run. If a host
+is removed from the runtime inventory, its absence is treated as an intentional
+membership change rather than an outage regression.
 
 ## Cron or timer usage
 
@@ -150,7 +154,7 @@ The refresh script has no embedded secrets and can be scheduled externally. Exam
 */30 * * * * CHATGLANCE_BIN=$HOME/.chatarch/venv/bin/chatglance CHATGLANCE_RUNTIME_HOME=$HOME/.chatarch/glance CHATGLANCE_INFRA_CONFIG=$HOME/.chatarch/glance/config/server-inventory.yml bash /path/to/ChatGlance/scripts/refresh-server-status.sh >> $HOME/.chatarch/glance/logs/server-status-refresh.log 2>&1
 ```
 
-Use a systemd user timer instead of cron if you need unit logging and status. Keep the script path and runtime paths explicit.
+Use a systemd user timer instead of cron if you need unit logging and status. Keep the script path and runtime paths explicit. The combined `refresh-live-pages.sh` uses a non-blocking lock at `$CHATGLANCE_REFRESH_LOCK` (default `$CHATGLANCE_RUNTIME_HOME/logs/refresh-live-pages.lock`) so manual runs and timer runs do not publish overlapping candidates.
 
 ## Probe contract
 

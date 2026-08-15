@@ -129,7 +129,8 @@ def test_normalize_account_limits_dedupes_crs_accounts_and_counts_codex_windows(
 def test_render_account_limits_html_shows_current_usage_and_reset_dates_without_secrets() -> None:
     html = render_account_limits_html(sample_account_limits_data())
 
-    assert "账号额度" in html
+    assert "订阅详情" in html
+    assert "账号额度" not in html
     assert "default, wzh" not in html
     assert "1,786" not in html
     assert "64,963" not in html
@@ -153,7 +154,7 @@ def test_build_account_limits_page_creates_wide_html_page() -> None:
     assert page["slug"] == "account-limits"
     assert page["width"] == "wide"
     assert page["columns"][0]["widgets"][0]["type"] == "html"
-    assert page["columns"][0]["widgets"][0]["title"] == "账号额度"
+    assert page["columns"][0]["widgets"][0]["title"] == "订阅详情"
 
 
 def test_replace_account_limits_page_appends_after_sites_page_and_removes_old_slug() -> None:
@@ -169,9 +170,24 @@ def test_replace_account_limits_page_appends_after_sites_page_and_removes_old_sl
 
     updated = replace_account_limits_page(config, sample_account_limits_data())
 
-    assert [page["name"] for page in updated["pages"]] == ["ChatArch", "项目", "服务器", "网站服务", "账号额度"]
+    assert [page["name"] for page in updated["pages"]] == ["ChatArch", "项目", "服务器", "网站服务", "订阅详情"]
     assert updated["pages"][-1]["slug"] == "account-limits"
     assert config["pages"][-1]["old"] is True
+
+
+def test_replace_account_limits_page_removes_old_account_quota_name_after_subscription_rename() -> None:
+    config = {
+        "pages": [
+            {"name": "ChatArch"},
+            {"name": "账号额度", "slug": "old-account-quota", "old": True},
+            {"name": "订阅详情", "slug": "account-limits", "old": True},
+        ]
+    }
+
+    updated = replace_account_limits_page(config, sample_account_limits_data())
+
+    assert [page["name"] for page in updated["pages"]] == ["ChatArch", "订阅详情"]
+    assert updated["pages"][-1]["slug"] == "account-limits"
     rendered = yaml.safe_dump(updated, allow_unicode=True, sort_keys=False)
     assert "使用额度" in rendered
     assert "重置时间" in rendered
@@ -194,6 +210,16 @@ def test_render_account_limits_html_uses_beijing_time_when_host_timezone_is_utc(
         monkeypatch.delenv("TZ", raising=False)
         if hasattr(time, "tzset"):
             time.tzset()
+
+
+def test_render_account_limits_html_converts_top_refresh_time_to_beijing() -> None:
+    data = sample_account_limits_data()
+    data["generated_at"] = "2026-08-14T03:42:07Z"
+
+    html = render_account_limits_html(data)
+
+    assert "最新整理：2026-08-14T11:42:07+08:00" in html
+    assert "2026-08-14T03:42:07Z" not in html
 
 
 def test_render_account_limits_html_is_idempotent_for_normalized_data() -> None:
@@ -286,13 +312,35 @@ def test_render_account_limits_html_uses_compact_codex_card_titles_without_repea
     assert "<h3>73-wzh</h3>" in html
 
 
-def test_render_account_limits_html_uses_small_left_calendar_right_primary_usage_layout() -> None:
-    html = render_account_limits_html(sample_account_limits_data())
+def test_render_account_limits_html_uses_single_month_calendar_card_and_account_card_grid() -> None:
+    data = sample_account_limits_data()
+    data["codex_reset"]["events"].append(
+        {
+            "event_id": "previous-month",
+            "time_bjt": "2026-07-20 09:00:00 +0800",
+            "date_bjt": "2026-07-20",
+            "scope": "Previous reset",
+            "source_url": "https://x.com/example/status/previous-month",
+        }
+    )
+    html = render_account_limits_html(data)
 
     assert 'class="account-limits-resource-layout"' in html
     assert 'class="codex-reset-panel"' in html
     assert 'class="codex-accounts-panel"' in html
-    assert 'class="codex-reset-carousel"' in html
+    assert 'class="codex-calendar-card"' in html
+    assert 'class="codex-calendar-month-switcher"' in html
+    assert 'class="codex-calendar-option is-active"' not in html
+    assert '#codex-reset-month-0:checked ~ .codex-calendar-month-switcher label { background: transparent; color: var(--color-text-subdue); border-color: var(--color-separator); }' in html
+    assert '#codex-reset-month-0:checked ~ .codex-calendar-month-switcher label[for=\'codex-reset-month-0\']' in html
+    assert '#codex-reset-month-1:checked ~ .codex-calendar-panels .codex-calendar-month { display: none; }' in html
+    assert '#codex-reset-month-1:checked ~ .codex-calendar-panels .codex-reset-month-panel-1 { display: block; }' in html
+    assert '#codex-reset-month-1:checked ~ .codex-calendar-month-switcher label { background: transparent; color: var(--color-text-subdue); border-color: var(--color-separator); }' in html
+    assert '#codex-reset-month-1:checked ~ .codex-calendar-month-switcher label[for=\'codex-reset-month-1\']' in html
+    assert 'class="codex-account-card-grid"' in html
+    assert 'class="codex-account-card site-style-card"' in html
+    assert 'class="codex-reset-carousel"' not in html
+    assert 'class="codex-account-list"' not in html
     assert 'class="limit-progress"' in html
     assert html.index('class="codex-reset-panel"') < html.index('class="codex-accounts-panel"')
     assert "使用额度" in html

@@ -8,6 +8,7 @@
 # GitHub HTTPS credential configured by `chatgh set-token` in this checkout.
 
 set -euo pipefail
+set +x
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -33,7 +34,7 @@ PROJECT_WORKERS="${CHATGLANCE_PROJECTS_WORKERS:-4}"
 COLLECT_ACTUAL_CLI_TREES="${CHATGLANCE_COLLECT_ACTUAL_CLI_TREES:-1}"
 CLI_TREE_TIMEOUT="${CHATGLANCE_CLI_TREE_TIMEOUT:-90}"
 
-mkdir -p "$(dirname "$DATA_PATH")" "$(dirname "$PAGE_PATH")" "$(dirname "$CLI_REPORT_PATH")" "$BACKUP_DIR"
+mkdir -p "$(dirname "$DATA_PATH")" "$(dirname "$PAGE_PATH")" "$(dirname "$CLI_REPORT_PATH")" "$(dirname "$CANDIDATE_PATH")" "$BACKUP_DIR"
 
 (
   cd "$REPO_ROOT"
@@ -112,7 +113,7 @@ PY
 
 "$GLANCE_BIN" -config "$CANDIDATE_PATH" config:validate
 
-if cmp -s "$CANDIDATE_PATH" "$CONFIG_PATH"; then
+if cmp -s "$NEXT_DATA_PATH" "$DATA_PATH" 2>/dev/null && cmp -s "$NEXT_PAGE_PATH" "$PAGE_PATH" 2>/dev/null && cmp -s "$NEXT_CLI_REPORT_PATH" "$CLI_REPORT_PATH" 2>/dev/null && cmp -s "$CANDIDATE_PATH" "$CONFIG_PATH" 2>/dev/null; then
   unchanged="$BACKUP_DIR/glance.projects.unchanged.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%S+0800).yml"
   mv "$CANDIDATE_PATH" "$unchanged"
   unchanged_data="$BACKUP_DIR/chatarch-projects.unchanged.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%S+0800).json"
@@ -123,7 +124,7 @@ if cmp -s "$CANDIDATE_PATH" "$CONFIG_PATH"; then
   if [[ -f "$NEXT_CLI_REPORT_PATH" ]]; then
     mv "$NEXT_CLI_REPORT_PATH" "$unchanged_cli_report"
   fi
-  echo "changed=false data=$DATA_PATH page=$PAGE_PATH config=$CONFIG_PATH candidate=$unchanged data_candidate=$unchanged_data page_candidate=$unchanged_page cli_report_candidate=$unchanged_cli_report"
+  echo "changed=false data=$DATA_PATH page=$PAGE_PATH config=$CONFIG_PATH candidate=$unchanged data_candidate=$unchanged_data page_candidate=$unchanged_page cli_report_candidate=$unchanged_cli_report service_action=external"
   exit 0
 fi
 
@@ -148,4 +149,4 @@ if [[ -f "$NEXT_CLI_REPORT_PATH" ]]; then
 fi
 mv "$CANDIDATE_PATH" "$CONFIG_PATH"
 
-echo "changed=true data=$DATA_PATH page=$PAGE_PATH cli_report=$CLI_REPORT_PATH config=$CONFIG_PATH backup=$backup data_backup=$data_backup page_backup=$page_backup cli_report_backup=$cli_report_backup"
+echo "changed=true data=$DATA_PATH page=$PAGE_PATH cli_report=$CLI_REPORT_PATH config=$CONFIG_PATH backup=$backup data_backup=$data_backup page_backup=$page_backup cli_report_backup=$cli_report_backup service_action=external"
