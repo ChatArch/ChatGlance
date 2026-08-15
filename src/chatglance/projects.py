@@ -150,7 +150,7 @@ def category_key(item: dict[str, Any]) -> str:
             return "python-package"
         if actual_business_count == 0 and _cli_commands(item):
             return "python-early"
-        if _actual_tree_status(item) in {"no-entrypoint", "unavailable"}:
+        if _actual_tree_status(item) == "no-entrypoint":
             return "python-early"
         if _description_is_placeholder(item):
             return "python-early"
