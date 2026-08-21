@@ -23,6 +23,7 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 - `src/chatglance/`: helper code for project, server, and website-service card page generation, Glance YAML patching, runtime maintenance, and user-level systemd unit rendering/installation.
 - `tests/`: regression tests for project pages, Disk mountpoint visibility, runtime/systemd helpers, and release workflow contracts.
 - `docs/quickstart.md`: new-machine quick start that keeps Glance frontend config primary and `chatglance` as a management helper.
+- `docs/cli-tree.md`: full and brief CLI trees generated from the real Click registry, with tested side-effect boundaries.
 - `docs/site-architecture.md`: boundary between ChatGlance as a Python package, the Glance runtime, generated config, and runtime data refresh scripts.
 - `docs/projects.md`: project-page display contract, PyPI-only version rule, entrypoint-only display rule, actual CLI-tree classification evidence, and refresh review checklist.
 - `docs/infra.md`: configuration mechanism, external data-generation chain, refresh workflow, and cron/timer template for the Infra/`服务器` page.
@@ -54,13 +55,19 @@ For a new machine that should host a similar but still highly customizable Glanc
 ```bash
 pip install -e ".[dev]"
 chatglance --help
-chatglance --tree
 chatglance --version
+chatglance --tree
+chatglance --tree-brief
 python -m pytest -q
 python -m build
+python -m twine check dist/*
 ```
 
-The recommended `项目` refresh entry point is also a repository script. It uses the current ChatGH repository list for PR/Issue/timestamp fields, then reads default-branch manifest/entrypoint evidence without cloning, building, or executing repository source trees. For Python package maturity, it probes the latest published PyPI package with `uvx --from <package>@latest <entrypoint> --tree` or help fallback and writes `project-cli-tree-report.tsv` as audit evidence. Private repository contents use `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN` when present, otherwise the script reuses the repo-local GitHub credential configured by `chatgh set-token` in the current ChatGlance checkout without printing it:
+## CLI tree
+
+See [`docs/cli-tree.md`](docs/cli-tree.md) for the complete command surface. ChatStyle renders `chatglance --tree` from the real Click registry with parameter signatures; `chatglance --tree-brief` keeps the same nodes and descriptions without signatures. Tests run both entry points and compare them byte-for-byte with the documented trees.
+
+The recommended `项目` refresh entry point is also a repository script. It uses the current ChatGH repository list for PR/Issue/timestamp fields, then reads default-branch manifest/entrypoint evidence without cloning, building, or executing repository source trees. For Python package maturity, it probes the latest published PyPI package with `uvx --from <package>@latest <entrypoint> --tree` or help fallback and writes `project-cli-tree-report.tsv` as audit evidence. Private repository reads fall back in order from explicit token environment variables, to the current checkout's repo-local GitHub credential, to the typed active ChatGlance ChatEnv profile, and finally to ChatGH's shared ChatEnv profile. Token values are never printed:
 
 ```bash
 CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \

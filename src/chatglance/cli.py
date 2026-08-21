@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 import shutil
 import subprocess
@@ -11,6 +10,7 @@ from pathlib import Path
 from typing import NoReturn
 
 import click
+from chatstyle import add_tree_option
 
 from chatglance import __version__
 from chatglance.account_limits import (
@@ -59,74 +59,6 @@ from chatglance.sites import (
 from chatglance.systemd import install_user_units, render_all_units, show_user_units, systemctl_user, write_units
 
 
-def _purpose(command: click.Command) -> str:
-    text = command.short_help or inspect.getdoc(command.callback) or ""
-    return " ".join(text.strip().split()).rstrip(".")
-
-
-def _parameter_piece(parameter: click.Parameter) -> str | None:
-    if getattr(parameter, "hidden", False) or parameter.name == "help":
-        return None
-    if isinstance(parameter, click.Argument):
-        piece = parameter.name.upper().replace("_", "-")
-        if not parameter.required:
-            piece = f"[{piece}]"
-        if parameter.nargs == -1:
-            piece = f"{piece}..."
-        return piece
-    if not isinstance(parameter, click.Option):
-        return None
-    option_names = [name for name in (*parameter.opts, *parameter.secondary_opts) if name.startswith("--")]
-    if not option_names:
-        option_names = [name for name in (*parameter.opts, *parameter.secondary_opts) if name.startswith("-")]
-    if not option_names:
-        return None
-    if parameter.is_flag or parameter.flag_value is not None:
-        piece = "/".join(option_names)
-    else:
-        metavar = parameter.metavar or parameter.name.upper().replace("_", "-")
-        piece = f"{'/'.join(option_names)} {metavar}"
-    if not parameter.required:
-        piece = f"[{piece}]"
-    return piece
-
-
-def _command_signature(name: str, command: click.Command) -> str:
-    pieces = [piece for piece in (_parameter_piece(parameter) for parameter in command.params) if piece]
-    return " ".join([name, *pieces])
-
-
-def _render_command_tree(command: click.Command, name: str, prefix: str, is_last: bool, lines: list[str]) -> None:
-    connector = "└── " if is_last else "├── "
-    line = f"{prefix}{connector}{_command_signature(name, command)}"
-    purpose = _purpose(command)
-    if purpose:
-        line = f"{line}  # {purpose}"
-    lines.append(line)
-    if not isinstance(command, click.Group):
-        return
-    children = [(child_name, child) for child_name, child in command.commands.items() if not child.hidden]
-    child_prefix = prefix + ("    " if is_last else "│   ")
-    for index, (child_name, child) in enumerate(children):
-        _render_command_tree(child, child_name, child_prefix, index == len(children) - 1, lines)
-
-
-def _render_cli_tree(root: click.Group) -> str:
-    children = [(name, command) for name, command in root.commands.items() if not command.hidden]
-    lines = [f"chatglance  # {_purpose(root)}"]
-    root_options = [
-        ("--help", "Show help for the current command."),
-        ("--version", "Show package version."),
-        ("--tree", "Print the registered CLI tree."),
-    ]
-    for index, (option, purpose) in enumerate(root_options):
-        is_last = not children and index == len(root_options) - 1
-        lines.append(f"{'└──' if is_last else '├──'} {option}  # {purpose}")
-    for index, (child_name, child) in enumerate(children):
-        _render_command_tree(child, child_name, "", index == len(children) - 1, lines)
-    return "\n".join(lines)
-
-
 def _resolve_chatglance_bin(explicit: Path | None) -> Path:
     """Resolve the executable path that systemd should call for maintenance."""
 
@@ -148,16 +80,11 @@ def _raise_systemd_error(exc: subprocess.CalledProcessError) -> NoReturn:
     raise click.ClickException(detail) from exc
 
 
-@click.group(invoke_without_command=True, no_args_is_help=True)
+@click.group(name="chatglance", invoke_without_command=True, no_args_is_help=True)
 @click.version_option(__version__, prog_name="chatglance")
-@click.option("--tree", "show_tree", is_flag=True, is_eager=True, help="Print the registered CLI tree.")
-@click.pass_context
-def main(ctx: click.Context, show_tree: bool) -> None:
+@add_tree_option(renderer_options={"root_name": "chatglance"})
+def main() -> None:
     """Generate and maintain ChatArch Glance dashboard config."""
-
-    if show_tree:
-        click.echo(_render_cli_tree(ctx.command))
-        ctx.exit()
 
 
 @main.group()
@@ -190,7 +117,7 @@ def collect_projects(
     actual_cli_tree: bool,
     cli_tree_timeout: int,
 ) -> None:
-    """Refresh project inventory JSON from ChatGH and read-only repository metadata."""
+    """Write refreshed project inventory JSON from read-only GitHub metadata."""
 
     inventory = refresh_project_inventory(
         output_path=output_path,
@@ -234,7 +161,7 @@ def collect_projects(
 @click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="YAML file to write the generated Glance page object to.")
 @click.option("--page-name", default=PAGE_NAME, show_default=True, help="Generated Glance page name.")
 def render_projects_page(data_path: Path, output_path: Path, page_name: str) -> None:
-    """Render the `项目` page YAML from inventory JSON."""
+    """Write the `项目` page YAML from inventory JSON."""
 
     data = load_inventory(data_path)
     page = build_projects_page(data, page_name=page_name)
@@ -285,7 +212,7 @@ def home() -> None:
 @click.option("--type", "widget_types", multiple=True, required=True, help="Glance widget type to remove from the ChatArch home page. Repeat for multiple types.")
 @click.option("--home-page-name", default="ChatArch", show_default=True, help="Home page name to patch.")
 def remove_home_widget(config_path: Path, output_path: Path, widget_types: tuple[str, ...], home_page_name: str) -> None:
-    """Remove unavailable widgets from the ChatArch home page."""
+    """Write a config copy with unavailable home-page widgets removed."""
 
     config = load_yaml(config_path)
     updated = remove_home_widget_types(config, set(widget_types), home_page_name=home_page_name)
@@ -303,7 +230,7 @@ def servers() -> None:
 @click.option("--config", "ssh_config", type=click.Path(path_type=Path, dir_okay=False), help="SSH config to scan. Defaults to ~/.ssh/config.")
 @click.option("--inventory-config", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Infra/server inventory YAML. When set, print configured aliases.")
 def server_candidates(ssh_config: Path | None, inventory_config: Path | None) -> None:
-    """Print server aliases selected for the Infra page."""
+    """Print selected server aliases without probing hosts."""
 
     from chatglance.servers import dedupe_aliases_by_target, ssh_config_aliases
 
@@ -326,7 +253,7 @@ def server_candidates(ssh_config: Path | None, inventory_config: Path | None) ->
 @click.option("--timeout", default=None, type=int, help="Per-host SSH probe timeout in seconds. Overrides inventory config.")
 @click.option("--workers", default=None, type=int, help="Parallel read-only SSH workers. Overrides inventory config.")
 def collect_servers(aliases: tuple[str, ...], inventory_config: Path | None, default_candidates: bool, output_path: Path, timeout: int | None, workers: int | None) -> None:
-    """Collect a read-only static server-status JSON snapshot."""
+    """Write a server-status JSON snapshot from read-only SSH probes."""
 
     selected = list(aliases)
     config: dict | None = None
@@ -357,7 +284,7 @@ def collect_servers(aliases: tuple[str, ...], inventory_config: Path | None, def
 @click.option("--next", "next_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Newly collected server-status JSON snapshot.")
 @click.option("--allow-offline-regression", is_flag=True, help="Allow replacing an online host with a non-online status.")
 def validate_servers_refresh(previous_path: Path, next_path: Path, allow_offline_regression: bool) -> None:
-    """Fail closed when a server refresh would downgrade online hosts."""
+    """Validate a refresh snapshot without modifying either input."""
 
     previous = load_server_status(previous_path)
     current = load_server_status(next_path)
@@ -376,7 +303,7 @@ def validate_servers_refresh(previous_path: Path, next_path: Path, allow_offline
 @click.option("--page-slug", default=None, help="Generated Glance page slug. Defaults to inventory config or servers.")
 @click.option("--widget-title", default=None, help="Generated Glance HTML widget title. Defaults to inventory config or 服务器状态.")
 def render_servers_page(data_path: Path, output_path: Path, inventory_config: Path | None, page_name: str | None, page_slug: str | None, widget_title: str | None) -> None:
-    """Render the `服务器` page YAML from server-status JSON."""
+    """Write the `服务器` page YAML from server-status JSON."""
 
     config = load_server_inventory_config(inventory_config) if inventory_config else {}
     page_options = page_options_from_inventory_config(config)
@@ -429,7 +356,7 @@ def sites() -> None:
 @click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Output site-services JSON path.")
 @click.option("--gatus-db", type=click.Path(path_type=Path, dir_okay=False), help="Optional Gatus sqlite DB used to attach latest local monitor status.")
 def collect_sites(inventory_config: Path, output_path: Path, gatus_db: Path | None) -> None:
-    """Collect reviewed website-service cards and optional Uptime status."""
+    """Write reviewed site cards and optional Uptime status to JSON."""
 
     data = load_sites_inventory(inventory_config)
     if gatus_db:
@@ -457,7 +384,7 @@ def collect_sites(inventory_config: Path, output_path: Path, gatus_db: Path | No
 @click.option("--page-slug", default=SITES_DEFAULT_PAGE_SLUG, show_default=True, help="Generated Glance page slug.")
 @click.option("--widget-title", default=SITES_DEFAULT_WIDGET_TITLE, show_default=True, help="Generated Glance HTML widget title.")
 def render_sites_page(data_path: Path, output_path: Path, page_name: str, page_slug: str, widget_title: str) -> None:
-    """Render the `网站服务` page YAML from site-services JSON."""
+    """Write the `网站服务` page YAML from site-services JSON."""
 
     data = load_sites_data(data_path)
     page = build_sites_page(data, page_name=page_name, page_slug=page_slug, widget_title=widget_title)
@@ -472,7 +399,7 @@ def render_sites_page(data_path: Path, output_path: Path, page_name: str, page_s
 @click.option("--public-base-url", help="Optional public base URL to attach as cover_url values in the updated JSON.")
 @click.option("--updated-data", type=click.Path(path_type=Path, dir_okay=False), help="Optional output JSON path with cover_url values attached.")
 def export_sites_covers(data_path: Path, output_dir: Path, public_base_url: str | None, updated_data: Path | None) -> None:
-    """Export generated SVG covers for reviewed website services."""
+    """Write SVG covers and an optional updated inventory JSON."""
 
     data = load_sites_data(data_path)
     updated = export_site_covers(data, output_dir, public_base_url=public_base_url)
@@ -510,7 +437,7 @@ def account_limits() -> None:
 @click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Raw account-limits JSON to normalize and redact.")
 @click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Output normalized account-limits JSON path.")
 def normalize_account_limits_json(data_path: Path, output_path: Path) -> None:
-    """Normalize account/quota data for the dashboard."""
+    """Write normalized, redacted account/quota JSON."""
 
     data = load_account_limits_data(data_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -536,7 +463,7 @@ def normalize_account_limits_json(data_path: Path, output_path: Path) -> None:
 @click.option("--page-slug", default=ACCOUNT_LIMITS_DEFAULT_PAGE_SLUG, show_default=True, help="Generated Glance page slug.")
 @click.option("--widget-title", default=ACCOUNT_LIMITS_DEFAULT_WIDGET_TITLE, show_default=True, help="Generated Glance HTML widget title.")
 def render_account_limits_page(data_path: Path, output_path: Path, page_name: str, page_slug: str, widget_title: str) -> None:
-    """Render the `订阅详情` page YAML from account-limits JSON."""
+    """Write the `订阅详情` page YAML from account-limits JSON."""
 
     data = load_account_limits_data(data_path)
     page = build_account_limits_page(data, page_name=page_name, page_slug=page_slug, widget_title=widget_title)
@@ -578,7 +505,7 @@ def runtime() -> None:
 @click.option("--glance-bin", type=click.Path(path_type=Path, dir_okay=False), default=Path("bin/glance"), show_default=True, help="Runtime-relative or absolute Glance binary used for config validation.")
 @click.option("--restart-service", default=None, help="systemd user service to restart only if the rendered config changed.")
 def maintain_runtime(runtime_home: Path, config_path: Path, data_path: Path, backup_dir: Path, page_name: str, validate: bool, glance_bin: Path, restart_service: str | None) -> None:
-    """Apply generated project content and root-only Disk config once."""
+    """Update runtime config atomically and optionally restart a service."""
 
     runtime_home = runtime_home.expanduser()
     config = runtime_path(runtime_home, config_path)
@@ -619,7 +546,7 @@ def maintain_runtime(runtime_home: Path, config_path: Path, data_path: Path, bac
 @click.option("--interval", default="30min", show_default=True, help="systemd OnUnitActiveSec interval for the maintenance timer.")
 @click.option("--output-dir", type=click.Path(path_type=Path, file_okay=False), help="Directory to write unit files. Omit to print them.")
 def render_systemd(runtime_home: Path, chatglance_bin: Path, service_name: str, maintenance_service_name: str, timer_name: str, interval: str, output_dir: Path | None) -> None:
-    """Render direct Glance service plus chatglance maintenance units."""
+    """Print user units or write them to an output directory."""
 
     units = render_all_units(
         runtime_home=runtime_home.expanduser(),

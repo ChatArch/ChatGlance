@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.5 - 2026-08-21
+
+ChatArch CLI runtime and typed environment alignment release.
+
+- Replace the package-local Click tree renderer with ChatStyle `add_tree_option()` and expose registered `--tree` / `--tree-brief` output from the explicit `chatglance` root.
+- Add bounded `chatstyle>=0.2.0,<0.3.0` and `chatenv>=0.2.10,<0.3.0` runtimes plus a typed, sensitive ChatGlance token profile at ChatEnv's storage path.
+- Document command side effects and secret boundaries, keep checked-in full/brief trees aligned with the real registry, and add installed CLI/build/package checks to the Python 3.10-3.12 CI matrix.
+
 ## 0.1.4 - 2026-08-21
 
 Project category count display patch.

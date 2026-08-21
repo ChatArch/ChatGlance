@@ -43,11 +43,11 @@ The page contains:
 - `ChatGlance` must appear on the project page when it is visible in the ChatArch repository list.
 - Version display is **PyPI-only**. Do not use GitHub tags, GitHub releases, `pyproject.toml`, `package.json`, or local manifests as version sources for the page.
 - CLI display in the table remains **entrypoint-only**. For Python packages this means `project.scripts` / `project.gui-scripts`; for Node packages this means `package.json` `bin` entries. Do not expand Click/Typer/npm subcommands into the compact table cell.
-- Python package classification uses actual CLI tree evidence when available: the refresh installs the latest PyPI package with `uvx --from <package>@latest <entrypoint> --tree` and counts non-option business command nodes. `--help`, `--version`, and `--tree` are global options, not business commands.
+- Python package classification uses actual CLI tree evidence when available: the refresh installs the latest PyPI package with `uvx --from <package>@latest <entrypoint> --tree` and counts non-option business command nodes. `--help`, `--version`, `--tree`, and `--tree-brief` are global options, not business commands.
 - `Python (early)` is for placeholder/scaffold/trivial packages: no business subcommands in the actual CLI tree, or explicit placeholder/scaffold/PyPI-name-registration evidence. A package with real business subcommands is `Python 包` even if an older baseline/override marked it as early.
 - `--baseline-data` may preserve reviewed categories for projects without stronger current tree evidence, but stale early overrides must not demote complex CLI packages such as ChatCRS.
 - ChatEnv metadata is extracted from `[project.entry-points."chatenv.configs"]` target modules and `EnvField` declarations. The generated inventory stores only schema names, ENV keys, descriptions, sensitivity flags, and whether a default exists; it must not store `.env` values or default literal values.
-- GitHub API file/content reads must stay authenticated when possible. Token resolution order is explicit `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`, then repo-local git `extraHeader`, then ChatGH's ChatEnv `GitHubConfig.GITHUB_ACCESS_TOKEN`.
+- GitHub API file/content reads must stay authenticated when possible. Token resolution order is explicit `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`, then repo-local git `extraHeader`, then the typed active ChatGlance profile at ChatEnv's storage path, then ChatGH's ChatEnv `GitHubConfig.GITHUB_ACCESS_TOKEN`.
 - Tokens, cookies, auth headers, password hashes, and credentials must stay out of generated JSON/YAML and repository docs.
 
 ## Refresh script

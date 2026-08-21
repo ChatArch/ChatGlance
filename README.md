@@ -23,6 +23,7 @@
 - `src/chatglance/`：项目页、服务器页、网站服务卡片页生成，Glance YAML patch、runtime maintenance、user-level systemd unit 渲染/安装等辅助代码。
 - `tests/`：项目页、Disk root-only patch、runtime/systemd、workflow contract 的回归测试。
 - `docs/quickstart.md`：新机器快速开始：以 Glance 前端配置为主、`chatglance` CLI 管理为辅的配置路径。
+- `docs/cli-tree.md`：由真实 Click registry 生成并由测试锁定的完整/简洁 CLI 树与副作用边界。
 - `docs/site-architecture.md`：ChatGlance 作为 Python 包、Glance runtime、生成配置和 runtime 数据脚本之间的边界。
 - `docs/projects.md`：`项目` 页展示内容、PyPI-only 版本规则、entrypoint-only 展示规则、actual CLI tree 分类证据和刷新验收清单。
 - `docs/infra.md`：Infra/`服务器` 页的配置机制、外部数据生成链路、刷新方式和 cron/timer 模板。
@@ -54,13 +55,19 @@
 ```bash
 pip install -e ".[dev]"
 chatglance --help
-chatglance --tree
 chatglance --version
+chatglance --tree
+chatglance --tree-brief
 python -m pytest -q
 python -m build
+python -m twine check dist/*
 ```
 
-刷新 `项目` 页的推荐入口同样是仓库脚本；它用 ChatGH 当前 repo 列表刷新 PR/Issue/时间字段，只读读取默认分支 manifest/entrypoint 证据，并从 PyPI 读取版本。默认用当前 runtime JSON 作为 baseline 保留人工 review 过的分类证据，同时用 latest PyPI actual CLI tree/help 结果校正 Python 包成熟度；脚本会生成 `project-cli-tree-report.tsv` 作为审计报告。private repo 内容读取优先使用 `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`，否则复用当前 ChatGlance checkout 里 `chatgh set-token` 配好的 repo-local GitHub credential，不打印 token。详细验收见 [`docs/projects.md`](docs/projects.md)：
+## CLI 树
+
+完整命令面见 [`docs/cli-tree.md`](docs/cli-tree.md)。`chatglance --tree` 由 ChatStyle 从真实 Click registry 生成带参数签名的完整树；`chatglance --tree-brief` 保留相同节点和说明但省略签名。源码测试会直接运行两个入口，并与文档中的树逐字对齐。
+
+刷新 `项目` 页的推荐入口同样是仓库脚本；它用 ChatGH 当前 repo 列表刷新 PR/Issue/时间字段，只读读取默认分支 manifest/entrypoint 证据，并从 PyPI 读取版本。默认用当前 runtime JSON 作为 baseline 保留人工 review 过的分类证据，同时用 latest PyPI actual CLI tree/help 结果校正 Python 包成熟度；脚本会生成 `project-cli-tree-report.tsv` 作为审计报告。private repo 内容读取按显式 token 环境变量、当前 checkout 的 repo-local GitHub credential、ChatGlance typed ChatEnv active profile、ChatGH shared ChatEnv profile 的顺序回退，并且不打印 token。详细验收见 [`docs/projects.md`](docs/projects.md)：
 
 ```bash
 CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \

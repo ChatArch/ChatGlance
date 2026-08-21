@@ -161,7 +161,7 @@ collection:
 
 ## 4. 先预览再更新
 
-项目页先刷新当前 GitHub/ChatGH 数据。这个命令会更新 PR/Issue/时间字段，并只读读取默认分支的 `pyproject.toml`、`package.json` 和入口声明；它不会 clone、build 或执行各仓库源码。为了判断 Python 包是否已经具备真实业务 CLI，它会默认用 `uvx --from <package>@latest <entrypoint> --tree` 安装并探测 latest PyPI 包的 CLI tree，必要时 fallback 到 help 输出。private repo 内容读取优先使用 `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`，否则复用当前 ChatGlance checkout 里 `chatgh set-token` 配好的 repo-local GitHub credential，不打印 token：
+项目页先刷新当前 GitHub/ChatGH 数据。这个命令会更新 PR/Issue/时间字段，并只读读取默认分支的 `pyproject.toml`、`package.json` 和入口声明；它不会 clone、build 或执行各仓库源码。为了判断 Python 包是否已经具备真实业务 CLI，它会默认用 `uvx --from <package>@latest <entrypoint> --tree` 安装并探测 latest PyPI 包的 CLI tree，必要时 fallback 到 help 输出。private repo 内容读取按显式 `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`、当前 checkout 的 repo-local GitHub credential、ChatGlance typed ChatEnv active profile、ChatGH shared ChatEnv profile 的顺序回退，并且不打印 token：
 
 ```bash
 chatglance projects collect \

@@ -3,5 +3,6 @@
 recursive-exclude docs/deployment *
 include docs/quickstart.md
 include docs/infra.md
+include docs/cli-tree.md
 recursive-include examples *.yml
 recursive-include scripts *.sh
