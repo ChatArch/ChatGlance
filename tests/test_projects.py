@@ -26,14 +26,14 @@ def sample_inventory():
                         "business_command_count": 3,
                         "global_options": ["--help", "--version", "--tree", "--tree-brief"],
                         "compact_trees": {"alpha": "alpha\n├── projects\n│   ├── collect\n│   └── render-page\n└── status"},
-                        "brief_trees": {"alpha": "alpha\n├── projects\n│   ├── collect\n│   └── render-page\n└── status"},
+                        "brief_trees": {"alpha": "alpha  # Alpha CLI.\n├── projects  # Project commands.\n│   ├── collect  # Collect inventory.\n│   └── render-page  # Render page.\n└── status  # Show status."},
                         "entrypoints": {
                             "alpha": {
                                 "status": "ok",
                                 "business_commands": ["projects", "collect", "render-page"],
                                 "business_command_count": 3,
                                 "global_options": ["--help", "--version", "--tree", "--tree-brief"],
-                                "brief_tree": "alpha\n├── projects\n│   ├── collect\n│   └── render-page\n└── status",
+                                "brief_tree": "alpha  # Alpha CLI.\n├── projects  # Project commands.\n│   ├── collect  # Collect inventory.\n│   └── render-page  # Render page.\n└── status  # Show status.",
                             }
                         },
                     },
@@ -329,10 +329,13 @@ def test_projects_detail_cli_section_renders_brief_tree_code_block() -> None:
 
     assert "projects-detail-cli-tree" in source
     assert "Brief tree" in source
-    assert "alpha" in source
-    assert "├── projects" in source
-    assert "│   ├── collect" in source
-    assert "└── status" in source
+    assert "projects-detail-tabset" in source
+    assert "projects-detail-tab-label projects-detail-tab-cli-label" in source
+    assert "projects-detail-tab-label projects-detail-tab-env-label" in source
+    assert "alpha  # Alpha CLI." in source
+    assert "├── projects  # Project commands." in source
+    assert "│   ├── collect  # Collect inventory." in source
+    assert "└── status  # Show status." in source
 
 
 def test_projects_table_sorts_python_first_npm_middle_and_early_last() -> None:

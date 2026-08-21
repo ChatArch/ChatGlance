@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.7 - 2026-08-22
+
+Project detail CLI comment and switch release.
+
+- Preserve inline `# ...` comments from `--tree-brief` in stored `brief_trees` and project detail code blocks.
+- Show CLI and ENV detail modules behind a lightweight clickable switch when a project has ChatEnv/ENV metadata.
+
 ## 0.1.6 - 2026-08-22
 
 Project detail brief CLI tree release.

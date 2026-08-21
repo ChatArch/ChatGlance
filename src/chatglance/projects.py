@@ -460,7 +460,42 @@ def _chatenv_detail_html(item: dict[str, Any]) -> str:
     return ""
 
 
-def _repo_detail_panel(item: dict[str, Any]) -> str:
+def _cli_detail_html(item: dict[str, Any]) -> str:
+    cli_commands = [command for command in _cli_commands(item) if not command.lstrip("([{<").startswith("-")]
+    cli_html = " ".join(f'<code>{html_text(command)}</code>' for command in cli_commands) if cli_commands else "—"
+    cli_tree_html = _cli_brief_tree_html(item)
+    return (
+        '<section class="projects-detail-section projects-detail-cli-section">'
+        '<h4>CLI</h4>'
+        f'<div class="projects-detail-cli">{cli_html}</div>'
+        f'{cli_tree_html}'
+        '</section>'
+    )
+
+
+def _detail_tabbed_sections(cli_html: str, chatenv_html: str, detail_id: str) -> str:
+    if not chatenv_html:
+        return cli_html
+    group = html_text(f"{detail_id}-detail-tab")
+    cli_id = html_text(f"{detail_id}-tab-cli")
+    env_id = html_text(f"{detail_id}-tab-env")
+    return (
+        '<div class="projects-detail-tabset">'
+        f'<input class="projects-detail-tab-radio projects-detail-tab-cli-radio" type="radio" id="{cli_id}" name="{group}" checked>'
+        f'<input class="projects-detail-tab-radio projects-detail-tab-env-radio" type="radio" id="{env_id}" name="{group}">'
+        '<div class="projects-detail-tab-nav" aria-label="详情模块切换">'
+        f'<label class="projects-detail-tab-label projects-detail-tab-cli-label" for="{cli_id}">CLI</label>'
+        f'<label class="projects-detail-tab-label projects-detail-tab-env-label" for="{env_id}">ENV</label>'
+        '</div>'
+        '<div class="projects-detail-tab-content">'
+        f'<div class="projects-detail-tab-panel projects-detail-tab-cli-panel">{cli_html}</div>'
+        f'<div class="projects-detail-tab-panel projects-detail-tab-env-panel">{chatenv_html}</div>'
+        '</div>'
+        '</div>'
+    )
+
+
+def _repo_detail_panel(item: dict[str, Any], detail_id: str) -> str:
     name = text_value(item.get("name"), "unknown")
     docs = item.get("docs") if isinstance(item.get("docs"), list) else []
     docs_url = docs[0].get("url") if docs and isinstance(docs[0], dict) else ""
@@ -474,9 +509,7 @@ def _repo_detail_panel(item: dict[str, Any]) -> str:
             _detail_metric("最近提交", safe_date(item.get("pushed_at") or item.get("updated_at"))),
         ]
     )
-    cli_commands = [command for command in _cli_commands(item) if not command.lstrip("([{<").startswith("-")]
-    cli_html = " ".join(f'<code>{html_text(command)}</code>' for command in cli_commands) if cli_commands else "—"
-    cli_tree_html = _cli_brief_tree_html(item)
+    detail_sections = _detail_tabbed_sections(_cli_detail_html(item), _chatenv_detail_html(item), detail_id)
     links = [f'<a href="{html_text(item.get("html_url"))}" target="_blank" rel="noreferrer">GitHub</a>']
     if docs_url:
         links.append(f'<a href="{html_text(docs_url)}" target="_blank" rel="noreferrer">Docs</a>')
@@ -493,12 +526,7 @@ def _repo_detail_panel(item: dict[str, Any]) -> str:
   <div class="projects-detail-links">{" · ".join(links)}</div>
   <p class="projects-detail-description">{html_text(description)}</p>
   <div class="projects-detail-metrics">{metrics}</div>
-  <section class="projects-detail-section">
-    <h4>CLI</h4>
-    <div class="projects-detail-cli">{cli_html}</div>
-    {cli_tree_html}
-  </section>
-  {chatenv_html}
+  {detail_sections}
 </article>"""
 
 
@@ -510,7 +538,7 @@ def _repo_detail_popover(item: dict[str, Any], detail_id: str) -> str:
     return (
         f'<div id="{html_text(detail_id)}" class="projects-detail-popover" popover>'
         f'<button type="button" class="projects-detail-close" popovertarget="{html_text(detail_id)}" popovertargetaction="hide">关闭</button>'
-        f'{_repo_detail_panel(item)}'
+        f'{_repo_detail_panel(item, detail_id)}'
         '</div>'
     )
 
@@ -591,6 +619,15 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
 .projects-detail-metrics strong { display: block; margin-top: 0.15rem; }
 .projects-detail-section { margin-top: 1rem; }
 .projects-detail-section h4 { margin: 0 0 0.45rem 0; }
+.projects-detail-tabset { display: grid; grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr); gap: 0.8rem; align-items: start; margin-top: 1rem; }
+.projects-detail-tab-radio { position: absolute; opacity: 0; pointer-events: none; }
+.projects-detail-tab-nav { display: flex; flex-direction: column; gap: 0.45rem; position: sticky; top: 3rem; }
+.projects-detail-tab-label { display: flex; align-items: center; justify-content: space-between; cursor: pointer; border: 1px solid var(--color-separator); border-radius: 0.8rem; padding: 0.55rem 0.7rem; background: var(--color-background); color: var(--color-text-subdued); font-weight: 600; }
+.projects-detail-tab-label:hover { border-color: var(--color-primary); color: var(--color-text); }
+.projects-detail-tab-panel { display: none; }
+.projects-detail-tab-cli-radio:checked ~ .projects-detail-tab-nav .projects-detail-tab-cli-label, .projects-detail-tab-env-radio:checked ~ .projects-detail-tab-nav .projects-detail-tab-env-label { border-color: var(--color-primary); color: var(--color-text); box-shadow: inset 3px 0 0 var(--color-primary); }
+.projects-detail-tab-cli-radio:checked ~ .projects-detail-tab-content .projects-detail-tab-cli-panel, .projects-detail-tab-env-radio:checked ~ .projects-detail-tab-content .projects-detail-tab-env-panel { display: block; }
+.projects-detail-tab-content .projects-detail-section { margin-top: 0; }
 .projects-detail-cli code { display: inline-block; margin: 0 0.25rem 0.25rem 0; border: 1px solid var(--color-separator); border-radius: 999px; padding: 0.08rem 0.42rem; background: var(--color-background); }
 .projects-detail-cli-tree { margin-top: 0.65rem; }
 .projects-detail-cli-tree-block { margin-top: 0.55rem; }
@@ -601,7 +638,7 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
 .projects-env-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
 .projects-env-table th, .projects-env-table td { padding: 0.34rem 0.45rem; border-bottom: 1px solid var(--color-separator); text-align: left; vertical-align: top; }
 .projects-env-table code { white-space: nowrap; }
-@media (max-width: 720px) { .projects-detail-popover { width: calc(100vw - 1rem); max-height: 92vh; } }
+@media (max-width: 720px) { .projects-detail-popover { width: calc(100vw - 1rem); max-height: 92vh; } .projects-detail-tabset { grid-template-columns: 1fr; } .projects-detail-tab-nav { position: static; flex-direction: row; } .projects-detail-tab-label { flex: 1; justify-content: center; } }
 </style>
 <div id="projects-table-root" class="projects-table-wrap">
 <table class="projects-table">

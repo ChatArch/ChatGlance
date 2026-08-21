@@ -34,7 +34,8 @@ The page contains:
    - table category order is `Python 包` first, `Node / npm 包` next, then service/docs/other projects, with `Python (early)` projects last.
 6. **仓库详情卡片**
    - GitHub/docs links, description, version/category/PR/Issue/commit metrics;
-   - package CLI entrypoints plus a scrollable brief CLI tree code block when actual tree evidence is available;
+   - package CLI entrypoints plus a scrollable brief CLI tree code block when actual tree evidence is available; inline `# ...` comments from `--tree-brief` are preserved;
+   - projects with ChatEnv/ENV metadata expose CLI and ENV modules behind a lightweight click switch so the CLI tree does not push ENV details out of view;
    - ChatEnv schema table when a provider/schema is registered: schema, ENV key, description, sensitivity flag, and default-presence flag only;
    - dependency-only ChatEnv projects are omitted from the ENV detail section until they register a provider/schema.
 
