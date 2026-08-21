@@ -23,6 +23,9 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from chatenv import EnvStore, get_paths
+
+from chatglance.config import ChatGlanceConfig
 from chatglance.projects import category_key, display_category
 
 JsonDict = dict[str, Any]
@@ -107,13 +110,24 @@ def read_token_from_repo_git_config() -> str | None:
     return None
 
 
+def read_token_from_chatglance_chatenv() -> str | None:
+    """Read the active typed ChatGlance profile without logging its token."""
+
+    try:
+        values = EnvStore(get_paths().envs_dir).load_active(ChatGlanceConfig)
+    except Exception:
+        return None
+    token = str(values.get("CHATGLANCE_GITHUB_TOKEN") or "").strip()
+    return token or None
+
+
 def read_token_from_chatgh_chatenv() -> str | None:
     """Read ChatGH's ChatEnv GitHub token when ChatGH is installed.
 
     ChatGlance can run outside its source checkout, where repo-local git
     extraHeader credentials are unavailable. In the ChatArch runtime, ChatGH owns
     the shared GitHub token schema, so use it as a final optional fallback without
-    adding a hard package dependency or logging the token.
+    requiring ChatGH itself or logging the token.
     """
 
     try:
@@ -139,6 +153,9 @@ def resolve_token(env_names: Sequence[str] = ("CHATGLANCE_GITHUB_TOKEN", "GITHUB
         if value:
             return value.strip()
     token = read_token_from_repo_git_config()
+    if token:
+        return token
+    token = read_token_from_chatglance_chatenv()
     if token:
         return token
     return read_token_from_chatgh_chatenv()
@@ -620,9 +637,9 @@ def parse_actual_cli_tree_output(output: str) -> JsonDict:
     """Parse a CLI tree/help output into compact substantive command evidence.
 
     The dashboard classification uses real installed CLI trees. Global options
-    such as ``--help``/``--version``/``--tree`` are not business commands. Trivial
-    placeholder nodes such as ``hello``/``demo`` are kept as placeholder evidence
-    but do not promote a package out of ``Python (early)``.
+    such as ``--help``/``--version``/``--tree``/``--tree-brief`` are not business
+    commands. Trivial placeholder nodes such as ``hello``/``demo`` are kept as
+    placeholder evidence but do not promote a package out of ``Python (early)``.
     """
 
     business_commands: list[str] = []

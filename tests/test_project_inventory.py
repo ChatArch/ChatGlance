@@ -10,6 +10,7 @@ from chatglance.project_inventory import (
     parse_actual_cli_tree_output,
     parse_click_command_names,
     parse_python_project_cli,
+    read_token_from_chatglance_chatenv,
     read_token_from_chatgh_chatenv,
     resolve_token,
 )
@@ -93,6 +94,7 @@ def test_git_extraheader_token_parser_returns_secret_without_rendering_it():
 def test_resolve_token_prefers_environment_before_repo_and_chatgh(monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "env-token")
     monkeypatch.setattr(project_inventory_module, "read_token_from_repo_git_config", lambda: "repo-token")
+    monkeypatch.setattr(project_inventory_module, "read_token_from_chatglance_chatenv", lambda: "chatglance-token")
     monkeypatch.setattr(project_inventory_module, "read_token_from_chatgh_chatenv", lambda: "chatgh-token")
 
     assert resolve_token(("GITHUB_TOKEN",)) == "env-token"
@@ -101,17 +103,46 @@ def test_resolve_token_prefers_environment_before_repo_and_chatgh(monkeypatch):
 def test_resolve_token_prefers_repo_token_before_chatgh(monkeypatch):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(project_inventory_module, "read_token_from_repo_git_config", lambda: "repo-token")
+    monkeypatch.setattr(project_inventory_module, "read_token_from_chatglance_chatenv", lambda: "chatglance-token")
     monkeypatch.setattr(project_inventory_module, "read_token_from_chatgh_chatenv", lambda: "chatgh-token")
 
     assert resolve_token(("GITHUB_TOKEN",)) == "repo-token"
 
 
+def test_resolve_token_prefers_chatglance_profile_before_chatgh(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(project_inventory_module, "read_token_from_repo_git_config", lambda: None)
+    monkeypatch.setattr(project_inventory_module, "read_token_from_chatglance_chatenv", lambda: "chatglance-token")
+    monkeypatch.setattr(project_inventory_module, "read_token_from_chatgh_chatenv", lambda: "chatgh-token")
+
+    assert resolve_token(("GITHUB_TOKEN",)) == "chatglance-token"
+
+
 def test_resolve_token_falls_back_to_chatgh_chatenv(monkeypatch):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr(project_inventory_module, "read_token_from_repo_git_config", lambda: None)
+    monkeypatch.setattr(project_inventory_module, "read_token_from_chatglance_chatenv", lambda: None)
     monkeypatch.setattr(project_inventory_module, "read_token_from_chatgh_chatenv", lambda: "chatgh-token")
 
     assert resolve_token(("GITHUB_TOKEN",)) == "chatgh-token"
+
+
+def test_read_token_from_chatglance_chatenv_uses_active_typed_store(monkeypatch):
+    calls = {}
+
+    class FakeStore:
+        def __init__(self, envs_dir):
+            calls["envs_dir"] = envs_dir
+
+        def load_active(self, config_cls):
+            calls["config_cls"] = config_cls.__name__
+            return {"CHATGLANCE_GITHUB_TOKEN": " chatglance-token "}
+
+    monkeypatch.setattr(project_inventory_module, "get_paths", lambda: types.SimpleNamespace(envs_dir="/safe/envs"))
+    monkeypatch.setattr(project_inventory_module, "EnvStore", FakeStore)
+
+    assert read_token_from_chatglance_chatenv() == "chatglance-token"
+    assert calls == {"envs_dir": "/safe/envs", "config_cls": "ChatGlanceConfig"}
 
 
 def test_read_token_from_chatgh_chatenv_loads_github_config_without_logging(monkeypatch):

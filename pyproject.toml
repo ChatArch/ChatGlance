@@ -9,7 +9,13 @@ description = "ChatArch Glance website deployment helpers and records."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-dependencies = ["click>=8.0", "PyYAML>=6.0,<7.0", "tomli>=1.1.0; python_version < '3.11'"]
+dependencies = [
+    "click>=8.0",
+    "chatstyle>=0.2.0,<0.3.0",
+    "chatenv>=0.2.10,<0.3.0",
+    "PyYAML>=6.0,<7.0",
+    "tomli>=1.1.0; python_version < '3.11'",
+]
 authors = [{name = "ChatArch", email = "1073853456@qq.com"}]
 keywords = ["chatglance", "chatarch", "cli"]
 classifiers = [
@@ -23,6 +29,9 @@ Repository = "https://github.com/ChatArch/ChatGlance"
 
 [project.scripts]
 chatglance = "chatglance.cli:main"
+
+[project.entry-points."chatenv.configs"]
+chatglance = "chatglance.config"
 
 [project.optional-dependencies]
 dev = ["build", "pytest", "twine"]
