@@ -1,0 +1,94 @@
+# Example refresh schedule config for a ChatGlance runtime.
+#
+# This file is intentionally a sanitized example. The live file should live under
+# the runtime config directory, for example:
+#
+#   ~/.chatarch/glance/config/refresh-schedule.yml
+#
+# Real scripts, host paths, proxy settings, credentials, and local wrappers stay
+# on the server. The web settings UI should only edit safe fields such as
+# `enabled` and `interval`, not `command`.
+
+version: 1
+
+settings:
+  timezone: Asia/Shanghai
+  default_timeout: 20m
+  lock_file: logs/refresh-scheduler.lock
+  state_file: data/refresh-state.json
+  restart_service: chatarch-glance.service
+  # When true, a scheduler may restart Glance once after all due jobs complete
+  # and at least one job reports `changed=true`.
+  restart_after_changed_jobs: true
+
+jobs:
+  - id: projects
+    label: 项目
+    page: 项目
+    tag: page:projects
+    description: Refresh ChatArch project inventory and render the project page.
+    enabled: true
+    interval: 1h
+    command: refresh.d/projects.sh
+    working_directory: /home/zhihong/Playground/core/ChatGlance
+    timeout: 20m
+    restart_on_change: true
+    editable:
+      - enabled
+      - interval
+
+  - id: servers
+    label: 服务器
+    page: 服务器
+    tag: page:infra
+    description: Refresh read-only server status snapshots from the runtime server inventory.
+    enabled: true
+    interval: 15m
+    command: refresh.d/servers.sh
+    timeout: 3m
+    restart_on_change: true
+    editable:
+      - enabled
+      - interval
+
+  - id: sites
+    label: 网站服务
+    page: 网站服务
+    tag: page:sites
+    description: Refresh reviewed website-service cards and external uptime status.
+    enabled: true
+    interval: 10m
+    command: refresh.d/sites.sh
+    timeout: 5m
+    restart_on_change: true
+    editable:
+      - enabled
+      - interval
+
+  - id: account-limits
+    label: 订阅详情
+    page: ChatArch
+    tag: page:account-limits
+    description: Refresh account/subscription limit cards from local runtime credentials.
+    enabled: true
+    interval: 30m
+    command: refresh.d/account-limits.sh
+    timeout: 5m
+    restart_on_change: true
+    editable:
+      - enabled
+      - interval
+
+  - id: maintenance
+    label: Runtime maintenance
+    page: ChatArch
+    tag: runtime:maintenance
+    description: Maintain generated config shape and disk mountpoint presentation.
+    enabled: true
+    interval: 30m
+    command: refresh.d/maintenance.sh
+    timeout: 2m
+    restart_on_change: true
+    editable:
+      - enabled
+      - interval

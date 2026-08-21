@@ -156,6 +156,8 @@ The refresh script has no embedded secrets and can be scheduled externally. Exam
 
 Use a systemd user timer instead of cron if you need unit logging and status. Keep the script path and runtime paths explicit. The combined `refresh-live-pages.sh` uses a non-blocking lock at `$CHATGLANCE_REFRESH_LOCK` (default `$CHATGLANCE_RUNTIME_HOME/logs/refresh-live-pages.lock`) so manual runs and timer runs do not publish overlapping candidates.
 
+For per-page or per-tag refresh intervals, do not hard-code every machine's concrete script in the package. The proposed design is a runtime-owned `refresh-schedule.yml` plus runtime wrapper scripts under `refresh.d/`; see `docs/refresh-scheduling.md` and `examples/refresh-schedule.example.yml`.
+
 ## Probe contract
 
 `chatglance servers collect` is read-only. It connects to each selected SSH alias and collects:

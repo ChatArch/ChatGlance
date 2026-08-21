@@ -27,8 +27,9 @@
 - `docs/site-architecture.md`：ChatGlance 作为 Python 包、Glance runtime、生成配置和 runtime 数据脚本之间的边界。
 - `docs/projects.md`：`项目` 页展示内容、PyPI-only 版本规则、entrypoint-only 展示规则、actual CLI tree 分类证据和刷新验收清单。
 - `docs/infra.md`：Infra/`服务器` 页的配置机制、外部数据生成链路、刷新方式和 cron/timer 模板。
+- `docs/refresh-scheduling.md`：刷新间隔/设置按钮的设计边界：仓库管 schema/校验/展示，runtime 管真实脚本和 schedule。
 - `docs/deployment/current-site.md`：当前线上 Glance 网站的私有部署记录，包括服务拓扑、路径、user service/timer、local/public entry、验收和安全边界。
-- `examples/server-inventory.example.yml` / `examples/site-services.example.yml`：可提交的脱敏 inventory 配置示例；真实 inventory 放在 runtime config 目录。
+- `examples/server-inventory.example.yml` / `examples/site-services.example.yml` / `examples/refresh-schedule.example.yml`：可提交的脱敏 runtime 配置示例；真实 inventory/schedule 放在 runtime config 目录。
 - `scripts/refresh-projects-page.sh`：刷新 GitHub/ChatGH 当前项目数据、生成 `项目` 页并安全替换 candidate config 的脚本模板。
 - `scripts/refresh-server-status.sh` / `scripts/refresh-sites-page.sh`：可手动运行或挂 cron/systemd timer 的外部刷新脚本模板。
 - `README.md` / `README.en.md` / `CHANGELOG.md`：对外/协作入口；避免写入 live auth、token、password hash 或代理凭据。

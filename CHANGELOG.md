@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Document the refresh schedule/settings-button design and add a sanitized runtime-owned `refresh-schedule.yml` example.
+
 ## 0.1.5 - 2026-08-21
 
 ChatArch CLI runtime and typed environment alignment release.

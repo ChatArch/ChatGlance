@@ -10,7 +10,8 @@ ChatGlance owns the reproducible source and scripts that produce the live site's
 - `scripts/refresh-projects-page.sh`: refreshes ChatArch project inventory data, collects latest-PyPI CLI-tree evidence for Python package classification, renders the `项目` page, validates a candidate `glance.yml`, backs up the previous live files, and replaces the generated artifacts.
 - `scripts/refresh-server-status.sh`: refreshes server-status data, renders the `服务器` page, validates a candidate `glance.yml`, backs up the previous live files, and replaces generated artifacts.
 - `scripts/refresh-sites-page.sh`: refreshes the reviewed `网站服务` card page from `site-services.yml` and optional Gatus status, validates a candidate `glance.yml`, backs up the previous live files, and replaces generated artifacts.
-- `docs/` and `examples/`: deployment contracts, quick start, project-page contract, infra/server-page contract, site-services contract, and sanitized runtime config examples.
+- `docs/refresh-scheduling.md`: documents the proposed runtime-owned refresh schedule contract and the safe boundary for a future web settings button.
+- `docs/` and `examples/`: deployment contracts, quick start, project-page contract, infra/server-page contract, site-services contract, refresh-schedule design, and sanitized runtime config examples.
 
 ## What ChatGlance does not own
 
@@ -38,7 +39,9 @@ Typical live runtime layout:
   config/project-category-overrides.json
   config/server-inventory.yml        # live-only, secret-free inventory labels
   config/site-services.yml           # live-only reviewed website-service labels/covers
+  config/refresh-schedule.yml        # live-only schedule metadata for generated page refreshes
   config/backups/                    # generated backups
+  refresh.d/                         # live-only wrapper scripts for scheduled refresh jobs
   data/chatarch-projects.json        # generated project data
   data/projects-page.yml             # generated 项目 page
   data/project-cli-tree-report.tsv   # generated Python CLI-tree audit report

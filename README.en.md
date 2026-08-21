@@ -27,8 +27,9 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 - `docs/site-architecture.md`: boundary between ChatGlance as a Python package, the Glance runtime, generated config, and runtime data refresh scripts.
 - `docs/projects.md`: project-page display contract, PyPI-only version rule, entrypoint-only display rule, actual CLI-tree classification evidence, and refresh review checklist.
 - `docs/infra.md`: configuration mechanism, external data-generation chain, refresh workflow, and cron/timer template for the Infra/`服务器` page.
+- `docs/refresh-scheduling.md`: design boundary for refresh intervals and a settings button: the repository owns schema/validation/display, while the runtime owns concrete scripts and schedules.
 - `docs/deployment/current-site.md`: private repository-only deployment record for the current live Glance site. It is excluded from public package artifacts.
-- `examples/server-inventory.example.yml` / `examples/site-services.example.yml`: sanitized inventory config templates. Real inventories belong in the runtime config directory.
+- `examples/server-inventory.example.yml` / `examples/site-services.example.yml` / `examples/refresh-schedule.example.yml`: sanitized runtime config templates. Real inventories and schedules belong in the runtime config directory.
 - `scripts/refresh-projects-page.sh`: script template that refreshes current GitHub/ChatGH project data, renders the `项目` page, validates a candidate config, and safely replaces it.
 - `scripts/refresh-server-status.sh` / `scripts/refresh-sites-page.sh`: external refresh script templates for manual runs, cron, or systemd user timers.
 - `README.md` / `README.en.md` / `CHANGELOG.md`: collaboration and package-facing entry points; do not include live auth, tokens, password hashes, proxy credentials, or secret-bearing files.
