@@ -35,6 +35,7 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 ## Current capabilities
 
 - Refresh repository inventory JSON from current ChatGH/GitHub data and render a Glance `项目` page with a visible `generated_at` refresh timestamp; version display is PyPI-only, the compact table shows package entrypoints only, and Python early/non-early classification is corrected from latest-PyPI actual CLI tree/help evidence while stale baseline categories remain audit evidence only.
+- Generate native-click `详情` buttons in the `项目` table; the detail card shows project description, basics, CLI, and registered ChatEnv Env keys, descriptions, sensitivity flags, and default-presence flags without showing values.
 - Keep the current tabs limited to `最近提交`, `待处理 PR / Issue`, `分类`, and `一览表`.
 - Filter the triage tab to repositories with non-zero PR or Issue counts and sort by `(PR, Issue, recent commit)` descending.
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.
@@ -68,7 +69,7 @@ CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
 bash scripts/refresh-projects-page.sh
 ```
 
-The generated project overview includes a `刷新时间` item so operators can see when the PR/Issue data was refreshed.
+The generated project overview includes a `刷新时间` item so operators can see when the PR/Issue data was refreshed. The table's detail button also shows repository basics, CLI entrypoints, and non-secret ChatEnv/ENV schema metadata.
 
 The recommended Infra/`服务器` refresh entry point is the external script, not hand-editing JSON:
 

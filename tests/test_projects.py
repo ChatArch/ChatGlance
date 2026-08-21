@@ -15,6 +15,7 @@ def sample_inventory():
                 "open_prs": 0,
                 "open_issues": 0,
                 "pushed_at": "2026-08-01T00:00:00Z",
+                "description": "Alpha connects the symbolic config schema to runtime commands.",
                 "category": "python-package",
                 "version": {"value": "0.1.0", "source": "pyproject.toml"},
                 "cli": {
@@ -35,6 +36,39 @@ def sample_inventory():
                     },
                 },
                 "docs": [{"url": "https://example.invalid/alpha"}],
+                "chatenv": {
+                    "depends": True,
+                    "entry_points": {"alpha": "alpha.config"},
+                    "schema_count": 1,
+                    "field_count": 2,
+                    "env_keys": ["ALPHA_API_KEY", "ALPHA_REGION"],
+                    "schemas": [
+                        {
+                            "class_name": "AlphaConfig",
+                            "title": "Alpha Configuration",
+                            "storage_dir": "Alpha",
+                            "aliases": ["alpha"],
+                            "source_path": "src/alpha/config.py",
+                            "env_keys": ["ALPHA_API_KEY", "ALPHA_REGION"],
+                            "fields": [
+                                {
+                                    "attribute": "ALPHA_API_KEY",
+                                    "env_key": "ALPHA_API_KEY",
+                                    "desc": "Alpha API key.",
+                                    "sensitive": True,
+                                    "has_default": False,
+                                },
+                                {
+                                    "attribute": "ALPHA_REGION",
+                                    "env_key": "ALPHA_REGION",
+                                    "desc": "Alpha region.",
+                                    "sensitive": False,
+                                    "has_default": True,
+                                },
+                            ],
+                        }
+                    ],
+                },
             },
             {
                 "name": "beta",
@@ -43,6 +77,17 @@ def sample_inventory():
                 "open_issues": 0,
                 "pushed_at": "2026-08-03T00:00:00Z",
                 "category": "service/app",
+                "version": {},
+                "cli": {"commands": []},
+                "docs": [],
+            },
+            {
+                "name": "npm-mid",
+                "html_url": "https://github.com/ChatArch/npm-mid",
+                "open_prs": 0,
+                "open_issues": 0,
+                "pushed_at": "2026-08-05T00:00:00Z",
+                "category": "node-package",
                 "version": {},
                 "cli": {"commands": []},
                 "docs": [],
@@ -71,6 +116,7 @@ def sample_inventory():
                 "cli": {"commands": ["chatflow"], "tree_status": "command-names-only"},
                 "evidence": {"has_pyproject": True},
                 "docs": [],
+                "chatenv": {"depends": True, "entry_points": {}, "schema_count": 0, "field_count": 0, "env_keys": [], "schemas": []},
             },
             {
                 "name": "delta-template",
@@ -241,6 +287,35 @@ def test_projects_table_cli_cell_exposes_compact_hover_tree_without_options() ->
     assert "--tree" not in source
     assert "max-height" in source
     assert "overflow: auto" in source
+
+
+def test_projects_table_uses_click_buttons_with_symbolic_detail_popovers() -> None:
+    page = build_projects_page(sample_inventory())
+    table_widget = page["columns"][1]["widgets"][0]["widgets"][3]
+    source = table_widget["source"]
+
+    assert table_widget["title"] == "一览表"
+    assert "projects-detail-button" in source
+    assert "popovertarget" in source
+    assert "projects-detail-popover" in source
+    assert "Alpha connects the symbolic config schema to runtime commands." in source
+    assert "Env 2" in source
+    assert "ALPHA_API_KEY" in source
+    assert "Alpha API key." in source
+    assert "敏感" in source
+    assert "ChatEnv dep" not in source
+    assert "未发现 ChatEnv 依赖或注册 schema" not in source
+
+
+def test_projects_table_sorts_python_first_npm_middle_and_early_last() -> None:
+    page = build_projects_page(sample_inventory())
+    source = page["columns"][1]["widgets"][0]["widgets"][3]["source"]
+
+    assert source.index("alpha") < source.index("npm-mid")
+    assert source.index("npm-mid") < source.index("beta")
+    assert source.index("beta") < source.index("gamma")
+    assert source.index("gamma") < source.index("ChatFlow")
+    assert source.index("ChatFlow") < source.index("delta-template")
 
 
 def test_patch_server_stats_root_only_hides_default_mountpoints():

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.3 - 2026-08-21
+
+Project page metadata, authenticated GitHub refresh, and live dashboard detail UX release.
+
+- Reuse ChatGH's ChatEnv `GITHUB_ACCESS_TOKEN` as the final ChatGlance GitHub API token fallback after explicit env vars and repo-local git credentials, keeping project refreshes authenticated even outside the ChatGlance checkout.
+- Add native-click `详情` popover cards to the `项目` inventory table with registered ChatEnv ENV keys, descriptions, sensitivity flags, and no values; dependency-only ChatEnv projects stay out of the ENV detail section.
+- Sort the `项目` table by category with Python packages first, Node/npm packages next, service/docs/other projects after that, and Python early packages last.
 - Add `chatglance servers --inventory-config` support for Infra/server inventory YAML: alias selection, exclusions, labels, collection defaults, and page metadata.
 - Add `docs/infra.md`, `examples/server-inventory.example.yml`, and `scripts/refresh-server-status.sh` to document and automate the external static-data refresh path.
 - Document which Infra content is source/config versus generated runtime data, including `server-status.json`, `server-page.yml`, and candidate Glance config refreshes.
