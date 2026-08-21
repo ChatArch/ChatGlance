@@ -34,7 +34,7 @@ The page contains:
    - table category order is `Python 包` first, `Node / npm 包` next, then service/docs/other projects, with `Python (early)` projects last.
 6. **仓库详情卡片**
    - GitHub/docs links, description, version/category/PR/Issue/commit metrics;
-   - package CLI entrypoints;
+   - package CLI entrypoints plus a scrollable brief CLI tree code block when actual tree evidence is available;
    - ChatEnv schema table when a provider/schema is registered: schema, ENV key, description, sensitivity flag, and default-presence flag only;
    - dependency-only ChatEnv projects are omitted from the ENV detail section until they register a provider/schema.
 
@@ -43,7 +43,7 @@ The page contains:
 - `ChatGlance` must appear on the project page when it is visible in the ChatArch repository list.
 - Version display is **PyPI-only**. Do not use GitHub tags, GitHub releases, `pyproject.toml`, `package.json`, or local manifests as version sources for the page.
 - CLI display in the table remains **entrypoint-only**. For Python packages this means `project.scripts` / `project.gui-scripts`; for Node packages this means `package.json` `bin` entries. Do not expand Click/Typer/npm subcommands into the compact table cell.
-- Python package classification uses actual CLI tree evidence when available: the refresh installs the latest PyPI package with `uvx --from <package>@latest <entrypoint> --tree` and counts non-option business command nodes. `--help`, `--version`, `--tree`, and `--tree-brief` are global options, not business commands.
+- Python package classification uses actual CLI tree evidence when available: the refresh installs the latest PyPI package with `uvx --from <package>@latest <entrypoint> --tree-brief` first, falls back to `--tree`/`--help`, and counts non-option business command nodes. `--help`, `--version`, `--tree`, and `--tree-brief` are global options, not business commands.
 - `Python (early)` is for placeholder/scaffold/trivial packages: no business subcommands in the actual CLI tree, or explicit placeholder/scaffold/PyPI-name-registration evidence. A package with real business subcommands is `Python 包` even if an older baseline/override marked it as early.
 - `--baseline-data` may preserve reviewed categories for projects without stronger current tree evidence, but stale early overrides must not demote complex CLI packages such as ChatCRS.
 - ChatEnv metadata is extracted from `[project.entry-points."chatenv.configs"]` target modules and `EnvField` declarations. The generated inventory stores only schema names, ENV keys, descriptions, sensitivity flags, and whether a default exists; it must not store `.env` values or default literal values.

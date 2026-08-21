@@ -24,13 +24,16 @@ def sample_inventory():
                         "status": "ok",
                         "business_commands": ["projects", "collect", "render-page"],
                         "business_command_count": 3,
-                        "global_options": ["--help", "--version", "--tree"],
+                        "global_options": ["--help", "--version", "--tree", "--tree-brief"],
+                        "compact_trees": {"alpha": "alpha\n├── projects\n│   ├── collect\n│   └── render-page\n└── status"},
+                        "brief_trees": {"alpha": "alpha\n├── projects\n│   ├── collect\n│   └── render-page\n└── status"},
                         "entrypoints": {
                             "alpha": {
                                 "status": "ok",
                                 "business_commands": ["projects", "collect", "render-page"],
                                 "business_command_count": 3,
-                                "global_options": ["--help", "--version", "--tree"],
+                                "global_options": ["--help", "--version", "--tree", "--tree-brief"],
+                                "brief_tree": "alpha\n├── projects\n│   ├── collect\n│   └── render-page\n└── status",
                             }
                         },
                     },
@@ -318,6 +321,18 @@ def test_projects_table_uses_click_buttons_with_symbolic_detail_popovers() -> No
     assert "敏感" in source
     assert "ChatEnv dep" not in source
     assert "未发现 ChatEnv 依赖或注册 schema" not in source
+
+
+def test_projects_detail_cli_section_renders_brief_tree_code_block() -> None:
+    page = build_projects_page(sample_inventory())
+    source = page["columns"][1]["widgets"][0]["widgets"][3]["source"]
+
+    assert "projects-detail-cli-tree" in source
+    assert "Brief tree" in source
+    assert "alpha" in source
+    assert "├── projects" in source
+    assert "│   ├── collect" in source
+    assert "└── status" in source
 
 
 def test_projects_table_sorts_python_first_npm_middle_and_early_last() -> None:
