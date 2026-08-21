@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import base64
 import concurrent.futures
 import json
@@ -106,6 +107,30 @@ def read_token_from_repo_git_config() -> str | None:
     return None
 
 
+def read_token_from_chatgh_chatenv() -> str | None:
+    """Read ChatGH's ChatEnv GitHub token when ChatGH is installed.
+
+    ChatGlance can run outside its source checkout, where repo-local git
+    extraHeader credentials are unavailable. In the ChatArch runtime, ChatGH owns
+    the shared GitHub token schema, so use it as a final optional fallback without
+    adding a hard package dependency or logging the token.
+    """
+
+    try:
+        from chatenv import get_paths
+        from chatgh.config import GitHubConfig
+    except Exception:
+        return None
+    try:
+        paths = get_paths()
+        GitHubConfig.load_all(paths.envs_dir)
+        value = GitHubConfig.GITHUB_ACCESS_TOKEN.value
+    except Exception:
+        return None
+    token = str(value or "").strip()
+    return token or None
+
+
 def resolve_token(env_names: Sequence[str] = ("CHATGLANCE_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN")) -> str | None:
     """Resolve an optional GitHub token without logging it."""
 
@@ -113,7 +138,10 @@ def resolve_token(env_names: Sequence[str] = ("CHATGLANCE_GITHUB_TOKEN", "GITHUB
         value = os.environ.get(name)
         if value:
             return value.strip()
-    return read_token_from_repo_git_config()
+    token = read_token_from_repo_git_config()
+    if token:
+        return token
+    return read_token_from_chatgh_chatenv()
 
 
 def run_chatgh_repo_list(*, owner: str, limit: int, chatgh_bin: str = "chatgh") -> list[JsonDict]:
@@ -335,6 +363,213 @@ def _module_to_path(entrypoint: str) -> str | None:
     if not module:
         return None
     return "src/" + "/".join(module.split(".")) + ".py"
+
+
+
+def _module_candidate_paths(entrypoint: str) -> list[str]:
+    path = _module_to_path(entrypoint)
+    if path is None:
+        return []
+    bare = path.removeprefix("src/")
+    return [path] if bare == path else [path, bare]
+
+
+def chatenv_entry_points(pyproject: JsonDict) -> dict[str, str]:
+    """Return package-declared ChatEnv provider entry points."""
+
+    project = _as_dict(pyproject.get("project"))
+    groups = _as_dict(project.get("entry-points"))
+    configs = _as_dict(groups.get("chatenv.configs"))
+    return {str(key): str(value) for key, value in configs.items()}
+
+
+def project_dependencies(pyproject: JsonDict) -> list[str]:
+    """Return dependency specifiers from core and optional dependency groups."""
+
+    project = _as_dict(pyproject.get("project"))
+    result = [str(item) for item in project.get("dependencies", []) if str(item).strip()] if isinstance(project.get("dependencies"), list) else []
+    optional = project.get("optional-dependencies")
+    if isinstance(optional, dict):
+        for values in optional.values():
+            if isinstance(values, list):
+                result.extend(str(item) for item in values if str(item).strip())
+    return result
+
+
+def depends_on_chatenv(dependencies: Sequence[str], package_name: str | None) -> bool:
+    if str(package_name or "").strip().lower() == "chatenv":
+        return True
+    return any(str(dep).strip().lower().startswith("chatenv") for dep in dependencies)
+
+
+def _literal_value(node: ast.AST | None) -> Any:
+    if node is None:
+        return None
+    try:
+        return ast.literal_eval(node)
+    except Exception:
+        return None
+
+
+def _call_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return ""
+
+
+def _base_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    if isinstance(node, ast.Subscript):
+        return _base_name(node.value)
+    return ""
+
+
+def _is_base_env_config(node: ast.ClassDef) -> bool:
+    return any(_base_name(base) in {"BaseEnvConfig", "_BaseEnvConfig"} for base in node.bases)
+
+
+def _envfield_from_call(value: ast.Call, target: str | None = None) -> JsonDict | None:
+    if _call_name(value.func) not in {"EnvField", "_EnvField"}:
+        return None
+    env_key = _literal_value(value.args[0]) if value.args else None
+    if not isinstance(env_key, str) or not env_key.strip():
+        return None
+    kwargs = {keyword.arg: _literal_value(keyword.value) for keyword in value.keywords if keyword.arg}
+    desc = kwargs.get("desc") or kwargs.get("description") or ""
+    if not isinstance(desc, str):
+        desc = str(desc) if desc is not None else ""
+    return {
+        "attribute": target or env_key,
+        "env_key": env_key,
+        "desc": desc,
+        "sensitive": bool(kwargs.get("is_sensitive") or kwargs.get("sensitive")),
+        "has_default": "default" in kwargs,
+    }
+
+
+def _extract_envfield_assignment(assign: ast.Assign | ast.AnnAssign) -> JsonDict | None:
+    value = assign.value if isinstance(assign, (ast.Assign, ast.AnnAssign)) else None
+    if not isinstance(value, ast.Call):
+        return None
+    target = None
+    if isinstance(assign, ast.Assign) and assign.targets:
+        first = assign.targets[0]
+        target = first.id if isinstance(first, ast.Name) else None
+    elif isinstance(assign, ast.AnnAssign):
+        target = assign.target.id if isinstance(assign.target, ast.Name) else None
+    return _envfield_from_call(value, target)
+
+
+def extract_chatenv_schemas_from_source(path: str, source: str) -> list[JsonDict]:
+    """Extract non-secret ChatEnv schema metadata from a Python source file."""
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    schemas: list[JsonDict] = []
+    schemas_by_class: dict[str, JsonDict] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef) or not _is_base_env_config(node):
+            continue
+        fields: list[JsonDict] = []
+        title = None
+        aliases: list[str] = []
+        storage_dir = None
+        for stmt in node.body:
+            if not isinstance(stmt, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
+            for target_node in targets:
+                if not isinstance(target_node, ast.Name):
+                    continue
+                value = _literal_value(stmt.value)
+                if target_node.id == "_title" and isinstance(value, str):
+                    title = value
+                elif target_node.id == "_aliases" and isinstance(value, (list, tuple)):
+                    aliases = [str(item) for item in value]
+                elif target_node.id == "_storage_dir" and isinstance(value, str):
+                    storage_dir = value
+            field = _extract_envfield_assignment(stmt)
+            if field:
+                fields.append(field)
+        schema = {
+            "class_name": node.name,
+            "title": title or node.name.removesuffix("Config") or node.name,
+            "storage_dir": storage_dir or node.name.removesuffix("Config") or node.name,
+            "aliases": aliases,
+            "source_path": path,
+            "fields": fields,
+            "env_keys": [field["env_key"] for field in fields],
+        }
+        schemas.append(schema)
+        schemas_by_class[node.name] = schema
+
+    for stmt in tree.body:
+        call = stmt.value if isinstance(stmt, ast.Expr) else None
+        if not isinstance(call, ast.Call) or _call_name(call.func) != "setattr" or len(call.args) < 3:
+            continue
+        class_node, attr_node, field_node = call.args[:3]
+        class_name = class_node.id if isinstance(class_node, ast.Name) else ""
+        attr_name = _literal_value(attr_node)
+        if not class_name or class_name not in schemas_by_class or not isinstance(field_node, ast.Call):
+            continue
+        field = _envfield_from_call(field_node, str(attr_name) if isinstance(attr_name, str) else None)
+        if not field:
+            continue
+        schema = schemas_by_class[class_name]
+        if field["env_key"] not in schema["env_keys"]:
+            schema["fields"].append(field)
+            schema["env_keys"].append(field["env_key"])
+    return schemas
+
+
+def parse_python_project_chatenv(
+    pyproject: JsonDict,
+    *,
+    package_name: str | None,
+    fetch_file: Callable[[str], str | None],
+) -> JsonDict:
+    """Extract non-secret ChatEnv dependency, entry-point, and EnvField metadata."""
+
+    dependencies = project_dependencies(pyproject)
+    entry_points = chatenv_entry_points(pyproject)
+    candidate_paths: list[str] = []
+    for target in entry_points.values():
+        candidate_paths.extend(_module_candidate_paths(target))
+    if str(package_name or "").strip().lower() == "chatenv":
+        candidate_paths.append("src/chatenv/configs.py")
+
+    schemas: list[JsonDict] = []
+    seen_paths: set[str] = set()
+    for rel_path in candidate_paths:
+        if rel_path in seen_paths:
+            continue
+        seen_paths.add(rel_path)
+        source = fetch_file(rel_path)
+        if not source or ("EnvField" not in source and "BaseEnvConfig" not in source):
+            continue
+        schemas.extend(extract_chatenv_schemas_from_source(rel_path, source))
+
+    env_keys: list[str] = []
+    for schema in schemas:
+        for key in schema.get("env_keys", []):
+            text = str(key).strip()
+            if text and text not in env_keys:
+                env_keys.append(text)
+    return {
+        "depends": depends_on_chatenv(dependencies, package_name),
+        "entry_points": entry_points,
+        "schemas": schemas,
+        "env_keys": env_keys,
+        "schema_count": len(schemas),
+        "field_count": sum(len(schema.get("fields", [])) for schema in schemas),
+    }
 
 
 def parse_python_project_cli(pyproject: JsonDict, *, fetch_file: Callable[[str], str | None] | None = None) -> JsonDict:
@@ -568,6 +803,7 @@ def enrich_repository(
     item.setdefault("docs", [{"url": f"https://arch.gh.wzhecnu.cn/{name}/", "source": "chatarch-pages-candidate"}] if name else [])
     item.setdefault("version", {"value": None, "source": None})
     item.setdefault("cli", {"commands": [], "sources": [], "tree_status": "not-detected"})
+    item.setdefault("chatenv", {"depends": False, "entry_points": {}, "schemas": [], "env_keys": [], "schema_count": 0, "field_count": 0})
 
     pyproject_text = fetcher(full_name, "pyproject.toml") if name else None
     if pyproject_text:
@@ -584,6 +820,11 @@ def enrich_repository(
         package.setdefault("npm_name", None)
         item["version"] = pypi_version(str(package.get("python_name") or name), fetcher=pypi_fetcher)
         item["cli"] = parse_python_project_cli(pyproject)
+        item["chatenv"] = parse_python_project_chatenv(
+            pyproject,
+            package_name=str(package.get("python_name") or name),
+            fetch_file=lambda rel_path: fetcher(full_name, rel_path) if name else None,
+        )
         evidence.update({"has_pyproject": True, "details_source": "chatgh+github-contents"})
     else:
         package_json_text = fetcher(full_name, "package.json") if name else None
@@ -670,6 +911,9 @@ def build_project_inventory(
         "with_detected_version": sum(1 for item in repositories if isinstance(item.get("version"), dict) and bool(item["version"].get("value"))),
         "with_detected_cli_entries": sum(1 for item in repositories if isinstance(item.get("cli"), dict) and bool(item["cli"].get("commands"))),
         "with_detected_cli_commands": sum(1 for item in repositories if isinstance(item.get("cli"), dict) and bool(item["cli"].get("commands"))),
+        "with_chatenv_dependency": sum(1 for item in repositories if isinstance(item.get("chatenv"), dict) and bool(item["chatenv"].get("depends"))),
+        "with_chatenv_entry_points": sum(1 for item in repositories if isinstance(item.get("chatenv"), dict) and bool(item["chatenv"].get("entry_points"))),
+        "with_chatenv_fields": sum(1 for item in repositories if isinstance(item.get("chatenv"), dict) and int(item["chatenv"].get("field_count") or 0) > 0),
         "with_actual_cli_tree": sum(1 for item in repositories if isinstance(item.get("cli"), dict) and isinstance(item["cli"].get("actual_tree"), dict) and item["cli"]["actual_tree"].get("status") == "ok"),
         "with_actual_cli_business_commands": sum(1 for item in repositories if isinstance(item.get("cli"), dict) and isinstance(item["cli"].get("actual_tree"), dict) and int(item["cli"]["actual_tree"].get("business_command_count") or 0) > 0),
         "with_docs_candidates": sum(1 for item in repositories if item.get("docs")),
@@ -684,7 +928,7 @@ def build_project_inventory(
             "owner": owner,
             "repo_count": len(rows),
             "auth_source": "chatgh repo list + optional GitHub token environment",
-            "notes": "Repository list comes from ChatGH. Manifest and package entrypoint evidence is fetched read-only from default-branch repository files. Version display uses PyPI only. When enabled, actual CLI tree evidence comes from installing the latest PyPI package with uvx and running each entrypoint's --tree/help output. Credentials are omitted.",
+            "notes": "Repository list comes from ChatGH. Manifest, package entrypoint, and ChatEnv schema evidence are fetched read-only from default-branch repository files. Version display uses PyPI only. When enabled, actual CLI tree evidence comes from installing the latest PyPI package with uvx and running each entrypoint's --tree/help output. Env values and credentials are omitted.",
         },
         "counts": counts,
         "categories": categories,

@@ -1,12 +1,17 @@
 import base64
 import json
+import sys
+import types
 
+from chatglance import project_inventory as project_inventory_module
 from chatglance.project_inventory import (
     _token_from_extraheader,
     build_project_inventory,
     parse_actual_cli_tree_output,
     parse_click_command_names,
     parse_python_project_cli,
+    read_token_from_chatgh_chatenv,
+    resolve_token,
 )
 from chatglance.projects import category_key, display_category
 
@@ -83,6 +88,56 @@ def test_git_extraheader_token_parser_returns_secret_without_rendering_it():
     assert _token_from_extraheader(f"Authorization: Basic {encoded}") == token
     assert _token_from_extraheader(f"authorization: basic {encoded}") == token
     assert _token_from_extraheader("Authorization: Bearer ***") is None
+
+
+def test_resolve_token_prefers_environment_before_repo_and_chatgh(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "env-token")
+    monkeypatch.setattr(project_inventory_module, "read_token_from_repo_git_config", lambda: "repo-token")
+    monkeypatch.setattr(project_inventory_module, "read_token_from_chatgh_chatenv", lambda: "chatgh-token")
+
+    assert resolve_token(("GITHUB_TOKEN",)) == "env-token"
+
+
+def test_resolve_token_prefers_repo_token_before_chatgh(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(project_inventory_module, "read_token_from_repo_git_config", lambda: "repo-token")
+    monkeypatch.setattr(project_inventory_module, "read_token_from_chatgh_chatenv", lambda: "chatgh-token")
+
+    assert resolve_token(("GITHUB_TOKEN",)) == "repo-token"
+
+
+def test_resolve_token_falls_back_to_chatgh_chatenv(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(project_inventory_module, "read_token_from_repo_git_config", lambda: None)
+    monkeypatch.setattr(project_inventory_module, "read_token_from_chatgh_chatenv", lambda: "chatgh-token")
+
+    assert resolve_token(("GITHUB_TOKEN",)) == "chatgh-token"
+
+
+def test_read_token_from_chatgh_chatenv_loads_github_config_without_logging(monkeypatch):
+    calls = {}
+    chatenv_module = types.ModuleType("chatenv")
+    chatenv_module.get_paths = lambda: types.SimpleNamespace(envs_dir="/safe/envs")
+    chatgh_module = types.ModuleType("chatgh")
+    chatgh_config_module = types.ModuleType("chatgh.config")
+
+    class FakeTokenField:
+        value = " chatgh-token "
+
+    class FakeGitHubConfig:
+        GITHUB_ACCESS_TOKEN = FakeTokenField()
+
+        @classmethod
+        def load_all(cls, envs_dir):
+            calls["envs_dir"] = envs_dir
+
+    chatgh_config_module.GitHubConfig = FakeGitHubConfig
+    monkeypatch.setitem(sys.modules, "chatenv", chatenv_module)
+    monkeypatch.setitem(sys.modules, "chatgh", chatgh_module)
+    monkeypatch.setitem(sys.modules, "chatgh.config", chatgh_config_module)
+
+    assert read_token_from_chatgh_chatenv() == "chatgh-token"
+    assert calls == {"envs_dir": "/safe/envs"}
 
 
 def test_parse_click_command_names_handles_positional_and_keyword_names():
@@ -238,6 +293,77 @@ def test_build_project_inventory_classifies_from_actual_cli_tree_over_stale_over
     assert display_category(by_name["ChatCRS"]) == "Python 包"
     assert inventory["counts"]["with_actual_cli_tree"] == 2
     assert inventory["counts"]["with_actual_cli_business_commands"] == 1
+
+
+def test_build_project_inventory_extracts_chatenv_schema_metadata_without_values():
+    rows = [
+        {
+            "name": "ChatDNS",
+            "full_name": "ChatArch/ChatDNS",
+            "private": False,
+            "open_prs": 0,
+            "open_issues": 0,
+            "html_url": "https://github.com/ChatArch/ChatDNS",
+        }
+    ]
+    files = {
+        (
+            "ChatArch/ChatDNS",
+            "pyproject.toml",
+        ): """[project]
+name = "ChatDNS"
+dependencies = ["click>=8.0", "chatenv>=0.2.4,<0.3.0"]
+[project.entry-points."chatenv.configs"]
+chatdns = "chatdns.config"
+""",
+        (
+            "ChatArch/ChatDNS",
+            "src/chatdns/config.py",
+        ): """from chatenv import BaseEnvConfig, EnvField
+
+class ChatDNSConfig(BaseEnvConfig):
+    _title = "ChatDNS Configuration"
+    _aliases = ["chatdns", "dns"]
+    _storage_dir = "ChatDNS"
+
+    CHATDNS_PROVIDER = EnvField(
+        "CHATDNS_PROVIDER",
+        default="aliyun",
+        desc="DNS provider selector.",
+    )
+    CHATDNS_TOKEN = EnvField(
+        "CHATDNS_TOKEN",
+        default="secret-default-should-not-render",
+        desc="DNS token used for provider access.",
+        is_sensitive=True,
+    )
+""",
+    }
+
+    inventory = build_project_inventory(
+        rows,
+        owner="ChatArch",
+        generated_at="2026-08-21T12:00:00+08:00",
+        fetcher=lambda full, rel: files.get((full, rel)),
+        pypi_fetcher=lambda name: {"info": {"version": "0.1.10"}},
+        workers=1,
+    )
+    item = inventory["repositories"][0]
+    chatenv = item["chatenv"]
+
+    assert chatenv["depends"] is True
+    assert chatenv["entry_points"] == {"chatdns": "chatdns.config"}
+    assert chatenv["schema_count"] == 1
+    assert chatenv["field_count"] == 2
+    assert chatenv["env_keys"] == ["CHATDNS_PROVIDER", "CHATDNS_TOKEN"]
+    assert chatenv["schemas"][0]["storage_dir"] == "ChatDNS"
+    assert chatenv["schemas"][0]["aliases"] == ["chatdns", "dns"]
+    assert chatenv["schemas"][0]["fields"][1]["sensitive"] is True
+    assert chatenv["schemas"][0]["fields"][1]["desc"] == "DNS token used for provider access."
+    assert "secret-default-should-not-render" not in json.dumps(chatenv)
+    assert inventory["counts"]["with_chatenv_dependency"] == 1
+    assert inventory["counts"]["with_chatenv_entry_points"] == 1
+    assert inventory["counts"]["with_chatenv_fields"] == 1
 
 
 def test_loadable_inventory_shape_is_json_serializable(tmp_path):

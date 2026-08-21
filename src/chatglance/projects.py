@@ -313,9 +313,189 @@ def cli_cell(item: dict[str, Any]) -> str:
     return " ".join(chips)
 
 
+
+def _chatenv_meta(item: dict[str, Any]) -> dict[str, Any]:
+    return _mapping(item.get("chatenv"))
+
+
+def _chatenv_schemas(item: dict[str, Any]) -> list[dict[str, Any]]:
+    schemas = _chatenv_meta(item).get("schemas")
+    return [schema for schema in schemas if isinstance(schema, dict)] if isinstance(schemas, list) else []
+
+
+def _chatenv_fields(item: dict[str, Any]) -> list[dict[str, Any]]:
+    fields: list[dict[str, Any]] = []
+    for schema in _chatenv_schemas(item):
+        schema_label = text_value(schema.get("title") or schema.get("class_name"), "Env")
+        class_name = text_value(schema.get("class_name"), schema_label)
+        storage_dir = text_value(schema.get("storage_dir"), "")
+        aliases = schema.get("aliases") if isinstance(schema.get("aliases"), list) else []
+        schema_fields = schema.get("fields") if isinstance(schema.get("fields"), list) else []
+        for field in schema_fields:
+            if not isinstance(field, dict):
+                continue
+            env_key = text_value(field.get("env_key"), "")
+            if not env_key:
+                continue
+            fields.append(
+                {
+                    "schema": schema_label,
+                    "class_name": class_name,
+                    "storage_dir": storage_dir,
+                    "aliases": [str(alias) for alias in aliases],
+                    "env_key": env_key,
+                    "desc": text_value(field.get("desc"), "—"),
+                    "sensitive": bool(field.get("sensitive")),
+                    "has_default": bool(field.get("has_default")),
+                }
+            )
+    return fields
+
+
+def chatenv_cell(item: dict[str, Any]) -> str:
+    fields = _chatenv_fields(item)
+    if fields:
+        return f'<span class="projects-env-pill">Env {len(fields)}</span>'
+    meta = _chatenv_meta(item)
+    if meta.get("entry_points") or _chatenv_schemas(item):
+        return '<span class="projects-env-muted">Entry point</span>'
+    return "—"
+
+
+def _detail_metric(label: str, value: Any) -> str:
+    return f'<div><span>{html_text(label)}</span><strong>{html_text(value)}</strong></div>'
+
+
+def _entry_points_text(meta: dict[str, Any]) -> str:
+    entry_points = meta.get("entry_points") if isinstance(meta.get("entry_points"), dict) else {}
+    parts = [f"{key} -> {value}" for key, value in sorted(entry_points.items())]
+    return ", ".join(parts)
+
+
+def _chatenv_detail_html(item: dict[str, Any]) -> str:
+    meta = _chatenv_meta(item)
+    fields = _chatenv_fields(item)
+    entry_points = _entry_points_text(meta)
+    if fields:
+        rows = []
+        for field in fields:
+            flags = []
+            if field["sensitive"]:
+                flags.append('<span class="projects-env-flag sensitive">敏感</span>')
+            if field["has_default"]:
+                flags.append('<span class="projects-env-flag">默认</span>')
+            schema_bits = [field["schema"]]
+            if field["storage_dir"]:
+                schema_bits.append(field["storage_dir"])
+            if field["aliases"]:
+                schema_bits.append("/".join(field["aliases"]))
+            rows.append(
+                "<tr>"
+                f'<td>{html_text(" · ".join(schema_bits))}</td>'
+                f'<td><code>{html_text(field["env_key"])}</code></td>'
+                f'<td>{html_text(field["desc"])}</td>'
+                f'<td>{" ".join(flags) or "—"}</td>'
+                "</tr>"
+            )
+        entry_html = f'<p class="projects-detail-note">Entry point: {html_text(entry_points)}</p>' if entry_points else ""
+        return (
+            '<section class="projects-detail-section">'
+            '<h4>ChatEnv / ENV</h4>'
+            f'{entry_html}'
+            '<div class="projects-env-table-wrap"><table class="projects-env-table">'
+            '<thead><tr><th>Schema</th><th>ENV</th><th>含义</th><th>标记</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody>'
+            '</table></div>'
+            '</section>'
+        )
+    if entry_points or _chatenv_schemas(item):
+        reason = "已注册 chatenv.configs，但没有提取到 EnvField。" if entry_points else "发现 ChatEnv schema，但没有提取到 EnvField。"
+        if entry_points:
+            reason += f" Entry point: {entry_points}"
+        return (
+            '<section class="projects-detail-section">'
+            '<h4>ChatEnv / ENV</h4>'
+            f'<p class="projects-detail-empty">{html_text(reason)}</p>'
+            '</section>'
+        )
+    return ""
+
+
+def _repo_detail_panel(item: dict[str, Any]) -> str:
+    name = text_value(item.get("name"), "unknown")
+    docs = item.get("docs") if isinstance(item.get("docs"), list) else []
+    docs_url = docs[0].get("url") if docs and isinstance(docs[0], dict) else ""
+    version = version_display(item.get("version") if isinstance(item.get("version"), dict) else None)
+    metrics = "".join(
+        [
+            _detail_metric("PR", int(item.get("open_prs") or 0)),
+            _detail_metric("Issue", int(item.get("open_issues") or 0)),
+            _detail_metric("版本", version),
+            _detail_metric("类型", display_category(item)),
+            _detail_metric("最近提交", safe_date(item.get("pushed_at") or item.get("updated_at"))),
+        ]
+    )
+    cli_commands = [command for command in _cli_commands(item) if not command.lstrip("([{<").startswith("-")]
+    cli_html = " ".join(f'<code>{html_text(command)}</code>' for command in cli_commands) if cli_commands else "—"
+    links = [f'<a href="{html_text(item.get("html_url"))}" target="_blank" rel="noreferrer">GitHub</a>']
+    if docs_url:
+        links.append(f'<a href="{html_text(docs_url)}" target="_blank" rel="noreferrer">Docs</a>')
+    description = text_value(item.get("description"), "—")
+    chatenv_html = _chatenv_detail_html(item)
+    return f"""
+<article class="projects-detail-panel" aria-label="{html_text(name)} 详情">
+  <header class="projects-detail-head">
+    <div>
+      <p class="projects-detail-kicker">Repository detail</p>
+      <h3>{html_text(name)}</h3>
+    </div>
+  </header>
+  <div class="projects-detail-links">{" · ".join(links)}</div>
+  <p class="projects-detail-description">{html_text(description)}</p>
+  <div class="projects-detail-metrics">{metrics}</div>
+  <section class="projects-detail-section">
+    <h4>CLI</h4>
+    <div class="projects-detail-cli">{cli_html}</div>
+  </section>
+  {chatenv_html}
+</article>"""
+
+
+def _repo_detail_popover_button(detail_id: str) -> str:
+    return f'<button type="button" class="projects-detail-button" popovertarget="{html_text(detail_id)}">详情</button>'
+
+
+def _repo_detail_popover(item: dict[str, Any], detail_id: str) -> str:
+    return (
+        f'<div id="{html_text(detail_id)}" class="projects-detail-popover" popover>'
+        f'<button type="button" class="projects-detail-close" popovertarget="{html_text(detail_id)}" popovertargetaction="hide">关闭</button>'
+        f'{_repo_detail_panel(item)}'
+        '</div>'
+    )
+
+TABLE_CATEGORY_ORDER = {
+    "python-package": 0,
+    "node-package": 1,
+    "service/app": 2,
+    "docs/site": 3,
+    "other": 4,
+    "python-early": 5,
+}
+
+
+def _sorted_repos_for_table(data: dict[str, Any]) -> list[dict[str, Any]]:
+    return sorted(
+        sorted_repos(data, "name"),
+        key=lambda item: (TABLE_CATEGORY_ORDER.get(category_key(item), TABLE_CATEGORY_ORDER["other"]), text_value(item.get("name"), "").lower()),
+    )
+
+
 def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
     rows: list[str] = []
-    for item in sorted_repos(data, "name"):
+    popovers: list[str] = []
+    for index, item in enumerate(_sorted_repos_for_table(data)):
+        detail_id = f"projects-detail-{index}"
+        popovers.append(_repo_detail_popover(item, detail_id))
         cli = cli_cell(item)
         docs = item.get("docs") if isinstance(item.get("docs"), list) else []
         docs_url = docs[0].get("url") if docs and isinstance(docs[0], dict) else ""
@@ -323,10 +503,12 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
         rows.append(
             "<tr>"
             f'<td><a href="{html_text(item.get("html_url"))}" target="_blank" rel="noreferrer">{html_text(item.get("name"))}</a></td>'
+            f'<td>{_repo_detail_popover_button(detail_id)}</td>'
             f'<td class="num">{int(item.get("open_prs") or 0)}</td>'
             f'<td class="num">{int(item.get("open_issues") or 0)}</td>'
             f'<td>{html_text(version_display(item.get("version") if isinstance(item.get("version"), dict) else None))}</td>'
             f'<td>{html_text(display_category(item))}</td>'
+            f'<td>{chatenv_cell(item)}</td>'
             f'<td class="projects-cli-cell">{cli}</td>'
             f'<td>{docs_cell}</td>'
             f'<td>{html_text(safe_date(item.get("pushed_at") or item.get("updated_at")))}</td>'
@@ -341,22 +523,49 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
 .projects-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .projects-table a { color: inherit; text-decoration: none; }
 .projects-table a:hover { text-decoration: underline; }
+.projects-detail-button { appearance: none; cursor: pointer; border: 1px solid var(--color-separator); border-radius: 999px; padding: 0.18rem 0.62rem; background: var(--color-background); color: var(--color-text); font: inherit; font-size: 0.82em; }
+.projects-detail-button:hover { border-color: var(--color-primary); }
+.projects-detail-popover { width: min(72rem, calc(100vw - 2rem)); max-height: min(82vh, 50rem); overflow: auto; margin: auto; padding: 0; border: 1px solid var(--color-separator); border-radius: 1rem; background: var(--color-widget-background); color: var(--color-text); box-shadow: 0 24px 80px rgba(0,0,0,0.45); }
+.projects-detail-popover::backdrop { background: rgba(0,0,0,0.58); backdrop-filter: blur(2px); }
+.projects-env-pill, .projects-env-muted, .projects-env-flag { display: inline-block; border-radius: 999px; padding: 0.08rem 0.42rem; border: 1px solid var(--color-separator); background: var(--color-background); font-size: 0.82em; white-space: nowrap; }
+.projects-env-pill { color: var(--color-positive); }
+.projects-env-muted { color: var(--color-text-subdued); }
+.projects-env-flag { color: var(--color-text-subdued); }
+.projects-env-flag.sensitive { color: var(--color-negative); }
 .projects-cli-cell { min-width: 8rem; }
 .projects-cli-hover { position: relative; display: inline-block; margin: 0 0.25rem 0.25rem 0; }
 .projects-cli-hover code { border: 1px solid var(--color-separator); border-radius: 999px; padding: 0.08rem 0.42rem; background: var(--color-background); font-size: 0.82em; cursor: help; }
 .projects-cli-tree { display: none; position: absolute; z-index: 20; left: 0; top: 1.65rem; min-width: 14rem; max-width: min(34rem, 70vw); max-height: 18rem; overflow: auto; white-space: pre; margin: 0; padding: 0.65rem 0.75rem; border: 1px solid var(--color-separator); border-radius: 0.75rem; background: var(--color-widget-background); color: var(--color-text); box-shadow: 0 18px 42px rgba(0,0,0,0.34); font-size: 0.82em; line-height: 1.45; }
 .projects-cli-hover:hover .projects-cli-tree, .projects-cli-hover:focus-within .projects-cli-tree { display: block; }
 .projects-cli-extra { color: var(--color-text-subdued); font-size: 0.85em; }
+.projects-detail-head { display: flex; align-items: start; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
+.projects-detail-head h3 { margin: 0; font-size: 1.35rem; }
+.projects-detail-kicker, .projects-detail-note, .projects-detail-empty { margin: 0; color: var(--color-text-subdued); font-size: 0.86em; }
+.projects-detail-close { position: sticky; top: 0.7rem; float: right; z-index: 2; margin: 0.7rem 0.7rem 0 0; border: 1px solid var(--color-separator); border-radius: 999px; padding: 0.22rem 0.65rem; background: var(--color-background); color: inherit; font: inherit; cursor: pointer; }
+.projects-detail-panel { padding: 1rem; }
+.projects-detail-links, .projects-detail-description { margin: 0.45rem 0; }
+.projects-detail-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: 0.5rem; margin: 0.8rem 0; }
+.projects-detail-metrics div { border: 1px solid var(--color-separator); border-radius: 0.75rem; padding: 0.5rem; background: var(--color-background); }
+.projects-detail-metrics span { display: block; color: var(--color-text-subdued); font-size: 0.78em; }
+.projects-detail-metrics strong { display: block; margin-top: 0.15rem; }
+.projects-detail-section { margin-top: 1rem; }
+.projects-detail-section h4 { margin: 0 0 0.45rem 0; }
+.projects-detail-cli code { display: inline-block; margin: 0 0.25rem 0.25rem 0; border: 1px solid var(--color-separator); border-radius: 999px; padding: 0.08rem 0.42rem; background: var(--color-background); }
+.projects-env-table-wrap { overflow-x: auto; }
+.projects-env-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
+.projects-env-table th, .projects-env-table td { padding: 0.34rem 0.45rem; border-bottom: 1px solid var(--color-separator); text-align: left; vertical-align: top; }
+.projects-env-table code { white-space: nowrap; }
+@media (max-width: 720px) { .projects-detail-popover { width: calc(100vw - 1rem); max-height: 92vh; } }
 </style>
-<div class="projects-table-wrap">
+<div id="projects-table-root" class="projects-table-wrap">
 <table class="projects-table">
-<thead><tr><th>仓库</th><th>PR</th><th>Issue</th><th>版本</th><th>类型</th><th>CLI</th><th>文档</th><th>最近提交</th></tr></thead>
+<thead><tr><th>仓库</th><th>详情</th><th>PR</th><th>Issue</th><th>版本</th><th>类型</th><th>Env</th><th>CLI</th><th>文档</th><th>最近提交</th></tr></thead>
 <tbody>
 """ + "\n".join(rows) + """
 </tbody>
 </table>
 </div>
-"""
+""" + "\n".join(popovers)
     return {"type": "html", "title": "一览表", "source": source}
 
 
