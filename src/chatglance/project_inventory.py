@@ -705,6 +705,7 @@ def parse_actual_cli_tree_output(output: str) -> JsonDict:
         "global_options": global_options,
         "global_option_count": len(global_options),
         "compact_tree": "\n".join(compact_lines),
+        "brief_tree": "\n".join(compact_lines),
     }
 
 
@@ -722,7 +723,7 @@ def make_actual_cli_tree_fetcher(*, uvx_bin: str = "uvx") -> ActualCliTreeFetche
             return None
         package_spec = f"{package}@latest"
         base = [uvx_bin, "--from", package_spec, entrypoint]
-        for args in ([*base, "--tree"], [*base, "--help"]):
+        for args in ([*base, "--tree-brief"], [*base, "--tree"], [*base, "--help"]):
             try:
                 result = subprocess.run(
                     args,
@@ -758,6 +759,7 @@ def enrich_actual_cli_tree(item: JsonDict, *, fetcher: ActualCliTreeFetcher, tim
     all_options: list[str] = []
     all_placeholders: list[str] = []
     compact_trees: dict[str, str] = {}
+    brief_trees: dict[str, str] = {}
     statuses: list[str] = []
     for command in commands:
         output = fetcher(package_name, command, timeout)
@@ -775,6 +777,9 @@ def enrich_actual_cli_tree(item: JsonDict, *, fetcher: ActualCliTreeFetcher, tim
         compact_tree = str(tree.get("compact_tree") or "").strip()
         if compact_tree:
             compact_trees[command] = compact_tree
+        brief_tree = str(tree.get("brief_tree") or compact_tree).strip()
+        if brief_tree:
+            brief_trees[command] = brief_tree
         for option in tree.get("global_options", []):
             text = str(option).strip()
             if text and text not in all_options:
@@ -795,6 +800,7 @@ def enrich_actual_cli_tree(item: JsonDict, *, fetcher: ActualCliTreeFetcher, tim
         "global_options": all_options,
         "global_option_count": len(all_options),
         "compact_trees": compact_trees,
+        "brief_trees": brief_trees,
         "entrypoints": per_entrypoint,
     }
     item["cli"] = cli
@@ -945,7 +951,7 @@ def build_project_inventory(
             "owner": owner,
             "repo_count": len(rows),
             "auth_source": "chatgh repo list + optional GitHub token environment",
-            "notes": "Repository list comes from ChatGH. Manifest, package entrypoint, and ChatEnv schema evidence are fetched read-only from default-branch repository files. Version display uses PyPI only. When enabled, actual CLI tree evidence comes from installing the latest PyPI package with uvx and running each entrypoint's --tree/help output. Env values and credentials are omitted.",
+            "notes": "Repository list comes from ChatGH. Manifest, package entrypoint, and ChatEnv schema evidence are fetched read-only from default-branch repository files. Version display uses PyPI only. When enabled, actual CLI tree evidence comes from installing the latest PyPI package with uvx and running each entrypoint's --tree-brief/--tree/help output. Env values and credentials are omitted.",
         },
         "counts": counts,
         "categories": categories,

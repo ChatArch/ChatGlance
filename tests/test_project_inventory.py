@@ -7,6 +7,7 @@ from chatglance import project_inventory as project_inventory_module
 from chatglance.project_inventory import (
     _token_from_extraheader,
     build_project_inventory,
+    make_actual_cli_tree_fetcher,
     parse_actual_cli_tree_output,
     parse_click_command_names,
     parse_python_project_cli,
@@ -230,6 +231,23 @@ def test_parse_actual_cli_tree_output_falls_back_to_help_commands_section():
     assert parsed["business_commands"] == ["deploy", "status"]
 
 
+def test_actual_cli_tree_fetcher_prefers_tree_brief(monkeypatch):
+    calls = []
+
+    def fake_run(args, check, stdout, stderr, text, timeout):
+        calls.append(args)
+        if args[-1] == "--tree-brief":
+            return types.SimpleNamespace(returncode=0, stdout=CHATCRS_TREE)
+        return types.SimpleNamespace(returncode=0, stdout="should not be used")
+
+    monkeypatch.setattr(project_inventory_module.subprocess, "run", fake_run)
+
+    fetch = make_actual_cli_tree_fetcher(uvx_bin="uvx")
+
+    assert fetch("ChatCRS", "chatcrs", 30) == CHATCRS_TREE
+    assert calls == [["uvx", "--from", "ChatCRS@latest", "chatcrs", "--tree-brief"]]
+
+
 def test_build_project_inventory_uses_fresh_cli_surface_for_categories():
     rows = [
         {
@@ -318,6 +336,8 @@ def test_build_project_inventory_classifies_from_actual_cli_tree_over_stale_over
     assert category_key(by_name["ChatCI"]) == "python-early"
     assert display_category(by_name["ChatCI"]) == "Python (early)"
     assert by_name["ChatCRS"]["cli"]["actual_tree"]["business_command_count"] == 8
+    assert "chatcrs" in by_name["ChatCRS"]["cli"]["actual_tree"]["brief_trees"]
+    assert "apikey" in by_name["ChatCRS"]["cli"]["actual_tree"]["brief_trees"]["chatcrs"]
     assert by_name["ChatCRS"]["reviewed_category"] == "python-early"
     assert by_name["ChatCRS"]["category"] == "python-package"
     assert category_key(by_name["ChatCRS"]) == "python-package"

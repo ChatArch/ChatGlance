@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.6 - 2026-08-22
+
+Project detail brief CLI tree release.
+
+- Prefer `--tree-brief` when collecting actual CLI tree evidence and render the brief CLI tree as a code block in project detail cards.
+
 ## 0.1.5 - 2026-08-21
 
 ChatArch CLI runtime and typed environment alignment release.

@@ -314,6 +314,44 @@ def cli_cell(item: dict[str, Any]) -> str:
     return " ".join(chips)
 
 
+def _actual_cli_tree(item: dict[str, Any]) -> dict[str, Any]:
+    return _mapping(_mapping(item.get("cli")).get("actual_tree"))
+
+
+def _brief_tree_for_command(item: dict[str, Any], command: str) -> str:
+    tree = _actual_cli_tree(item)
+    entrypoints = _mapping(tree.get("entrypoints"))
+    entry = _mapping(entrypoints.get(command))
+    for source in (entry, tree):
+        text = text_value(source.get("brief_tree") or source.get("tree_brief") or source.get("compact_tree"), "").strip()
+        if text:
+            return text
+    for key in ("brief_trees", "tree_briefs", "compact_trees"):
+        values = _mapping(tree.get(key))
+        text = text_value(values.get(command), "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _cli_brief_tree_html(item: dict[str, Any]) -> str:
+    commands = [command for command in _cli_commands(item) if not command.lstrip("([{<").startswith("-")]
+    blocks: list[str] = []
+    for command in commands:
+        tree_text = _brief_tree_for_command(item, command)
+        if not tree_text:
+            continue
+        label = f'<div class="projects-detail-cli-tree-label"><code>{html_text(command)}</code> brief tree</div>' if len(commands) > 1 else '<div class="projects-detail-cli-tree-label">Brief tree</div>'
+        blocks.append(
+            '<div class="projects-detail-cli-tree-block">'
+            f'{label}'
+            f'<pre><code>{html.escape(tree_text, quote=True)}</code></pre>'
+            '</div>'
+        )
+    if not blocks:
+        return ""
+    return f'<div class="projects-detail-cli-tree">{"".join(blocks)}</div>'
+
 
 def _chatenv_meta(item: dict[str, Any]) -> dict[str, Any]:
     return _mapping(item.get("chatenv"))
@@ -438,6 +476,7 @@ def _repo_detail_panel(item: dict[str, Any]) -> str:
     )
     cli_commands = [command for command in _cli_commands(item) if not command.lstrip("([{<").startswith("-")]
     cli_html = " ".join(f'<code>{html_text(command)}</code>' for command in cli_commands) if cli_commands else "—"
+    cli_tree_html = _cli_brief_tree_html(item)
     links = [f'<a href="{html_text(item.get("html_url"))}" target="_blank" rel="noreferrer">GitHub</a>']
     if docs_url:
         links.append(f'<a href="{html_text(docs_url)}" target="_blank" rel="noreferrer">Docs</a>')
@@ -457,6 +496,7 @@ def _repo_detail_panel(item: dict[str, Any]) -> str:
   <section class="projects-detail-section">
     <h4>CLI</h4>
     <div class="projects-detail-cli">{cli_html}</div>
+    {cli_tree_html}
   </section>
   {chatenv_html}
 </article>"""
@@ -552,6 +592,11 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
 .projects-detail-section { margin-top: 1rem; }
 .projects-detail-section h4 { margin: 0 0 0.45rem 0; }
 .projects-detail-cli code { display: inline-block; margin: 0 0.25rem 0.25rem 0; border: 1px solid var(--color-separator); border-radius: 999px; padding: 0.08rem 0.42rem; background: var(--color-background); }
+.projects-detail-cli-tree { margin-top: 0.65rem; }
+.projects-detail-cli-tree-block { margin-top: 0.55rem; }
+.projects-detail-cli-tree-label { margin: 0 0 0.25rem 0; color: var(--color-text-subdued); font-size: 0.82em; }
+.projects-detail-cli-tree-label code { border: 1px solid var(--color-separator); border-radius: 999px; padding: 0.04rem 0.34rem; background: var(--color-background); color: var(--color-text); }
+.projects-detail-cli-tree pre { margin: 0; max-height: 32rem; overflow: auto; white-space: pre; border: 1px solid var(--color-separator); border-radius: 0.8rem; padding: 0.75rem 0.85rem; background: var(--color-background); color: var(--color-text); font-size: 0.84em; line-height: 1.45; }
 .projects-env-table-wrap { overflow-x: auto; }
 .projects-env-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
 .projects-env-table th, .projects-env-table td { padding: 0.34rem 0.45rem; border-bottom: 1px solid var(--color-separator); text-align: left; vertical-align: top; }

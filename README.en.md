@@ -36,7 +36,7 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 ## Current capabilities
 
 - Refresh repository inventory JSON from current ChatGH/GitHub data and render a Glance `项目` page with a visible `generated_at` refresh timestamp; version display is PyPI-only, the compact table shows package entrypoints only, and Python early/non-early classification is corrected from latest-PyPI actual CLI tree/help evidence while stale baseline categories remain audit evidence only.
-- Generate native-click `详情` buttons in the `项目` table; the detail card shows project description, basics, CLI, and registered ChatEnv Env keys, descriptions, sensitivity flags, and default-presence flags without showing values.
+- Generate native-click `详情` buttons in the `项目` table; the detail card shows project description, basics, CLI entrypoints, a brief CLI tree code block, and registered ChatEnv Env keys, descriptions, sensitivity flags, and default-presence flags without showing values.
 - Keep the current tabs limited to `最近提交`, `待处理 PR / Issue`, `分类`, and `一览表`.
 - Filter the triage tab to repositories with non-zero PR or Issue counts and sort by `(PR, Issue, recent commit)` descending.
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.
@@ -67,7 +67,7 @@ python -m twine check dist/*
 
 See [`docs/cli-tree.md`](docs/cli-tree.md) for the complete command surface. ChatStyle renders `chatglance --tree` from the real Click registry with parameter signatures; `chatglance --tree-brief` keeps the same nodes and descriptions without signatures. Tests run both entry points and compare them byte-for-byte with the documented trees.
 
-The recommended `项目` refresh entry point is also a repository script. It uses the current ChatGH repository list for PR/Issue/timestamp fields, then reads default-branch manifest/entrypoint evidence without cloning, building, or executing repository source trees. For Python package maturity, it probes the latest published PyPI package with `uvx --from <package>@latest <entrypoint> --tree` or help fallback and writes `project-cli-tree-report.tsv` as audit evidence. Private repository reads fall back in order from explicit token environment variables, to the current checkout's repo-local GitHub credential, to the typed active ChatGlance ChatEnv profile, and finally to ChatGH's shared ChatEnv profile. Token values are never printed:
+The recommended `项目` refresh entry point is also a repository script. It uses the current ChatGH repository list for PR/Issue/timestamp fields, then reads default-branch manifest/entrypoint evidence without cloning, building, or executing repository source trees. For Python package maturity, it probes the latest published PyPI package with `uvx --from <package>@latest <entrypoint> --tree-brief`, falling back to `--tree` or help output, and writes `project-cli-tree-report.tsv` as audit evidence. Private repository reads fall back in order from explicit token environment variables, to the current checkout's repo-local GitHub credential, to the typed active ChatGlance ChatEnv profile, and finally to ChatGH's shared ChatEnv profile. Token values are never printed:
 
 ```bash
 CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \

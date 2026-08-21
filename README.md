@@ -36,7 +36,7 @@
 ## 当前能力
 
 - 通过 ChatGH/GitHub 当前数据刷新 repository inventory JSON，生成带 `generated_at` 的 Glance `项目` page；版本展示只看 PyPI，CLI 主表只展示 package entrypoint，Python early/non-early 分类使用 latest PyPI actual CLI tree/help 证据校正，旧 baseline 只保留为 reviewed audit evidence。
-- `项目` 页一览表为每个仓库生成原生点击 `详情` 按钮；详情卡片展示项目 description、基础信息、CLI，以及真实注册的 ChatEnv Env key、说明、敏感标记和默认存在标记，但不展示任何值。
+- `项目` 页一览表为每个仓库生成原生点击 `详情` 按钮；详情卡片展示项目 description、基础信息、CLI entrypoint、brief CLI tree 代码块，以及真实注册的 ChatEnv Env key、说明、敏感标记和默认存在标记，但不展示任何值。
 - 当前 page tabs 固定为：`最近提交`、`待处理 PR / Issue`、`分类`、`一览表`。
 - `待处理 PR / Issue` 只显示 PR/Issue 非 0 的仓库，并按 `(PR, Issue, 最近提交)` 降序。
 - 生成 config 副本时清理 legacy generated pages：`Projects`、`ChatArch Projects`、`ChatArch Projects List`。
@@ -67,7 +67,7 @@ python -m twine check dist/*
 
 完整命令面见 [`docs/cli-tree.md`](docs/cli-tree.md)。`chatglance --tree` 由 ChatStyle 从真实 Click registry 生成带参数签名的完整树；`chatglance --tree-brief` 保留相同节点和说明但省略签名。源码测试会直接运行两个入口，并与文档中的树逐字对齐。
 
-刷新 `项目` 页的推荐入口同样是仓库脚本；它用 ChatGH 当前 repo 列表刷新 PR/Issue/时间字段，只读读取默认分支 manifest/entrypoint 证据，并从 PyPI 读取版本。默认用当前 runtime JSON 作为 baseline 保留人工 review 过的分类证据，同时用 latest PyPI actual CLI tree/help 结果校正 Python 包成熟度；脚本会生成 `project-cli-tree-report.tsv` 作为审计报告。private repo 内容读取按显式 token 环境变量、当前 checkout 的 repo-local GitHub credential、ChatGlance typed ChatEnv active profile、ChatGH shared ChatEnv profile 的顺序回退，并且不打印 token。详细验收见 [`docs/projects.md`](docs/projects.md)：
+刷新 `项目` 页的推荐入口同样是仓库脚本；它用 ChatGH 当前 repo 列表刷新 PR/Issue/时间字段，只读读取默认分支 manifest/entrypoint 证据，并从 PyPI 读取版本。默认用当前 runtime JSON 作为 baseline 保留人工 review 过的分类证据，同时优先用 latest PyPI `--tree-brief`（回退到 `--tree`/help）结果校正 Python 包成熟度；脚本会生成 `project-cli-tree-report.tsv` 作为审计报告。private repo 内容读取按显式 token 环境变量、当前 checkout 的 repo-local GitHub credential、ChatGlance typed ChatEnv active profile、ChatGH shared ChatEnv profile 的顺序回退，并且不打印 token。详细验收见 [`docs/projects.md`](docs/projects.md)：
 
 ```bash
 CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
