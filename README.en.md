@@ -36,7 +36,7 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 ## Current capabilities
 
 - Refresh repository inventory JSON from current ChatGH/GitHub data and render a Glance `项目` page with a visible `generated_at` refresh timestamp; version display is PyPI-only, the compact table shows package entrypoints only, and Python early/non-early classification is corrected from latest-PyPI actual CLI tree/help evidence while stale baseline categories remain audit evidence only.
-- Generate native-click `详情` buttons in the `项目` table; the detail card shows project description, basics, CLI entrypoints, a brief CLI tree code block, and registered ChatEnv Env keys, descriptions, sensitivity flags, and default-presence flags without showing values.
+- Generate native-click `详情` buttons in the `项目` table; the detail card shows project description, basics, CLI entrypoints, a brief CLI tree code block with preserved `# ...` comments, and registered ChatEnv Env keys, descriptions, sensitivity flags, and default-presence flags. Projects with ENV metadata expose a CLI/ENV click switch, and no values are shown.
 - Keep the current tabs limited to `最近提交`, `待处理 PR / Issue`, `分类`, and `一览表`.
 - Filter the triage tab to repositories with non-zero PR or Issue counts and sort by `(PR, Issue, recent commit)` descending.
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.

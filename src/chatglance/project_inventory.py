@@ -705,7 +705,7 @@ def parse_actual_cli_tree_output(output: str) -> JsonDict:
         "global_options": global_options,
         "global_option_count": len(global_options),
         "compact_tree": "\n".join(compact_lines),
-        "brief_tree": "\n".join(compact_lines),
+        "brief_tree": output.strip(),
     }
 
 

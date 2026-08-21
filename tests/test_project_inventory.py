@@ -222,6 +222,8 @@ def test_parse_actual_cli_tree_output_counts_business_commands_not_global_option
     assert "[--home" in option_node["global_options"]
     assert complex_tree["business_command_count"] == 8
     assert complex_tree["business_commands"] == ["health", "models", "apikey", "list", "create", "account", "list", "refresh"]
+    assert "chatcrs  # HTTP/API-first CRS management helpers for ChatArch." in complex_tree["brief_tree"]
+    assert "├── health  # Check CRS health." in complex_tree["brief_tree"]
 
 
 def test_parse_actual_cli_tree_output_falls_back_to_help_commands_section():
@@ -338,6 +340,7 @@ def test_build_project_inventory_classifies_from_actual_cli_tree_over_stale_over
     assert by_name["ChatCRS"]["cli"]["actual_tree"]["business_command_count"] == 8
     assert "chatcrs" in by_name["ChatCRS"]["cli"]["actual_tree"]["brief_trees"]
     assert "apikey" in by_name["ChatCRS"]["cli"]["actual_tree"]["brief_trees"]["chatcrs"]
+    assert "# Manage CRS API keys." in by_name["ChatCRS"]["cli"]["actual_tree"]["brief_trees"]["chatcrs"]
     assert by_name["ChatCRS"]["reviewed_category"] == "python-early"
     assert by_name["ChatCRS"]["category"] == "python-package"
     assert category_key(by_name["ChatCRS"]) == "python-package"
