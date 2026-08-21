@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.4 - 2026-08-21
+
+Project category count display patch.
+
+- Show repository counts in each `分类` group title and align category ordering with the project table.
+
 ## 0.1.3 - 2026-08-21
 
 Project page metadata, authenticated GitHub refresh, and live dashboard detail UX release.

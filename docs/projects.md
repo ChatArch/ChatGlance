@@ -17,6 +17,8 @@ The page contains:
    - only repositories with open PRs or open issues.
 4. **分类**
    - reviewed project categories, including the short label `Python (early)` for early Python packages;
+   - group titles include repository counts, for example `Python 包 (31)`;
+   - category group order is `Python 包`, `Node / npm 包`, service/docs/other projects, then `Python (early)`;
    - Python package early/non-early classification is checked against the latest published package's actual CLI tree, not just entrypoint count or stale overrides.
 5. **一览表**
    - repository link and a native-click detail button;

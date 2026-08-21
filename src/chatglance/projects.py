@@ -18,7 +18,7 @@ CATEGORY_LABELS = {
     "docs/site": "文档 / 站点",
     "other": "其他项目",
 }
-CATEGORY_ORDER = ["python-package", "python-early", "node-package", "service/app", "docs/site", "other"]
+CATEGORY_ORDER = ["python-package", "node-package", "service/app", "docs/site", "other", "python-early"]
 CATEGORY_ALIASES = {
     "python-package": "python-package",
     "python-early": "python-early",
@@ -257,10 +257,11 @@ def make_category_groups(data: dict[str, Any]) -> list[dict[str, Any]]:
     for category in CATEGORY_ORDER:
         rows = [item for item in sorted_repos(data, "category") if category_key(item) == category]
         if rows:
-            groups.append({"title": CATEGORY_LABELS.get(category, category), "links": [bookmark_link(item) for item in rows]})
+            label = CATEGORY_LABELS.get(category, category)
+            groups.append({"title": f"{label} ({len(rows)})", "links": [bookmark_link(item) for item in rows]})
     remainder = [item for item in sorted_repos(data, "category") if category_key(item) not in CATEGORY_ORDER]
     if remainder:
-        groups.append({"title": "其他项目", "links": [bookmark_link(item) for item in remainder]})
+        groups.append({"title": f"其他项目 ({len(remainder)})", "links": [bookmark_link(item) for item in remainder]})
     return groups
 
 
