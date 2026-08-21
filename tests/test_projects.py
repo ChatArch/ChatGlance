@@ -148,6 +148,19 @@ def test_build_projects_page_has_only_current_tabs():
     assert "命令与文档" not in rendered
 
 
+def test_category_tab_group_titles_include_counts_and_sorted_order():
+    page = build_projects_page(sample_inventory())
+    category_widget = page["columns"][1]["widgets"][0]["widgets"][2]
+
+    assert [group["title"] for group in category_widget["groups"]] == [
+        "Python 包 (1)",
+        "Node / npm 包 (1)",
+        "服务 / 应用 (1)",
+        "文档 / 站点 (1)",
+        "Python (early) (2)",
+    ]
+
+
 def test_project_category_display_normalizes_early_python_packages():
     data = sample_inventory()
     repos = {item["name"]: item for item in data["repositories"]}
