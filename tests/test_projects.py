@@ -145,7 +145,7 @@ def group_tab_titles(page):
 def test_build_projects_page_has_only_current_tabs():
     page = build_projects_page(sample_inventory())
 
-    assert group_tab_titles(page) == ["最近提交", "待处理 PR / Issue", "分类", "一览表"]
+    assert group_tab_titles(page) == ["最近提交", "PR-issue", "分类", "一览表"]
     rendered = yaml.safe_dump(page, allow_unicode=True, sort_keys=False)
     assert "按名称" not in rendered
     assert "命令与文档" not in rendered

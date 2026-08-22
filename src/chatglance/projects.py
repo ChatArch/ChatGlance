@@ -235,7 +235,7 @@ def make_overview_groups(data: dict[str, Any]) -> list[dict[str, Any]]:
             "title": "概览",
             "links": [
                 {"title": "可见仓库", "url": "https://github.com/ChatArch", "description": str(counts.get("visible_repos", len(repositories(data)))), "icon": "si:github"},
-                {"title": "待处理 PR / Issue", "url": "https://github.com/ChatArch", "description": str(triage_count), "icon": "mdi:source-pull"},
+                {"title": "PR-issue", "url": "https://github.com/ChatArch", "description": str(triage_count), "icon": "mdi:source-pull"},
                 {"title": "刷新时间", "url": "https://github.com/ChatArch", "description": generated_at, "icon": "mdi:clock-outline"},
                 {"title": "生成数据", "url": "https://github.com/ChatArch", "description": "本地生成快照 · 不含凭据", "icon": "mdi:code-json"},
             ],
@@ -666,7 +666,7 @@ def build_projects_page(data: dict[str, Any], *, page_name: str = PAGE_NAME) -> 
                         "type": "group",
                         "widgets": [
                             make_sort_widget(data, "最近提交", "recent"),
-                            make_sort_widget(data, "待处理 PR / Issue", "triage"),
+                            make_sort_widget(data, "PR-issue", "triage"),
                             make_categories_widget(data),
                             make_table_widget(data),
                         ],

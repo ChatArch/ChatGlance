@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.8 - 2026-08-23
+
+Project refresh timer and PR-issue label patch.
+
+- Run source-based live refreshes with the ChatArch virtualenv Python when available so user-level timers do not import stale system-site ChatStyle packages.
+- Rename the `项目` page triage tab and overview label from `待处理 PR / Issue` to `PR-issue`.
+
 ## 0.1.7 - 2026-08-22
 
 Project detail CLI comment and switch release.
@@ -70,7 +77,7 @@ User-level systemd service management release.
 First workflow-verified ChatArch release target.
 
 - Add reusable Glance `项目` page generation from repository inventory JSON.
-- Keep project tabs focused on `最近提交`, `待处理 PR / Issue`, `分类`, and `一览表`.
+- Keep project tabs focused on `最近提交`, `PR-issue`, `分类`, and `一览表`.
 - Filter triage to repositories with non-zero PR/Issue counts.
 - Patch Glance `server-stats` disk display to root-only with `hide-mountpoints-by-default`.
 - Add `runtime maintain` for durable service-home maintenance.
