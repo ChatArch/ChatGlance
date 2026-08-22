@@ -13,7 +13,7 @@ The page contains:
    - a note that the snapshot is generated locally and contains no credentials.
 2. **最近提交**
    - repositories sorted by latest pushed/updated time.
-3. **待处理 PR / Issue**
+3. **PR-issue**
    - only repositories with open PRs or open issues.
 4. **分类**
    - reviewed project categories, including the short label `Python (early)` for early Python packages;

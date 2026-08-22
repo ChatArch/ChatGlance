@@ -8,4 +8,9 @@ set +x
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
-exec python3 -m chatglance.cli "$@"
+PYTHON_BIN="${CHATGLANCE_PYTHON_BIN:-}"
+if [[ -z "$PYTHON_BIN" && -x "$HOME/.chatarch/venv/bin/python" ]]; then
+  PYTHON_BIN="$HOME/.chatarch/venv/bin/python"
+fi
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+exec "$PYTHON_BIN" -m chatglance.cli "$@"

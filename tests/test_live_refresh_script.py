@@ -64,5 +64,7 @@ def test_source_chatglance_wrapper_for_live_scripts_uses_repo_src_without_shell_
 
     assert "set +x" in text
     assert "PYTHONPATH" in text
-    assert "exec python3 -m chatglance.cli \"$@\"" in text
+    assert "CHATGLANCE_PYTHON_BIN" in text
+    assert "$HOME/.chatarch/venv/bin/python" in text
+    assert "exec \"$PYTHON_BIN\" -m chatglance.cli \"$@\"" in text
     assert "eval" not in text

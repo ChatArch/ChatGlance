@@ -37,8 +37,8 @@
 
 - 通过 ChatGH/GitHub 当前数据刷新 repository inventory JSON，生成带 `generated_at` 的 Glance `项目` page；版本展示只看 PyPI，CLI 主表只展示 package entrypoint，Python early/non-early 分类使用 latest PyPI actual CLI tree/help 证据校正，旧 baseline 只保留为 reviewed audit evidence。
 - `项目` 页一览表为每个仓库生成原生点击 `详情` 按钮；详情卡片展示项目 description、基础信息、CLI entrypoint、保留 `# comment` 的 brief CLI tree 代码块，以及真实注册的 ChatEnv Env key、说明、敏感标记和默认存在标记；有 ENV 元数据时 CLI/ENV 可点击切换，但不展示任何值。
-- 当前 page tabs 固定为：`最近提交`、`待处理 PR / Issue`、`分类`、`一览表`。
-- `待处理 PR / Issue` 只显示 PR/Issue 非 0 的仓库，并按 `(PR, Issue, 最近提交)` 降序。
+- 当前 page tabs 固定为：`最近提交`、`PR-issue`、`分类`、`一览表`。
+- `PR-issue` 只显示 PR/Issue 非 0 的仓库，并按 `(PR, Issue, 最近提交)` 降序。
 - 生成 config 副本时清理 legacy generated pages：`Projects`、`ChatArch Projects`、`ChatArch Projects List`。
 - 为 Glance `server-stats` 写入“只显示有意义磁盘”的 Disk 配置：当前 live 策略始终保留 `/`，只有当 `/home` 是独立挂载点时才加 `/home`；每个可见 mountpoint 都显式写入 `hide: false`，避免 Disk 显示 `n/a`，同时继续隐藏 snap/loop/tmp/overlay。
 - 从 Infra inventory YAML 选择 SSH alias，执行只读采集，生成静态 `server-status.json`，再渲染 Glance `服务器`/Infra page。

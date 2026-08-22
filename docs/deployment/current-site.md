@@ -63,7 +63,7 @@ Maintenance flow:
 4. Normalize project type labels for the frontend: early Python packages render as `Python (early)`, but classification is checked against latest-PyPI actual CLI tree evidence. CLI entrypoint count alone is only the visible table surface; stale runtime baseline/category overrides are retained as `reviewed_category` audit evidence and must not demote a complex package such as ChatCRS.
 5. Render the current tabs:
    - `最近提交`
-   - `待处理 PR / Issue`
+   - `PR-issue`
    - `分类`
    - `一览表`
 6. Hide unhelpful Disk mountpoints such as snap/loop/tmp/overlay entries.
