@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 
 def load_collector_module():
@@ -54,6 +55,55 @@ def test_collector_marks_expired_oauth_without_exposing_token_values() -> None:
     assert summary["status"] == "partial"
     assert summary["failed_profiles"] == ["73-wzh"]
     assert summary["ok_profiles"] == ["allis"]
+
+
+def test_collector_calls_chatcrs_python_api_without_shelling_to_cli() -> None:
+    module = load_collector_module()
+    calls = []
+
+    fake_api = SimpleNamespace(
+        inspect_usage=lambda **kwargs: calls.append(("usage", kwargs)) or {"ok": True, "status": 200, "token_service": "Codex", "rate_limits": {}},
+        inspect_quota=lambda **kwargs: calls.append(("quota", kwargs))
+        or {"ok": True, "status": 200, "token_service": "Codex", "rate_limits": {"primary_used_percent": 1.0}},
+    )
+
+    usage = module.call_chatcrs_api("usage", profile="allis", refresh=False, timeout=7, codex_direct=fake_api)
+    quota = module.call_chatcrs_api("quota", profile="allis", refresh=True, timeout=9, codex_direct=fake_api)
+
+    assert usage["ok"] is True
+    assert quota["ok"] is True
+    assert calls == [
+        ("usage", {"profile": "allis", "refresh": False, "timeout": 7}),
+        ("quota", {"profile": "allis", "refresh": True, "timeout": 9}),
+    ]
+
+
+def test_profile_payload_records_chatcrs_token_service(monkeypatch) -> None:
+    module = load_collector_module()
+
+    def fake_bundle(profile: str, refresh: bool, timeout: int):
+        assert profile == "allis"
+        assert refresh is False
+        assert timeout == 7
+        return (
+            {"ok": True, "json": {"ok": True, "status": 200, "token_service": "Codex", "rate_limits": {}}},
+            {
+                "ok": True,
+                "json": {
+                    "ok": True,
+                    "status": 200,
+                    "token_service": "Codex",
+                    "rate_limits": {"primary_used_percent": 1.0, "primary_reset_after_seconds": 60, "primary_window_minutes": 300},
+                },
+            },
+        )
+
+    monkeypatch.setattr(module, "request_bundle", fake_bundle)
+
+    payload = module.profile_payload("allis", 7)
+
+    assert payload["status"] == "ok"
+    assert payload["token_service"] == "Codex"
 
 
 def test_collector_keeps_last_known_values_for_failed_profile() -> None:

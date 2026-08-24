@@ -16,11 +16,9 @@ def test_refresh_account_limits_script_lives_in_chatglance_scripts_with_proxy_an
     assert "proxy env --no-mask" in text
     assert "set +x" in text
     assert "eval" not in text
-    assert "chatcrs" in text
-    assert "${CHATCRS_BIN:-$HOME/.chatarch/venv/bin/chatcrs}" in text
-    assert "codex" in text
-    assert "usage" in text
-    assert "quota" in text
+    assert "PYTHON_BIN" in text
+    assert "$HOME/.chatarch/venv/bin/python" in text
+    assert "--chatcrs-bin" not in text
     assert "account-limits render-page" in text
     assert "account-limits update-config" in text
     assert "config:validate" in text
@@ -38,6 +36,8 @@ def test_refresh_account_limits_script_refuses_to_print_secret_values() -> None:
         "echo \"$PROXY_EXPORTS\"",
         "cat ~/.chatarch/envs/OpenAI",
         "cat ~/.chatarch/tokens/OpenAI",
+        "cat ~/.chatarch/envs/Codex",
+        "cat ~/.chatarch/tokens/Codex",
         "OPENAI_API_KEY=",
         "OPENAI_REFRESH_TOKEN=",
     ]
@@ -56,3 +56,6 @@ def test_collect_codex_account_limits_script_fetches_public_reset_tracker() -> N
     assert "source_url" in text
     assert "confirmed_reset_count" in text
     assert "urllib.request" in text
+    assert "inspect_usage" in text
+    assert "inspect_quota" in text
+    assert "subprocess" not in text
