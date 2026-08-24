@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import html
 import json
 import calendar
+import re
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,11 @@ SECRET_KEYS = {
     "password",
     "secret",
 }
+SECRET_ASSIGNMENT_PATTERN = re.compile(
+    r"\b(access_token|refresh_token|id_token|authorization|cookie|api[_-]?key|proxy|password|secret)\s*[:=]\s*\S+",
+    re.I,
+)
+BEARER_PATTERN = re.compile(r"Bearer\s+\S+", re.I)
 
 
 def text_value(value: Any, fallback: str = "") -> str:
@@ -41,6 +47,13 @@ def text_value(value: Any, fallback: str = "") -> str:
 
 def html_text(value: Any, fallback: str = "—") -> str:
     return html.escape(text_value(value, fallback), quote=True)
+
+
+def _display_error(value: Any) -> str:
+    text = text_value(value)
+    text = BEARER_PATTERN.sub("Bearer [REDACTED]", text)
+    text = SECRET_ASSIGNMENT_PATTERN.sub("[redacted secret]", text)
+    return text[:220]
 
 
 def _safe_number(value: Any) -> int | float | None:
@@ -306,6 +319,72 @@ def _progress_percent(value: Any) -> float | None:
     return max(0.0, min(100.0, float(number)))
 
 
+def _profile_probe_status(profile: dict[str, Any]) -> str:
+    status = text_value(profile.get("status"), "ok")
+    if status == "ok":
+        return "valid"
+    explicit = text_value(profile.get("credential_status"))
+    if explicit:
+        return explicit
+    error_text = text_value(profile.get("error")).lower()
+    if "401" in error_text or "oauth refresh failed" in error_text or "unauthorized" in error_text:
+        return "invalid_or_expired"
+    if "credential" in error_text:
+        return "missing"
+    return "probe_failed"
+
+
+def _status_label(value: str) -> str:
+    labels = {
+        "valid": "有效",
+        "invalid_or_expired": "已失效 / 需重新登录",
+        "missing": "缺少凭据",
+        "probe_failed": "请求失败",
+        "ok": "正常",
+        "partial": "部分失败",
+        "error": "失败",
+    }
+    return labels.get(value, value or "未知")
+
+
+def _refresh_status(safe: dict[str, Any], codex_profiles: list[dict[str, Any]]) -> dict[str, Any]:
+    raw = safe.get("refresh_status") if isinstance(safe.get("refresh_status"), dict) else {}
+    failed = raw.get("failed_profiles") if isinstance(raw.get("failed_profiles"), list) else []
+    ok_profiles = raw.get("ok_profiles") if isinstance(raw.get("ok_profiles"), list) else []
+    if not raw:
+        failed = [text_value(item.get("profile")) for item in codex_profiles if text_value(item.get("status"), "ok") != "ok"]
+        ok_profiles = [text_value(item.get("profile")) for item in codex_profiles if text_value(item.get("status"), "ok") == "ok"]
+    failed = [text_value(item) for item in failed if text_value(item)]
+    ok_profiles = [text_value(item) for item in ok_profiles if text_value(item)]
+    total = int(raw.get("profiles_total") or len(codex_profiles) or len(failed) + len(ok_profiles))
+    status = text_value(raw.get("status"), "")
+    if not status:
+        status = "ok" if not failed else "error" if not ok_profiles else "partial"
+    failures: list[dict[str, str]] = []
+    by_profile = {text_value(item.get("profile")): item for item in codex_profiles}
+    for profile in failed:
+        item = by_profile.get(profile, {})
+        failures.append(
+            {
+                "profile": profile,
+                "credential_status": _profile_probe_status(item),
+                "error_type": text_value(item.get("error_type")),
+                "error": _display_error(item.get("error")),
+                "last_successful_at": text_value(item.get("last_successful_at")),
+                "using_last_known_values": "yes" if item.get("using_last_known_values") else "",
+            }
+        )
+    return {
+        "status": status,
+        "profiles_total": total,
+        "ok_count": int(raw.get("ok_count") or len(ok_profiles)),
+        "failed_count": int(raw.get("failed_count") or len(failed)),
+        "ok_profiles": ok_profiles,
+        "failed_profiles": failed,
+        "failures": failures,
+    }
+
+
 def _primary_window(profile: dict[str, Any]) -> dict[str, Any] | None:
     windows = profile.get("windows") if isinstance(profile.get("windows"), list) else []
     candidates = [window for window in windows if isinstance(window, dict)]
@@ -415,6 +494,7 @@ def normalize_account_limits_data(data: dict[str, Any]) -> dict[str, Any]:
         "accounts": accounts,
         "codex": codex_profiles,
         "codex_reset": codex_reset,
+        "refresh_status": _refresh_status(safe, codex_profiles),
         "counts": {
             "accounts": len(accounts),
             "codex_profiles": len(codex_profiles),
@@ -451,6 +531,7 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
         progress_value = _progress_percent(primary.get("used_percent")) if primary else None
         progress_width = f"{progress_value:.1f}%" if progress_value is not None else "0%"
         status = text_value(profile.get("status"))
+        credential = _profile_probe_status(profile)
         error_bits = []
         if status and status != "ok":
             error_bits.append(status)
@@ -458,10 +539,16 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
             error_bits.append(text_value(profile.get("error_type")))
         error_label = " · ".join(bit for bit in error_bits if bit)
         error_html = ""
+        if credential != "valid":
+            error_html += f'<p class="limit-status-line">凭据状态：{html_text(_status_label(credential))}</p>'
+        if profile.get("using_last_known_values"):
+            last_success = _fmt_beijing_iso(profile.get("last_successful_at")) or text_value(profile.get("last_successful_at"))
+            if last_success:
+                error_html += f'<p class="limit-status-line">保留上次成功值：{html_text(last_success)}</p>'
         if error_label:
             error_html += f'<p class="limit-muted">状态：{html_text(error_label)}</p>'
         if profile.get("error"):
-            error_html += f'<p class="limit-muted">{html_text(profile.get("error"))}</p>'
+            error_html += f'<p class="limit-muted">{html_text(_display_error(profile.get("error")))}</p>'
         codex_cards.append(
             f"""
 <article class="codex-account-card site-style-card">
@@ -490,11 +577,44 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
     if codex_reset.get("used_fallback"):
         reset_intro_parts.append("账号窗口采样")
     reset_intro = " · ".join(reset_intro_parts)
+    refresh_status = normalized["refresh_status"]
+    status_class = text_value(refresh_status.get("status"), "ok")
+    failure_lines = []
+    for failure in refresh_status.get("failures", []):
+        if not isinstance(failure, dict):
+            continue
+        label_bits = [text_value(failure.get("profile")), _status_label(text_value(failure.get("credential_status")))]
+        if failure.get("error_type"):
+            label_bits.append(text_value(failure.get("error_type")))
+        if failure.get("using_last_known_values"):
+            last_success = _fmt_beijing_iso(failure.get("last_successful_at")) or text_value(failure.get("last_successful_at"))
+            if last_success:
+                label_bits.append(f"保留上次成功值 {last_success}")
+        if failure.get("error"):
+            label_bits.append(text_value(failure.get("error")))
+        failure_lines.append(" · ".join(bit for bit in label_bits if bit))
+    status_summary = (
+        f"采集状态：{_status_label(status_class)} · 成功 {refresh_status.get('ok_count')}/{refresh_status.get('profiles_total')}"
+        f" · 失败 {refresh_status.get('failed_count')}"
+    )
+    status_details = "；".join(failure_lines)
+    status_banner = ""
+    if status_class != "ok" or status_details:
+        status_banner = (
+            f'<div class="limit-status-banner is-{html_text(status_class)}">'
+            f'<strong>{html_text(status_summary)}</strong>'
+            f'{f"<span>{html_text(status_details)}</span>" if status_details else ""}'
+            '</div>'
+        )
 
     return f"""
 <style>
 .limit-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); }}
 .limit-muted {{ color: var(--color-text-subdue); font-size: 0.76rem; margin-top: 0.18rem; }}
+.limit-status-banner {{ display: flex; flex-direction: column; gap: 0.25rem; border: 1px solid var(--color-separator); border-radius: 14px; padding: 0.62rem 0.75rem; margin-bottom: 0.8rem; background: color-mix(in srgb, var(--color-negative) 9%, var(--color-widget-background)); }}
+.limit-status-banner strong {{ font-size: 0.86rem; }}
+.limit-status-banner span, .limit-status-line {{ color: var(--color-text-subdue); font-size: 0.76rem; }}
+.limit-status-line {{ margin-top: 0.18rem; }}
 .account-limits-resource-layout {{ display: grid; grid-template-columns: minmax(250px, 0.86fr) minmax(360px, 1.35fr); gap: 0.9rem; align-items: start; }}
 .codex-reset-panel, .codex-accounts-panel {{ border: 1px solid var(--color-separator); border-radius: 18px; padding: 0.85rem; background: var(--color-widget-background); box-shadow: 0 8px 28px rgba(15,23,42,0.08); }}
 .codex-reset-panel h2, .codex-accounts-panel h2 {{ margin: 0 0 0.45rem; font-size: 1rem; }}
@@ -525,6 +645,7 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 @media (max-width: 720px) {{ .account-limits-resource-layout {{ grid-template-columns: 1fr; }} }}
 </style>
 <div class="limit-summary">订阅详情 · 最新整理：{html_text(normalized.get('generated_at'))} · Codex 账号 {counts['codex_profiles']} 个</div>
+{status_banner}
 <div class="account-limits-resource-layout">
   <section class="codex-reset-panel"><h2>Codex 官方重置日历</h2><p class="limit-muted">{reset_intro}</p>{reset_calendar}</section>
   <section class="codex-accounts-panel"><h2>账号使用额度</h2><div class="codex-account-card-grid">{''.join(codex_cards) or '<p>暂无 Codex 账号数据。</p>'}</div></section>

@@ -239,6 +239,19 @@ def safe_error(result: dict[str, Any]) -> str:
     return text[:300]
 
 
+def credential_status(error_text: str, *, ok: bool) -> str:
+    """Return a non-secret credential/probe status for dashboard display."""
+
+    if ok:
+        return "valid"
+    lowered = error_text.lower()
+    if "401" in lowered or "oauth refresh failed" in lowered or "unauthorized" in lowered:
+        return "invalid_or_expired"
+    if "no codex credentials" in lowered or "credentials" in lowered:
+        return "missing"
+    return "probe_failed"
+
+
 def usage_window(profile: str, usage_payload: Any, quota_payload: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     windows: list[dict[str, Any]] = []
     history: list[dict[str, Any]] = []
@@ -315,12 +328,16 @@ def profile_payload(chatcrs_bin: str, profile: str, timeout: int) -> dict[str, A
         f"quota_headers={'yes' if headers_present(quota_json) else 'no'}",
         f"refresh_attempted={'yes' if refreshed else 'no'}",
     ]
+    error_text = ""
+    if not ok:
+        error_text = safe_error(usage) or safe_error(quota) or "Codex usage/quota probe failed"
     payload = {
         "profile": profile,
         "account_id": f"hash:{short_hash(usage_json.get('account_id') or quota_json.get('account_id') or profile)}",
         "account_name": profile,
         "plan": usage_json.get("plan") or usage_json.get("account_plan") or "Codex",
         "status": "ok" if ok else "error",
+        "credential_status": credential_status(error_text, ok=ok),
         "windows": windows,
         "reset_history": history,
         "details": details,
@@ -332,8 +349,25 @@ def profile_payload(chatcrs_bin: str, profile: str, timeout: int) -> dict[str, A
     }
     if not ok:
         payload["error_type"] = "CodexProbeError"
-        payload["error"] = safe_error(usage) or safe_error(quota) or "Codex usage/quota probe failed"
+        payload["error"] = error_text
     return payload
+
+
+def refresh_status(payloads: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize profile probe results without exposing credential values."""
+
+    failed = [str(item.get("profile")) for item in payloads if item.get("status") != "ok"]
+    ok_profiles = [str(item.get("profile")) for item in payloads if item.get("status") == "ok"]
+    status = "ok" if not failed else "error" if not ok_profiles else "partial"
+    return {
+        "status": status,
+        "profiles_total": len(payloads),
+        "ok_count": len(ok_profiles),
+        "failed_count": len(failed),
+        "ok_profiles": ok_profiles,
+        "failed_profiles": failed,
+        "message": "all profiles refreshed" if status == "ok" else f"failed_profiles={','.join(failed)}",
+    }
 
 
 def parse_profiles(text: str) -> list[str]:
@@ -360,6 +394,54 @@ def load_history(path: Path | None) -> list[dict[str, Any]]:
     return history
 
 
+def load_previous_profiles(path: Path | None) -> dict[str, dict[str, Any]]:
+    if path is None or not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    generated_at = payload.get("generated_at")
+    profiles: dict[str, dict[str, Any]] = {}
+    for item in payload.get("codex", []):
+        if not isinstance(item, dict):
+            continue
+        profile = str(item.get("profile") or "").strip()
+        if not profile:
+            continue
+        previous = dict(item)
+        previous["_previous_generated_at"] = generated_at
+        profiles[profile] = previous
+    return profiles
+
+
+def apply_last_known_values(current: list[dict[str, Any]], previous: dict[str, dict[str, Any]]) -> None:
+    """Keep last successful values visible while marking current failure."""
+
+    for payload in current:
+        if payload.get("status") == "ok":
+            continue
+        profile = str(payload.get("profile") or "")
+        previous_payload = previous.get(profile)
+        if not previous_payload:
+            continue
+        windows = previous_payload.get("windows") if isinstance(previous_payload.get("windows"), list) else []
+        if windows and not payload.get("windows"):
+            payload["windows"] = windows
+        for key in ("account_id", "account_name", "plan", "rate_limits"):
+            if previous_payload.get(key) not in (None, "", [], {}) and payload.get(key) in (None, "", [], {}):
+                payload[key] = previous_payload.get(key)
+        last_successful_at = previous_payload.get("last_successful_at")
+        if not last_successful_at and previous_payload.get("status") == "ok":
+            last_successful_at = previous_payload.get("_previous_generated_at")
+        if windows or last_successful_at:
+            payload["using_last_known_values"] = True
+        if last_successful_at:
+            payload["last_successful_at"] = last_successful_at
+
+
 def merge_history(current: list[dict[str, Any]], previous: list[dict[str, Any]]) -> list[dict[str, Any]]:
     merged: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
@@ -382,11 +464,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=int, default=60, help="Per ChatCRS command timeout in seconds")
     parser.add_argument("--reset-timeout", type=int, default=25, help="Public codexreset.org fetch timeout in seconds")
     parser.add_argument("--no-public-reset", action="store_true", help="Skip public codexreset.org reset timeline fetch")
+    parser.add_argument("--fail-on-profile-error", action="store_true", help="Exit non-zero when any profile probe fails after writing JSON.")
     args = parser.parse_args(argv)
 
     profiles = parse_profiles(args.profiles)
     previous_history = load_history(args.history)
+    previous_profiles = load_previous_profiles(args.history)
     current_payloads = [profile_payload(args.chatcrs_bin, profile, args.timeout) for profile in profiles]
+    apply_last_known_values(current_payloads, previous_profiles)
     current_history: list[dict[str, Any]] = []
     for payload in current_payloads:
         history = payload.get("reset_history") if isinstance(payload.get("reset_history"), list) else []
@@ -402,6 +487,7 @@ def main(argv: list[str] | None = None) -> int:
 
     result = {
         "generated_at": iso_now(),
+        "refresh_status": refresh_status(current_payloads),
         "accounts": [],
         "codex": current_payloads,
         "codex_reset": {"source": PUBLIC_RESET_SOURCE, "status": "skipped", "events": []}
@@ -422,7 +508,7 @@ def main(argv: list[str] | None = None) -> int:
     failures = [item.get("profile") for item in current_payloads if item.get("status") != "ok"]
     if failures:
         print("failed_profiles=" + ",".join(str(item) for item in failures), file=sys.stderr)
-        return 1
+        return 1 if args.fail_on_profile_error else 0
     return 0
 
 

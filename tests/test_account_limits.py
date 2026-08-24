@@ -120,6 +120,7 @@ def test_normalize_account_limits_dedupes_crs_accounts_and_counts_codex_windows(
         "codex_reset_events": 2,
     }
     assert normalized["codex_reset"]["source"] == "https://codexreset.org/"
+    assert normalized["refresh_status"]["status"] == "ok"
     wzh = normalized["accounts"][0]
     assert wzh["account_name"] == "wzh"
     assert wzh["profiles"] == ["default", "wzh"]
@@ -286,6 +287,54 @@ def test_normalize_account_limits_accepts_chatcrs_display_rows_shape() -> None:
     assert normalized["accounts"][0]["usage"]["total_all_tokens"] == 200671051
     assert "No Codex credentials stored" in html
     assert "AuthError" in html
+
+
+def test_render_account_limits_html_publishes_partial_probe_status_without_secrets() -> None:
+    data = sample_account_limits_data()
+    data["refresh_status"] = {
+        "status": "partial",
+        "profiles_total": 2,
+        "ok_count": 1,
+        "failed_count": 1,
+        "ok_profiles": ["allis"],
+        "failed_profiles": ["73-wzh"],
+    }
+    data["codex"] = [
+        data["codex"][0],
+        {
+            "profile": "73-wzh",
+            "account_name": "73-wzh",
+            "status": "error",
+            "credential_status": "invalid_or_expired",
+            "error_type": "CodexProbeError",
+            "error": "Error: OpenAI OAuth refresh failed: status=401 access_token=secret-value",
+            "using_last_known_values": True,
+            "last_successful_at": "2026-08-23T01:21:19+08:00",
+            "windows": [
+                {
+                    "label": "Primary",
+                    "used_percent": 88.8,
+                    "reset_at": "2026-08-25T10:00:00+08:00",
+                    "window_minutes": 300,
+                }
+            ],
+        },
+    ]
+
+    normalized = normalize_account_limits_data(data)
+    html = render_account_limits_html(data)
+
+    assert normalized["refresh_status"]["status"] == "partial"
+    assert normalized["refresh_status"]["failed_profiles"] == ["73-wzh"]
+    assert "采集状态：部分失败" in html
+    assert "成功 1/2" in html
+    assert "73-wzh" in html
+    assert "已失效 / 需重新登录" in html
+    assert "88.8%" in html
+    assert "保留上次成功值：2026-08-23T01:21:19+08:00" in html
+    assert "status=401" in html
+    assert "secret-value" not in html
+    assert "access_token" not in html
 
 
 def test_render_account_limits_html_omits_empty_crs_account_placeholder() -> None:
