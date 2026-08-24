@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Publish account-limits refreshes even when one Codex profile fails, preserving the last successful quota window while marking the current profile status as expired/unavailable.
+- Add a top-level account-limits collection status banner and per-profile credential status lines without exposing token values.
+
 ## 0.1.8 - 2026-08-23
 
 Project refresh timer and PR-issue label patch.
