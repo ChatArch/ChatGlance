@@ -13,9 +13,12 @@ set +x
 
 RUNTIME_HOME="${CHATGLANCE_RUNTIME_HOME:-$HOME/.chatarch/glance}"
 CHATGLANCE_BIN="${CHATGLANCE_BIN:-chatglance}"
-CHATCRS_BIN="${CHATGLANCE_CHATCRS_BIN:-${CHATCRS_BIN:-$HOME/.chatarch/venv/bin/chatcrs}}"
 GLANCE_BIN="${GLANCE_BIN:-$RUNTIME_HOME/bin/glance}"
 CHATCLASH_BIN="${CHATGLANCE_CHATCLASH_BIN:-$HOME/.chatarch/venv/bin/chatclash}"
+PYTHON_BIN="${CHATGLANCE_PYTHON_BIN:-${CHATCRS_PYTHON_BIN:-$HOME/.chatarch/venv/bin/python}}"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="python3"
+fi
 PROFILES="${CHATGLANCE_ACCOUNT_LIMITS_PROFILES:-73-wzh allis lookeng yifei}"
 DATA_PATH="${CHATGLANCE_ACCOUNT_LIMITS_JSON:-$RUNTIME_HOME/data/account-limits.json}"
 PAGE_PATH="${CHATGLANCE_ACCOUNT_LIMITS_PAGE_YML:-$RUNTIME_HOME/data/account-limits-page.yml}"
@@ -85,13 +88,12 @@ fi
 collector_args=(
   --profiles "$PROFILES"
   --output "$NEXT_DATA_PATH"
-  --chatcrs-bin "$CHATCRS_BIN"
   --timeout "$TIMEOUT"
 )
 if [[ -f "$DATA_PATH" ]]; then
   collector_args+=(--history "$DATA_PATH")
 fi
-"$COLLECTOR" "${collector_args[@]}"
+"$PYTHON_BIN" "$COLLECTOR" "${collector_args[@]}"
 
 "$CHATGLANCE_BIN" account-limits render-page \
   --data "$NEXT_DATA_PATH" \

@@ -15,7 +15,6 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 RUNTIME_HOME="${CHATGLANCE_RUNTIME_HOME:-$HOME/.chatarch/glance}"
 CHATGLANCE_BIN="${CHATGLANCE_BIN:-chatglance}"
-CHATGH_BIN="${CHATGH_BIN:-chatgh}"
 UVX_BIN="${CHATGLANCE_UVX_BIN:-uvx}"
 GLANCE_BIN="${GLANCE_BIN:-$RUNTIME_HOME/bin/glance}"
 OWNER="${CHATGLANCE_PROJECTS_OWNER:-ChatArch}"
@@ -54,7 +53,6 @@ mkdir -p "$(dirname "$DATA_PATH")" "$(dirname "$PAGE_PATH")" "$(dirname "$CLI_RE
   fi
   "$CHATGLANCE_BIN" projects collect \
     --owner "$OWNER" \
-    --chatgh-bin "$CHATGH_BIN" \
     --workers "$PROJECT_WORKERS" \
     "${baseline_args[@]}" \
     "${cli_tree_args[@]}" \

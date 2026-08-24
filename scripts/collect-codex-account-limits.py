@@ -2,7 +2,8 @@
 """Collect Codex account usage data for ChatGlance account-limits pages.
 
 This helper is intentionally conservative:
-- Uses ChatCRS public CLI rather than reading token files directly.
+- Uses ChatCRS' importable Python API rather than reading token files directly
+  or shelling back into a CLI.
 - First tries stored access tokens with --no-refresh.
 - If usage/quota fails or quota headers are missing, refreshes once through
   ChatCRS/ChatEnv and retries.
@@ -15,9 +16,7 @@ import argparse
 import html
 import hashlib
 import json
-import os
 import re
-import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -45,32 +44,40 @@ def short_hash(value: Any) -> str:
     return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:12]
 
 
-def run_chatcrs(chatcrs_bin: str, args: list[str], timeout: int) -> dict[str, Any]:
-    env = os.environ.copy()
-    for key in list(env):
-        if key.startswith("OPENAI_"):
-            env.pop(key, None)
-    proc = subprocess.run(
-        [chatcrs_bin, *args],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=timeout,
-        env=env,
-        check=False,
-    )
-    parsed: Any = None
-    stdout = proc.stdout.strip()
-    if stdout:
-        try:
-            parsed = json.loads(stdout)
-        except json.JSONDecodeError:
-            parsed = {"raw_stdout_hash": short_hash(stdout), "raw_stdout_len": len(stdout)}
+def call_chatcrs_api(
+    operation: str,
+    *,
+    profile: str,
+    refresh: bool,
+    timeout: int,
+    codex_direct: Any | None = None,
+) -> dict[str, Any]:
+    """Call the ChatCRS Python API and normalize it to collector result shape."""
+
+    try:
+        if codex_direct is None:
+            from chatcrs import codex_direct as codex_direct_module
+
+            codex_direct = codex_direct_module
+        if operation == "usage":
+            payload = codex_direct.inspect_usage(profile=profile, refresh=refresh, timeout=timeout)
+        elif operation == "quota":
+            payload = codex_direct.inspect_quota(profile=profile, refresh=refresh, timeout=timeout)
+        else:
+            raise ValueError(f"unsupported ChatCRS Codex operation: {operation}")
+    except Exception as exc:  # noqa: BLE001 - collector must publish redacted failure status.
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "json": {},
+            "stderr": f"{type(exc).__name__}: {redact_text(str(exc))}",
+        }
+    ok = bool(isinstance(payload, dict) and payload.get("ok"))
     return {
-        "ok": proc.returncode == 0,
-        "exit_code": proc.returncode,
-        "json": parsed,
-        "stderr": proc.stderr.strip(),
+        "ok": ok,
+        "exit_code": 0 if ok else 1,
+        "json": payload if isinstance(payload, dict) else {},
+        "stderr": "" if ok else f"ChatCRS {operation} failed: status={payload.get('status') if isinstance(payload, dict) else 'unknown'}",
     }
 
 
@@ -98,10 +105,9 @@ def needs_refresh(usage: dict[str, Any], quota: dict[str, Any]) -> bool:
     return not headers_present(quota_json)
 
 
-def request_bundle(chatcrs_bin: str, profile: str, refresh: bool, timeout: int) -> tuple[dict[str, Any], dict[str, Any]]:
-    flag = "--refresh" if refresh else "--no-refresh"
-    usage = run_chatcrs(chatcrs_bin, ["codex", "usage", "--profile", profile, flag, "--json-output"], timeout)
-    quota = run_chatcrs(chatcrs_bin, ["codex", "quota", "--profile", profile, flag, "--json-output"], timeout)
+def request_bundle(profile: str, refresh: bool, timeout: int) -> tuple[dict[str, Any], dict[str, Any]]:
+    usage = call_chatcrs_api("usage", profile=profile, refresh=refresh, timeout=timeout)
+    quota = call_chatcrs_api("quota", profile=profile, refresh=refresh, timeout=timeout)
     return usage, quota
 
 
@@ -146,12 +152,12 @@ def parse_public_reset_events(page_html: str) -> list[dict[str, Any]]:
 
     events: list[dict[str, Any]] = []
     item_pattern = re.compile(
-        r'<div class="w-72[^>]*data-datetime="(?P<datetime>[^"]+)"[^>]*data-kind="(?P<kind>[^"]+)"[^>]*data-source-url="(?P<source_url>[^"]+)"[^>]*data-testid="reset-timeline-item"(?P<body>.*?)(?=<div class="w-72[^>]*data-datetime=|</div></div></div></div></section>)',
+        r'<div\s+[^>]*data-datetime="(?P<datetime>[^"]+)"[^>]*data-kind="(?P<kind>[^"]+)"[^>]*data-source-url="(?P<source_url>[^"]+)"[^>]*data-testid="reset-timeline-item"(?P<body>.*?)(?=<div\s+[^>]*data-datetime="[^"]+"[^>]*data-kind="[^"]+"[^>]*data-source-url="[^"]+"[^>]*data-testid="reset-timeline-item"|</section>)',
         re.S,
     )
     for match in item_pattern.finditer(page_html):
         body = match.group("body")
-        if match.group("kind") != "confirmed" or "Confirmed reset" not in body:
+        if match.group("kind") != "confirmed":
             continue
         reset_dt = parse_datetime_utc(match.group("datetime"))
         if reset_dt is None:
@@ -160,7 +166,7 @@ def parse_public_reset_events(page_html: str) -> list[dict[str, Any]]:
         scope = ""
         source_label = ""
         for dt_html, dd_html in re.findall(r"<dt[^>]*>(.*?)</dt><dd[^>]*>(.*?)</dd>", body, re.S):
-            label = strip_html(dt_html).lower()
+            label = strip_html(dt_html).lower().rstrip(":")
             if label == "scope":
                 scope = strip_html(dd_html)
             elif label == "source":
@@ -307,14 +313,14 @@ def usage_window(profile: str, usage_payload: Any, quota_payload: Any) -> tuple[
     return windows, history
 
 
-def profile_payload(chatcrs_bin: str, profile: str, timeout: int) -> dict[str, Any]:
+def profile_payload(profile: str, timeout: int) -> dict[str, Any]:
     attempts: list[dict[str, Any]] = []
-    usage, quota = request_bundle(chatcrs_bin, profile, refresh=False, timeout=timeout)
+    usage, quota = request_bundle(profile, refresh=False, timeout=timeout)
     attempts.append({"mode": "no_refresh", "usage_ok": usage.get("ok"), "quota_ok": quota.get("ok")})
     refreshed = False
     if needs_refresh(usage, quota):
         refreshed = True
-        usage, quota = request_bundle(chatcrs_bin, profile, refresh=True, timeout=timeout)
+        usage, quota = request_bundle(profile, refresh=True, timeout=timeout)
         attempts.append({"mode": "refresh_once", "usage_ok": usage.get("ok"), "quota_ok": quota.get("ok")})
 
     usage_json = usage.get("json") if isinstance(usage.get("json"), dict) else {}
@@ -338,6 +344,7 @@ def profile_payload(chatcrs_bin: str, profile: str, timeout: int) -> dict[str, A
         "plan": usage_json.get("plan") or usage_json.get("account_plan") or "Codex",
         "status": "ok" if ok else "error",
         "credential_status": credential_status(error_text, ok=ok),
+        "token_service": usage_json.get("token_service") or quota_json.get("token_service") or "Codex",
         "windows": windows,
         "reset_history": history,
         "details": details,
@@ -457,10 +464,9 @@ def merge_history(current: list[dict[str, Any]], previous: list[dict[str, Any]])
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--profiles", default="73-wzh allis lookeng yifei", help="Space/comma-separated ChatEnv OpenAI profile names")
+    parser.add_argument("--profiles", default="73-wzh allis lookeng yifei", help="Space/comma-separated ChatEnv Codex profile names")
     parser.add_argument("--output", type=Path, required=True, help="Glance account-limits JSON output path")
     parser.add_argument("--history", type=Path, help="Previous account-limits JSON whose reset history should be merged")
-    parser.add_argument("--chatcrs-bin", default="chatcrs", help="ChatCRS executable")
     parser.add_argument("--timeout", type=int, default=60, help="Per ChatCRS command timeout in seconds")
     parser.add_argument("--reset-timeout", type=int, default=25, help="Public codexreset.org fetch timeout in seconds")
     parser.add_argument("--no-public-reset", action="store_true", help="Skip public codexreset.org reset timeline fetch")
@@ -470,7 +476,7 @@ def main(argv: list[str] | None = None) -> int:
     profiles = parse_profiles(args.profiles)
     previous_history = load_history(args.history)
     previous_profiles = load_previous_profiles(args.history)
-    current_payloads = [profile_payload(args.chatcrs_bin, profile, args.timeout) for profile in profiles]
+    current_payloads = [profile_payload(profile, args.timeout) for profile in profiles]
     apply_last_known_values(current_payloads, previous_profiles)
     current_history: list[dict[str, Any]] = []
     for payload in current_payloads:

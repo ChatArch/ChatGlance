@@ -172,6 +172,33 @@ def test_read_token_from_chatgh_chatenv_loads_github_config_without_logging(monk
     assert calls == {"envs_dir": "/safe/envs"}
 
 
+def test_run_chatgh_repo_list_uses_chatgh_python_api_without_shelling(monkeypatch):
+    calls = []
+
+    chatgh_module = types.ModuleType("chatgh")
+    chatgh_github_module = types.ModuleType("chatgh.github")
+    chatgh_commands_module = types.ModuleType("chatgh.github.commands")
+
+    def fake_list_repos(*, owner, limit, sort, direction, token):
+        calls.append({"owner": owner, "limit": limit, "sort": sort, "direction": direction, "token": token})
+        return [{"name": "ChatCRS"}, {"not": "filtered"}, "ignored"]
+
+    def fail_run(*args, **kwargs):
+        raise AssertionError("run_chatgh_repo_list should import ChatGH's Python API instead of invoking chatgh CLI")
+
+    chatgh_commands_module.list_repos = fake_list_repos
+    monkeypatch.setitem(sys.modules, "chatgh", chatgh_module)
+    monkeypatch.setitem(sys.modules, "chatgh.github", chatgh_github_module)
+    monkeypatch.setitem(sys.modules, "chatgh.github.commands", chatgh_commands_module)
+    monkeypatch.setattr(project_inventory_module, "resolve_token", lambda: "github-token")
+    monkeypatch.setattr(project_inventory_module.subprocess, "run", fail_run)
+
+    rows = project_inventory_module.run_chatgh_repo_list(owner="ChatArch", limit=10)
+
+    assert rows == [{"name": "ChatCRS"}, {"not": "filtered"}]
+    assert calls == [{"owner": "ChatArch", "limit": 10, "sort": "name", "direction": "asc", "token": "github-token"}]
+
+
 def test_parse_click_command_names_handles_positional_and_keyword_names():
     assert parse_click_command_names(CHATGLANCE_CLI_SOURCE) == ["projects", "render-page", "update-config"]
 

@@ -13,6 +13,8 @@ dependencies = [
     "click>=8.0",
     "chatstyle>=0.2.0,<0.3.0",
     "chatenv>=0.2.10,<0.3.0",
+    "ChatCRS>=0.3.0,<0.4.0",
+    "ChatGH>=0.2.12,<0.3.0",
     "PyYAML>=6.0,<7.0",
     "tomli>=1.1.0; python_version < '3.11'",
 ]

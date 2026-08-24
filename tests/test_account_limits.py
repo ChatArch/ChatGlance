@@ -148,6 +148,31 @@ def test_render_account_limits_html_shows_current_usage_and_reset_dates_without_
     assert "session-secret" not in html
 
 
+def test_render_account_limits_html_uses_newest_reset_event_over_stale_latest_field() -> None:
+    data = sample_account_limits_data()
+    data["codex_reset"]["latest"] = {
+        "time_utc": "2026-08-11T00:28:16Z",
+        "time_bjt": "2026-08-11 08:28:16 +0800",
+        "date_bjt": "2026-08-11",
+    }
+    data["codex_reset"]["events"].insert(
+        0,
+        {
+            "event_id": "2091400000000000000",
+            "time_utc": "2026-08-24T00:46:51Z",
+            "time_bjt": "2026-08-24 08:46:51 +0800",
+            "date_bjt": "2026-08-24",
+            "scope": "Paid Codex users",
+            "source_url": "https://x.com/thsottiaux/status/2091400000000000000",
+        },
+    )
+
+    html = render_account_limits_html(data)
+
+    assert "最新：2026-08-24 08:46:51 +0800" in html
+    assert "最新：2026-08-11 08:28:16 +0800" not in html
+
+
 def test_build_account_limits_page_creates_wide_html_page() -> None:
     page = build_account_limits_page(sample_account_limits_data())
 

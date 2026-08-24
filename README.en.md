@@ -67,11 +67,10 @@ python -m twine check dist/*
 
 See [`docs/cli-tree.md`](docs/cli-tree.md) for the complete command surface. ChatStyle renders `chatglance --tree` from the real Click registry with parameter signatures; `chatglance --tree-brief` keeps the same nodes and descriptions without signatures. Tests run both entry points and compare them byte-for-byte with the documented trees.
 
-The recommended `项目` refresh entry point is also a repository script. It uses the current ChatGH repository list for PR/Issue/timestamp fields, then reads default-branch manifest/entrypoint evidence without cloning, building, or executing repository source trees. For Python package maturity, it probes the latest published PyPI package with `uvx --from <package>@latest <entrypoint> --tree-brief`, falling back to `--tree` or help output, and writes `project-cli-tree-report.tsv` as audit evidence. Private repository reads fall back in order from explicit token environment variables, to the current checkout's repo-local GitHub credential, to the typed active ChatGlance ChatEnv profile, and finally to ChatGH's shared ChatEnv profile. Token values are never printed:
+The recommended `项目` refresh entry point is also a repository script. It uses ChatGH's Python API for the current repository list and PR/Issue/timestamp fields, then reads default-branch manifest/entrypoint evidence without cloning, building, or executing repository source trees. For Python package maturity, it probes the latest published PyPI package with `uvx --from <package>@latest <entrypoint> --tree-brief`, falling back to `--tree` or help output, and writes `project-cli-tree-report.tsv` as audit evidence. Private repository reads fall back in order from explicit token environment variables, to the current checkout's repo-local GitHub credential, to the typed active ChatGlance ChatEnv profile, and finally to ChatGH's shared ChatEnv profile. Token values are never printed:
 
 ```bash
 CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
-CHATGH_BIN=~/.chatarch/venv/bin/chatgh \
 CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
 bash scripts/refresh-projects-page.sh
 ```
@@ -111,7 +110,6 @@ Refresh current GitHub/ChatGH project data:
 ```bash
 chatglance projects collect \
   --owner ChatArch \
-  --chatgh-bin ~/.chatarch/venv/bin/chatgh \
   --output ~/.chatarch/glance/data/chatarch-projects.json
 ```
 

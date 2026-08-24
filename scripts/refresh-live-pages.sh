@@ -23,8 +23,9 @@ if ! flock -n 9; then
 fi
 export CHATGLANCE_RUNTIME_HOME="$RUNTIME_HOME"
 export CHATGLANCE_BIN="${CHATGLANCE_BIN:-$SCRIPT_DIR/chatglance-from-source}"
-export CHATGH_BIN="${CHATGH_BIN:-$HOME/.chatarch/venv/bin/chatgh}"
-export CHATCRS_BIN="${CHATCRS_BIN:-$HOME/.chatarch/venv/bin/chatcrs}"
+if [[ -z "${CHATGLANCE_PYTHON_BIN:-}" && -x "$HOME/.chatarch/venv/bin/python" ]]; then
+  export CHATGLANCE_PYTHON_BIN="$HOME/.chatarch/venv/bin/python"
+fi
 export CHATGLANCE_CHATCLASH_BIN="${CHATGLANCE_CHATCLASH_BIN:-$HOME/.chatarch/venv/bin/chatclash}"
 export GLANCE_BIN="${GLANCE_BIN:-$RUNTIME_HOME/bin/glance}"
 # The live dashboard should publish the current reviewed server state, including
