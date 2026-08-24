@@ -152,12 +152,12 @@ def parse_public_reset_events(page_html: str) -> list[dict[str, Any]]:
 
     events: list[dict[str, Any]] = []
     item_pattern = re.compile(
-        r'<div class="w-72[^>]*data-datetime="(?P<datetime>[^"]+)"[^>]*data-kind="(?P<kind>[^"]+)"[^>]*data-source-url="(?P<source_url>[^"]+)"[^>]*data-testid="reset-timeline-item"(?P<body>.*?)(?=<div class="w-72[^>]*data-datetime=|</div></div></div></div></section>)',
+        r'<div\s+[^>]*data-datetime="(?P<datetime>[^"]+)"[^>]*data-kind="(?P<kind>[^"]+)"[^>]*data-source-url="(?P<source_url>[^"]+)"[^>]*data-testid="reset-timeline-item"(?P<body>.*?)(?=<div\s+[^>]*data-datetime="[^"]+"[^>]*data-kind="[^"]+"[^>]*data-source-url="[^"]+"[^>]*data-testid="reset-timeline-item"|</section>)',
         re.S,
     )
     for match in item_pattern.finditer(page_html):
         body = match.group("body")
-        if match.group("kind") != "confirmed" or "Confirmed reset" not in body:
+        if match.group("kind") != "confirmed":
             continue
         reset_dt = parse_datetime_utc(match.group("datetime"))
         if reset_dt is None:
@@ -166,7 +166,7 @@ def parse_public_reset_events(page_html: str) -> list[dict[str, Any]]:
         scope = ""
         source_label = ""
         for dt_html, dd_html in re.findall(r"<dt[^>]*>(.*?)</dt><dd[^>]*>(.*?)</dd>", body, re.S):
-            label = strip_html(dt_html).lower()
+            label = strip_html(dt_html).lower().rstrip(":")
             if label == "scope":
                 scope = strip_html(dd_html)
             elif label == "source":

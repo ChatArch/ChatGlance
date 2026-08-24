@@ -42,6 +42,28 @@ def test_timestamp_helpers_emit_explicit_beijing_time() -> None:
     assert module.iso_from_epoch(0) == "1970-01-01T08:00:00+08:00"
 
 
+def test_public_reset_parser_handles_current_timeline_item_markup() -> None:
+    module = load_collector_module()
+    html = '''
+    <section>
+      <div class="relative flex" data-datetime="2026-08-13T00:00:00.000Z" data-kind="confirmed" data-source-url="https://x.com/thsottiaux/status/2087423996115681767" data-testid="reset-timeline-item">
+        <span>Confirmed reset</span><h3>Old reset</h3><dl><dt>Scope:</dt><dd>Shared/global Codex usage quota</dd><dt>Source:</dt><dd>Tibo on X</dd></dl>
+      </div>
+      <div class="relative flex" data-datetime="2026-08-24T00:46:51.000Z" data-kind="confirmed" data-source-url="https://x.com/thsottiaux/status/2091400000000000000" data-testid="reset-timeline-item">
+        <span>Confirmed reset</span><h3>Global Codex quota reset</h3><dl><dt>Scope:</dt><dd>Paid Codex users</dd><dt>Source:</dt><dd>Tibo on X</dd></dl>
+      </div>
+    </section>
+    '''
+
+    events = module.parse_public_reset_events(html)
+
+    assert len(events) == 2
+    assert events[0]["time_utc"] == "2026-08-24T00:46:51Z"
+    assert events[0]["time_bjt"] == "2026-08-24 08:46:51 +0800"
+    assert events[0]["scope"] == "Paid Codex users"
+    assert events[0]["event_id"] == "2091400000000000000"
+
+
 def test_collector_marks_expired_oauth_without_exposing_token_values() -> None:
     module = load_collector_module()
 

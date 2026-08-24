@@ -294,7 +294,7 @@ def _normalize_codex_reset(safe: dict[str, Any], codex_profiles: list[dict[str, 
                     events.append(event)
 
     events.sort(key=lambda item: text_value(item.get("reset_at")), reverse=True)
-    latest = raw_reset.get("latest") if isinstance(raw_reset, dict) and isinstance(raw_reset.get("latest"), dict) else {}
+    latest = events[0] if events else raw_reset.get("latest") if isinstance(raw_reset, dict) and isinstance(raw_reset.get("latest"), dict) else {}
     return {
         "source": source,
         "status": status,
