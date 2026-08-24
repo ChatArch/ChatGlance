@@ -58,4 +58,5 @@ def test_collect_codex_account_limits_script_fetches_public_reset_tracker() -> N
     assert "urllib.request" in text
     assert "inspect_usage" in text
     assert "inspect_quota" in text
+    assert "chatcrs-bin" not in text
     assert "subprocess" not in text

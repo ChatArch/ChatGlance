@@ -28,4 +28,5 @@ def test_manifest_registers_current_chatarch_runtime():
     assert "chatstyle>=0.2.0,<0.3.0" in manifest["project"]["dependencies"]
     assert "chatenv>=0.2.10,<0.3.0" in manifest["project"]["dependencies"]
     assert "ChatCRS>=0.3.0,<0.4.0" in manifest["project"]["dependencies"]
+    assert "ChatGH>=0.2.12,<0.3.0" in manifest["project"]["dependencies"]
     assert manifest["project"]["entry-points"]["chatenv.configs"]["chatglance"] == "chatglance.config"

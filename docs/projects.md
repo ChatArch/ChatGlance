@@ -63,7 +63,6 @@ Recommended live invocation:
 
 ```bash
 CHATGLANCE_BIN=$HOME/.chatarch/venv/bin/chatglance \
-CHATGH_BIN=$HOME/.chatarch/venv/bin/chatgh \
 CHATGLANCE_RUNTIME_HOME=$HOME/.chatarch/glance \
 bash /home/zhihong/Playground/core/ChatGlance/scripts/refresh-projects-page.sh
 ```

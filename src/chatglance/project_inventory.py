@@ -50,7 +50,6 @@ class RefreshOptions:
     collect_actual_cli_trees: bool = False
     uvx_bin: str = "uvx"
     token_env: tuple[str, ...] = ("CHATGLANCE_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN")
-    chatgh_bin: str = "chatgh"
     generated_at: str | None = None
 
 
@@ -161,19 +160,16 @@ def resolve_token(env_names: Sequence[str] = ("CHATGLANCE_GITHUB_TOKEN", "GITHUB
     return read_token_from_chatgh_chatenv()
 
 
-def run_chatgh_repo_list(*, owner: str, limit: int, chatgh_bin: str = "chatgh") -> list[JsonDict]:
-    """Return repositories from ChatGH's authenticated repo-list command."""
+def run_chatgh_repo_list(*, owner: str, limit: int) -> list[JsonDict]:
+    """Return repositories through ChatGH's importable Python API."""
 
-    result = subprocess.run(
-        [chatgh_bin, "repo", "list", "--owner", owner, "--limit", str(limit), "--sort", "name", "--direction", "asc", "--json-output"],
-        check=True,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    payload = json.loads(result.stdout)
+    try:
+        from chatgh.github.commands import list_repos
+    except Exception as exc:  # pragma: no cover - exercised only when ChatGH is not installed.
+        raise RuntimeError("ChatGH Python API is required for project inventory refresh") from exc
+    payload = list_repos(owner=owner, limit=limit, sort="name", direction="asc", token=resolve_token())
     if not isinstance(payload, list):
-        raise ValueError("chatgh repo list --json-output must return a JSON array")
+        raise ValueError("ChatGH repo list API must return a JSON array")
     return [item for item in payload if isinstance(item, dict)]
 
 
@@ -950,8 +946,8 @@ def build_project_inventory(
         "source": {
             "owner": owner,
             "repo_count": len(rows),
-            "auth_source": "chatgh repo list + optional GitHub token environment",
-            "notes": "Repository list comes from ChatGH. Manifest, package entrypoint, and ChatEnv schema evidence are fetched read-only from default-branch repository files. Version display uses PyPI only. When enabled, actual CLI tree evidence comes from installing the latest PyPI package with uvx and running each entrypoint's --tree-brief/--tree/help output. Env values and credentials are omitted.",
+            "auth_source": "ChatGH Python API + optional GitHub token environment",
+            "notes": "Repository list comes from ChatGH's importable Python API. Manifest, package entrypoint, and ChatEnv schema evidence are fetched read-only from default-branch repository files. Version display uses PyPI only. When enabled, actual CLI tree evidence comes from installing the latest PyPI package with uvx and running each entrypoint's --tree-brief/--tree/help output. Env values and credentials are omitted.",
         },
         "counts": counts,
         "categories": categories,
@@ -962,7 +958,7 @@ def build_project_inventory(
 def refresh_project_inventory(*, output_path: str | Path, options: RefreshOptions = RefreshOptions(), repo_list_json: str | Path | None = None, baseline_data: str | Path | None = None) -> JsonDict:
     """Refresh and write the project inventory JSON."""
 
-    rows = load_repo_rows(repo_list_json) if repo_list_json else run_chatgh_repo_list(owner=options.owner, limit=options.limit, chatgh_bin=options.chatgh_bin)
+    rows = load_repo_rows(repo_list_json) if repo_list_json else run_chatgh_repo_list(owner=options.owner, limit=options.limit)
     token = resolve_token(options.token_env)
     fetcher = make_github_fetcher(token=token, timeout=options.timeout)
     baseline_inventory = load_baseline_inventory(baseline_data)

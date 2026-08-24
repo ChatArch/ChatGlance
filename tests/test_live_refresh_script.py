@@ -24,7 +24,7 @@ def test_live_refresh_script_runs_three_page_refreshers_hourly_ready_and_restart
     assert "if [[ \"$changed_any\" == \"1\" ]]" in text
     assert "service_action=restarted" in text
     assert "service_action=unchanged" in text
-    assert "export CHATGH_BIN" in text
+    assert "export CHATGH_BIN" not in text
     assert "export CHATCRS_BIN" not in text
     assert "export CHATGLANCE_CHATCLASH_BIN" in text
     assert "export CHATGLANCE_ALLOW_SERVER_OFFLINE_REGRESSION" in text

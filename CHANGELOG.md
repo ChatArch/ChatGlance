@@ -5,6 +5,7 @@
 - Publish account-limits refreshes even when one Codex profile fails, preserving the last successful quota window while marking the current profile status as expired/unavailable.
 - Add a top-level account-limits collection status banner and per-profile credential status lines without exposing token values.
 - Call ChatCRS' importable Python Codex API from the account-limits collector and run the collector with the ChatArch Python environment, so Python code no longer shells back into the `chatcrs` CLI.
+- Call ChatGH's importable Python repo-list API from project inventory refresh, removing `--chatgh-bin` / `CHATGH_BIN` from ChatGlance scripts and the `projects collect` CLI surface.
 
 ## 0.1.8 - 2026-08-23
 

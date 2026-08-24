@@ -23,7 +23,6 @@ if ! flock -n 9; then
 fi
 export CHATGLANCE_RUNTIME_HOME="$RUNTIME_HOME"
 export CHATGLANCE_BIN="${CHATGLANCE_BIN:-$SCRIPT_DIR/chatglance-from-source}"
-export CHATGH_BIN="${CHATGH_BIN:-$HOME/.chatarch/venv/bin/chatgh}"
 export CHATGLANCE_CHATCLASH_BIN="${CHATGLANCE_CHATCLASH_BIN:-$HOME/.chatarch/venv/bin/chatclash}"
 export GLANCE_BIN="${GLANCE_BIN:-$RUNTIME_HOME/bin/glance}"
 # The live dashboard should publish the current reviewed server state, including

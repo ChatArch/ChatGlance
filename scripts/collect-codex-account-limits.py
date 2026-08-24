@@ -467,7 +467,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--profiles", default="73-wzh allis lookeng yifei", help="Space/comma-separated ChatEnv Codex profile names")
     parser.add_argument("--output", type=Path, required=True, help="Glance account-limits JSON output path")
     parser.add_argument("--history", type=Path, help="Previous account-limits JSON whose reset history should be merged")
-    parser.add_argument("--chatcrs-bin", default="", help="Deprecated compatibility option; ChatCRS is imported as a Python API.")
     parser.add_argument("--timeout", type=int, default=60, help="Per ChatCRS command timeout in seconds")
     parser.add_argument("--reset-timeout", type=int, default=25, help="Public codexreset.org fetch timeout in seconds")
     parser.add_argument("--no-public-reset", action="store_true", help="Skip public codexreset.org reset timeline fetch")

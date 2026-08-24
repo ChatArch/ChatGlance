@@ -67,11 +67,10 @@ python -m twine check dist/*
 
 完整命令面见 [`docs/cli-tree.md`](docs/cli-tree.md)。`chatglance --tree` 由 ChatStyle 从真实 Click registry 生成带参数签名的完整树；`chatglance --tree-brief` 保留相同节点和说明但省略签名。源码测试会直接运行两个入口，并与文档中的树逐字对齐。
 
-刷新 `项目` 页的推荐入口同样是仓库脚本；它用 ChatGH 当前 repo 列表刷新 PR/Issue/时间字段，只读读取默认分支 manifest/entrypoint 证据，并从 PyPI 读取版本。默认用当前 runtime JSON 作为 baseline 保留人工 review 过的分类证据，同时优先用 latest PyPI `--tree-brief`（回退到 `--tree`/help）结果校正 Python 包成熟度；脚本会生成 `project-cli-tree-report.tsv` 作为审计报告。private repo 内容读取按显式 token 环境变量、当前 checkout 的 repo-local GitHub credential、ChatGlance typed ChatEnv active profile、ChatGH shared ChatEnv profile 的顺序回退，并且不打印 token。详细验收见 [`docs/projects.md`](docs/projects.md)：
+刷新 `项目` 页的推荐入口同样是仓库脚本；它用 ChatGH Python API 获取当前 repo 列表并刷新 PR/Issue/时间字段，只读读取默认分支 manifest/entrypoint 证据，并从 PyPI 读取版本。默认用当前 runtime JSON 作为 baseline 保留人工 review 过的分类证据，同时优先用 latest PyPI `--tree-brief`（回退到 `--tree`/help）结果校正 Python 包成熟度；脚本会生成 `project-cli-tree-report.tsv` 作为审计报告。private repo 内容读取按显式 token 环境变量、当前 checkout 的 repo-local GitHub credential、ChatGlance typed ChatEnv active profile、ChatGH shared ChatEnv profile 的顺序回退，并且不打印 token。详细验收见 [`docs/projects.md`](docs/projects.md)：
 
 ```bash
 CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
-CHATGH_BIN=~/.chatarch/venv/bin/chatgh \
 CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
 bash scripts/refresh-projects-page.sh
 ```
@@ -111,7 +110,6 @@ bash scripts/refresh-sites-page.sh
 ```bash
 chatglance projects collect \
   --owner ChatArch \
-  --chatgh-bin ~/.chatarch/venv/bin/chatgh \
   --output ~/.chatarch/glance/data/chatarch-projects.json
 ```
 

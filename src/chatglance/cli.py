@@ -97,7 +97,6 @@ def projects() -> None:
 @click.option("--repo-list-json", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Existing ChatGH repo-list JSON to enrich instead of calling ChatGH.")
 @click.option("--baseline-data", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Prior project inventory JSON whose reviewed categories should be preserved.")
 @click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Inventory JSON path to write.")
-@click.option("--chatgh-bin", default="chatgh", show_default=True, help="ChatGH executable used for authenticated repo listing.")
 @click.option("--uvx-bin", default="uvx", show_default=True, help="uvx executable used to install latest PyPI packages for actual CLI tree collection.")
 @click.option("--limit", default=500, show_default=True, type=int, help="Maximum repositories to request from ChatGH.")
 @click.option("--workers", default=12, show_default=True, type=int, help="Parallel GitHub contents workers for manifest reads.")
@@ -109,7 +108,6 @@ def collect_projects(
     repo_list_json: Path | None,
     baseline_data: Path | None,
     output_path: Path,
-    chatgh_bin: str,
     uvx_bin: str,
     limit: int,
     workers: int,
@@ -128,7 +126,6 @@ def collect_projects(
             limit=limit,
             workers=workers,
             timeout=timeout,
-            chatgh_bin=chatgh_bin,
             uvx_bin=uvx_bin,
             collect_actual_cli_trees=actual_cli_tree,
             cli_tree_timeout=cli_tree_timeout,

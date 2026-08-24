@@ -21,7 +21,7 @@ chatglance
 ├── home  # Patch ChatArch home-page widgets.
 │   └── remove-widget [--config CONFIG-PATH] [--output OUTPUT-PATH] [--type WIDGET-TYPES] [--home-page-name HOME-PAGE-NAME]  # Write a config copy with unavailable home-page widgets removed.
 ├── projects  # Generate Glance project dashboard pages.
-│   ├── collect [--owner OWNER] [--repo-list-json REPO-LIST-JSON] [--baseline-data BASELINE-DATA] [--output OUTPUT-PATH] [--chatgh-bin CHATGH-BIN] [--uvx-bin UVX-BIN] [--limit LIMIT] [--workers WORKERS] [--timeout TIMEOUT] [--actual-cli-tree] [--cli-tree-timeout CLI-TREE-TIMEOUT]  # Write refreshed project inventory JSON from read-only GitHub metadata.
+│   ├── collect [--owner OWNER] [--repo-list-json REPO-LIST-JSON] [--baseline-data BASELINE-DATA] [--output OUTPUT-PATH] [--uvx-bin UVX-BIN] [--limit LIMIT] [--workers WORKERS] [--timeout TIMEOUT] [--actual-cli-tree] [--cli-tree-timeout CLI-TREE-TIMEOUT]  # Write refreshed project inventory JSON from read-only GitHub metadata.
 │   ├── render-page [--data DATA-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME]  # Write the `项目` page YAML from inventory JSON.
 │   └── update-config [--data DATA-PATH] [--config CONFIG-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME]  # Write a config copy with the generated project page replaced.
 ├── runtime  # Maintain a durable Glance service runtime.
