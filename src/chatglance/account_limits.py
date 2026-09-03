@@ -394,7 +394,10 @@ def _primary_window(profile: dict[str, Any]) -> dict[str, Any] | None:
     return candidates[0] if candidates else None
 
 
-def _render_reset_calendar(reset_events: list[dict[str, Any]]) -> str:
+def _render_reset_calendar(
+    reset_events: list[dict[str, Any]],
+    reference_month: tuple[int, int] | None = None,
+) -> str:
     parsed_events: list[tuple[datetime, dict[str, Any]]] = []
     for event in reset_events:
         dt = _parse_datetime(event.get("reset_at"))
@@ -408,8 +411,17 @@ def _render_reset_calendar(reset_events: list[dict[str, Any]]) -> str:
         events_by_month_day[(dt.year, dt.month)][dt.day].append((dt, event))
 
     # Keep the UI as a real Calendar: one visible month at a time, with compact
-    # month options for looking back through recent reset history.
-    month_keys = sorted(events_by_month_day.keys(), reverse=True)[:4]
+    # month options for looking back through recent reset history. Always offer
+    # the reference (latest refresh) month first so the switcher automatically
+    # gains new months as time passes, even before any reset event has been
+    # confirmed in them yet.
+    if reference_month is None:
+        now = datetime.now(BEIJING_TIMEZONE)
+        reference_month = (now.year, now.month)
+    month_keys = sorted(events_by_month_day.keys(), reverse=True)
+    if reference_month not in month_keys:
+        month_keys.insert(0, reference_month)
+    month_keys = month_keys[:4]
     radios: list[str] = []
     options: list[str] = []
     month_panels: list[str] = []
@@ -564,7 +576,9 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 
     codex_reset = normalized["codex_reset"]
     reset_events = codex_reset["events"]
-    reset_calendar = _render_reset_calendar(reset_events)
+    reference_dt = _parse_datetime(normalized.get("generated_at"))
+    reference_month = (reference_dt.year, reference_dt.month) if reference_dt is not None else None
+    reset_calendar = _render_reset_calendar(reset_events, reference_month=reference_month)
     reset_source = text_value(codex_reset.get("source"), "账号窗口采样")
     source_label = "codexreset.org" if "codexreset.org" in reset_source else reset_source
     source_url = _safe_http_url(reset_source)
