@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import datetime
 
 import yaml
 
 from chatglance.account_limits import (
     ACCOUNT_LIMITS_PAGE_NAME,
+    BEIJING_TIMEZONE,
     build_account_limits_page,
     normalize_account_limits_data,
     render_account_limits_html,
@@ -445,6 +447,30 @@ def test_render_account_limits_html_uses_recent_public_reset_months() -> None:
     assert "2026 年 06 月" in html
     assert "2026 年 05 月" in html
     assert "2026 年 04 月" not in html
+
+
+def test_render_account_limits_html_auto_includes_current_refresh_month() -> None:
+    data = sample_account_limits_data()
+    data["generated_at"] = "2026-09-03T22:24:53+08:00"
+
+    html = render_account_limits_html(data)
+
+    # The newest refresh month appears even though no reset event has been
+    # confirmed in it yet, and it is the default visible panel.
+    assert "2026 年 09 月" in html
+    assert "2026 年 08 月" in html
+    assert html.index("2026 年 09 月") < html.index("2026 年 08 月")
+    assert "0 次 reset" in html
+
+
+def test_render_account_limits_html_falls_back_to_bjt_now_when_generated_at_missing() -> None:
+    data = sample_account_limits_data()
+    data["generated_at"] = ""
+
+    html = render_account_limits_html(data)
+
+    now = datetime.now(BEIJING_TIMEZONE)
+    assert f"{now.year} 年 {now.month:02d} 月" in html
 
 
 def test_render_account_limits_html_does_not_render_unsafe_reset_source_urls() -> None:
