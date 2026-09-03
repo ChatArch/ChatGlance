@@ -9,6 +9,7 @@ import yaml
 from chatglance.account_limits import (
     ACCOUNT_LIMITS_PAGE_NAME,
     BEIJING_TIMEZONE,
+    _render_reset_calendar,
     build_account_limits_page,
     normalize_account_limits_data,
     render_account_limits_html,
@@ -442,32 +443,61 @@ def test_render_account_limits_html_uses_recent_public_reset_months() -> None:
 
     html = render_account_limits_html(data)
 
-    assert "2026 年 08 月" in html
-    assert "2026 年 07 月" in html
-    assert "2026 年 06 月" in html
-    assert "2026 年 05 月" in html
-    assert "2026 年 04 月" not in html
+    now = datetime.now(BEIJING_TIMEZONE)
+    current = (now.year, now.month)
+    event_months = [(2026, month) for month in range(8, 3, -1)]
+    expected = [current] + [month for month in event_months if month != current]
+    expected = expected[:4]
+    for year, month in expected:
+        assert f"{year} 年 {month:02d} 月" in html
+    for month in range(4, 9):
+        if (2026, month) not in expected:
+            assert f"2026 年 {month:02d} 月" not in html
 
 
-def test_render_account_limits_html_auto_includes_current_refresh_month() -> None:
+def test_render_account_limits_html_auto_includes_current_month() -> None:
     data = sample_account_limits_data()
-    data["generated_at"] = "2026-09-03T22:24:53+08:00"
 
     html = render_account_limits_html(data)
 
-    # The newest refresh month appears even though no reset event has been
-    # confirmed in it yet, and it is the default visible panel.
-    assert "2026 年 09 月" in html
-    assert "2026 年 08 月" in html
+    # The current Beijing month appears as a calendar option even though the
+    # sample reset events only contain August resets.
+    now = datetime.now(BEIJING_TIMEZONE)
+    assert f"{now.year} 年 {now.month:02d} 月" in html
+    assert "0 次 reset" in html
+
+
+def test_reset_calendar_puts_reference_month_first_even_without_events() -> None:
+    events = [
+        {
+            "event_id": "aug-1",
+            "reset_at": "2026-08-11T08:28:16+08:00",
+            "time_bjt": "2026-08-11 08:28:16 +0800",
+            "date_bjt": "2026-08-11",
+            "scope": "Recent reset",
+            "source_url": "https://x.com/example/status/aug-1",
+        }
+    ]
+
+    html = _render_reset_calendar(events, reference_month=(2026, 9))
+
     assert html.index("2026 年 09 月") < html.index("2026 年 08 月")
     assert "0 次 reset" in html
 
 
-def test_render_account_limits_html_falls_back_to_bjt_now_when_generated_at_missing() -> None:
-    data = sample_account_limits_data()
-    data["generated_at"] = ""
+def test_reset_calendar_defaults_to_current_bjt_month() -> None:
+    events = [
+        {
+            "event_id": "aug-1",
+            "reset_at": "2026-08-11T08:28:16+08:00",
+            "time_bjt": "2026-08-11 08:28:16 +0800",
+            "date_bjt": "2026-08-11",
+            "scope": "Recent reset",
+            "source_url": "https://x.com/example/status/aug-1",
+        }
+    ]
 
-    html = render_account_limits_html(data)
+    html = _render_reset_calendar(events)
 
     now = datetime.now(BEIJING_TIMEZONE)
     assert f"{now.year} 年 {now.month:02d} 月" in html

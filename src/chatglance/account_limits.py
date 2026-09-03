@@ -412,9 +412,9 @@ def _render_reset_calendar(
 
     # Keep the UI as a real Calendar: one visible month at a time, with compact
     # month options for looking back through recent reset history. Always offer
-    # the reference (latest refresh) month first so the switcher automatically
-    # gains new months as time passes, even before any reset event has been
-    # confirmed in them yet.
+    # the current month (by Beijing date) first so the switcher automatically
+    # gains new months as the date advances, even before any reset event has
+    # been confirmed in them yet.
     if reference_month is None:
         now = datetime.now(BEIJING_TIMEZONE)
         reference_month = (now.year, now.month)
@@ -576,9 +576,7 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 
     codex_reset = normalized["codex_reset"]
     reset_events = codex_reset["events"]
-    reference_dt = _parse_datetime(normalized.get("generated_at"))
-    reference_month = (reference_dt.year, reference_dt.month) if reference_dt is not None else None
-    reset_calendar = _render_reset_calendar(reset_events, reference_month=reference_month)
+    reset_calendar = _render_reset_calendar(reset_events)
     reset_source = text_value(codex_reset.get("source"), "账号窗口采样")
     source_label = "codexreset.org" if "codexreset.org" in reset_source else reset_source
     source_url = _safe_http_url(reset_source)
