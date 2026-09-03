@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import html
 import json
 import calendar
@@ -397,6 +397,7 @@ def _primary_window(profile: dict[str, Any]) -> dict[str, Any] | None:
 def _render_reset_calendar(
     reset_events: list[dict[str, Any]],
     reference_month: tuple[int, int] | None = None,
+    current_date: date | None = None,
 ) -> str:
     parsed_events: list[tuple[datetime, dict[str, Any]]] = []
     for event in reset_events:
@@ -415,9 +416,10 @@ def _render_reset_calendar(
     # the current month (by Beijing date) first so the switcher automatically
     # gains new months as the date advances, even before any reset event has
     # been confirmed in them yet.
+    if current_date is None:
+        current_date = datetime.now(BEIJING_TIMEZONE).date()
     if reference_month is None:
-        now = datetime.now(BEIJING_TIMEZONE)
-        reference_month = (now.year, now.month)
+        reference_month = (current_date.year, current_date.month)
     month_keys = sorted(events_by_month_day.keys(), reverse=True)
     if reference_month not in month_keys:
         month_keys.insert(0, reference_month)
@@ -449,17 +451,25 @@ def _render_reset_calendar(
                 cells.append('<div class="codex-reset-day is-empty"></div>')
                 continue
             events = days.get(day, [])
+            is_today = current_date == date(year, month, day)
+            classes = ["codex-reset-day"]
+            if events:
+                classes.append("is-reset")
+            if is_today:
+                classes.append("is-today")
+            class_attr = " ".join(classes)
             if events:
                 labels = ", ".join(
                     text_value(event.get("label") or event.get("source"), "Reset")
                     for _, event in events[:3]
                 )
-                title = html_text(labels, "Reset")
+                title = f"今天 · {labels}" if is_today else labels
                 cells.append(
-                    f'<div class="codex-reset-day is-reset" title="{title}"><span class="day-number">{day}</span></div>'
+                    f'<div class="{class_attr}" title="{html_text(title, "Reset")}"><span class="day-number">{day}</span></div>'
                 )
             else:
-                cells.append(f'<div class="codex-reset-day"><span class="day-number">{day}</span></div>')
+                title_attr = ' title="今天"' if is_today else ""
+                cells.append(f'<div class="{class_attr}"{title_attr}><span class="day-number">{day}</span></div>')
         month_panels.append(
             f"""
 <article class="codex-calendar-month {month_class}">
@@ -644,6 +654,9 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 .codex-reset-weekdays span {{ color: var(--color-text-subdue); font-size: 0.62rem; text-align: center; }}
 .codex-reset-day {{ min-height: 1.55rem; border-radius: 9px; display: grid; place-items: center; color: var(--color-text-subdue); font-size: 0.7rem; }}
 .codex-reset-day.is-reset {{ border: 1px solid var(--color-primary); color: var(--color-text-base); font-weight: 700; background: color-mix(in srgb, var(--color-primary) 16%, transparent); }}
+.codex-reset-day.is-today {{ color: var(--color-text-base); font-weight: 800; }}
+.codex-reset-day.is-today .day-number {{ inline-size: 1.28rem; block-size: 1.28rem; border: 2px solid #ef4444; border-radius: 999px; display: inline-grid; place-items: center; line-height: 1; box-shadow: 0 0 0 2px color-mix(in srgb, #ef4444 14%, transparent); }}
+.codex-reset-day.is-reset.is-today .day-number {{ background: color-mix(in srgb, #ef4444 12%, transparent); }}
 .codex-reset-day.is-empty {{ visibility: hidden; }}
 .codex-account-card-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 0.85rem; }}
 .codex-account-card.site-style-card {{ border: 1px solid var(--color-separator); border-radius: 18px; overflow: hidden; background: var(--color-widget-background); box-shadow: 0 8px 28px rgba(15,23,42,0.08); display: flex; flex-direction: column; }}
