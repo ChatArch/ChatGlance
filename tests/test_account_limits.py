@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import datetime
+from datetime import date, datetime
 
 import yaml
 
@@ -465,6 +465,9 @@ def test_render_account_limits_html_auto_includes_current_month() -> None:
     now = datetime.now(BEIJING_TIMEZONE)
     assert f"{now.year} 年 {now.month:02d} 月" in html
     assert "0 次 reset" in html
+    assert "is-today" in html
+    assert ".codex-reset-day.is-today .day-number" in html
+    assert "border: 2px solid #ef4444" in html
 
 
 def test_reset_calendar_puts_reference_month_first_even_without_events() -> None:
@@ -501,6 +504,42 @@ def test_reset_calendar_defaults_to_current_bjt_month() -> None:
 
     now = datetime.now(BEIJING_TIMEZONE)
     assert f"{now.year} 年 {now.month:02d} 月" in html
+
+
+def test_reset_calendar_marks_today_with_red_circle() -> None:
+    events = [
+        {
+            "event_id": "aug-1",
+            "reset_at": "2026-08-11T08:28:16+08:00",
+            "time_bjt": "2026-08-11 08:28:16 +0800",
+            "date_bjt": "2026-08-11",
+            "scope": "Recent reset",
+            "source_url": "https://x.com/example/status/aug-1",
+        }
+    ]
+
+    html = _render_reset_calendar(events, reference_month=(2026, 9), current_date=date(2026, 9, 3))
+
+    assert 'class="codex-reset-day is-today" title="今天"><span class="day-number">3</span>' in html
+
+
+def test_reset_calendar_keeps_reset_marker_when_today_is_reset_day() -> None:
+    events = [
+        {
+            "event_id": "sep-3",
+            "reset_at": "2026-09-03T08:28:16+08:00",
+            "time_bjt": "2026-09-03 08:28:16 +0800",
+            "date_bjt": "2026-09-03",
+            "scope": "Recent reset",
+            "label": "Recent reset",
+            "source_url": "https://x.com/example/status/sep-3",
+        }
+    ]
+
+    html = _render_reset_calendar(events, reference_month=(2026, 9), current_date=date(2026, 9, 3))
+
+    assert 'class="codex-reset-day is-reset is-today"' in html
+    assert 'title="今天 · Recent reset"' in html
 
 
 def test_render_account_limits_html_does_not_render_unsafe_reset_source_urls() -> None:

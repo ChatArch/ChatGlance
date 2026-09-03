@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Draw a red ring around today's Beijing date in the Codex reset calendar, while preserving the reset-event highlight when today is also a reset day.
 - Always show the current month (by Beijing date) first in the Codex reset calendar switcher, so a new month appears automatically as the date advances even before any reset event is confirmed in it.
 - Publish account-limits refreshes even when one Codex profile fails, preserving the last successful quota window while marking the current profile status as expired/unavailable.
 - Add a top-level account-limits collection status banner and per-profile credential status lines without exposing token values.
