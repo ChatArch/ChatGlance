@@ -239,3 +239,10 @@ Recommended topology: **systemd runs Glance directly; chatglance performs mainte
 - Do not store or print Glance auth material, password hashes, GitHub tokens, or proxy credentials.
 - Runtime binaries, logs, backups, and full live JSON snapshots are not source artifacts.
 - If dynamic tables, search, or bilingual UI switching become requirements, add a small static frontend layer later; the current foundation is a Python CLI.
+
+
+## Subscription quota probe models
+
+Set `CHATGLANCE_ACCOUNT_LIMITS_MODELS` in the collector environment or the refresh service EnvironmentFile to a JSON object mapping exact profile names to available Codex quota probe models, for example `{"example":"supported-codex-model"}`. Refresh scripts inherit this setting.
+
+Only the matching profile quota probe is affected; other profiles, usage GET, credentials, and profile selection remain unchanged. Unset or blank mappings and blank model strings preserve the ChatCRS default. Invalid JSON or non-string model values return a collection error. A model 404 does not establish token expiry; check model availability before rotating credentials.

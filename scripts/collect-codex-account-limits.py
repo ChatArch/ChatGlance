@@ -16,6 +16,7 @@ import argparse
 import html
 import hashlib
 import json
+import os
 import re
 import sys
 import urllib.error
@@ -62,7 +63,15 @@ def call_chatcrs_api(
         if operation == "usage":
             payload = codex_direct.inspect_usage(profile=profile, refresh=refresh, timeout=timeout)
         elif operation == "quota":
-            payload = codex_direct.inspect_quota(profile=profile, refresh=refresh, timeout=timeout)
+            configured = os.environ.get("CHATGLANCE_ACCOUNT_LIMITS_MODELS", "").strip()
+            models = json.loads(configured or "{}")
+            if not isinstance(models, dict) or any(not isinstance(value, str) for value in models.values()):
+                raise ValueError("CHATGLANCE_ACCOUNT_LIMITS_MODELS must map profile names to model strings")
+            model = models.get(profile, "").strip()
+            model_options = {"model": model} if model else {}
+            payload = codex_direct.inspect_quota(
+                profile=profile, refresh=refresh, timeout=timeout, **model_options
+            )
         else:
             raise ValueError(f"unsupported ChatCRS Codex operation: {operation}")
     except Exception as exc:  # noqa: BLE001 - collector must publish redacted failure status.

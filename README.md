@@ -239,3 +239,10 @@ chatglance runtime status
 - 不保存或输出 Glance auth、password hash、GitHub token、proxy credential。
 - live runtime、logs、backups、全量实时 JSON 快照默认不进源码仓库。
 - 后续如需动态表格、搜索、中英文切换，再考虑增加小型静态前端层；当前 Python CLI 是基础层。
+
+
+## 订阅页额度探测模型
+
+`collect-codex-account-limits.py` 使用 ChatCRS Python API 探测 Codex Responses 额度响应头。可在采集进程环境或刷新 service 的 EnvironmentFile 中配置 `CHATGLANCE_ACCOUNT_LIMITS_MODELS`，值为 profile 名称到可用模型名称的 JSON 对象，例如 `{"example":"supported-codex-model"}`。刷新脚本会继承该变量。
+
+仅精确匹配的 profile 覆盖额度探测模型；其他 profile、usage GET、凭据和账号名单不变。未设置、空白对象或空白模型值时保留 ChatCRS 默认模型；无效 JSON/非字符串模型返回采集错误。模型 404 不等于 token 失效，应先检查模型可用性，不要反复轮换凭据。

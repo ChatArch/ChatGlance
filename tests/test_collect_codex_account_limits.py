@@ -79,7 +79,8 @@ def test_collector_marks_expired_oauth_without_exposing_token_values() -> None:
     assert summary["ok_profiles"] == ["allis"]
 
 
-def test_collector_calls_chatcrs_python_api_without_shelling_to_cli() -> None:
+def test_collector_calls_chatcrs_python_api_without_shelling_to_cli(monkeypatch) -> None:
+    monkeypatch.delenv("CHATGLANCE_ACCOUNT_LIMITS_MODELS", raising=False)
     module = load_collector_module()
     calls = []
 
@@ -156,3 +157,45 @@ def test_collector_keeps_last_known_values_for_failed_profile() -> None:
     assert current[0]["using_last_known_values"] is True
     assert current[0]["last_successful_at"] == "2026-08-23T01:21:19+08:00"
     assert current[0]["windows"][0]["used_percent"] == 12.5
+
+
+def test_quota_model_override_is_scoped_to_exact_profile(monkeypatch) -> None:
+    module = load_collector_module()
+    monkeypatch.setenv("CHATGLANCE_ACCOUNT_LIMITS_MODELS", '{"example":"  supported-codex-model  "}')
+    calls = []
+    api = SimpleNamespace(
+        inspect_usage=lambda **kwargs: calls.append(("usage", kwargs)) or {"ok": True, "status": 200},
+        inspect_quota=lambda **kwargs: calls.append(("quota", kwargs)) or {"ok": True, "status": 200},
+    )
+    module.call_chatcrs_api("usage", profile="example", refresh=False, timeout=7, codex_direct=api)
+    module.call_chatcrs_api("quota", profile="example", refresh=False, timeout=7, codex_direct=api)
+    module.call_chatcrs_api("quota", profile="other", refresh=False, timeout=7, codex_direct=api)
+    assert calls == [
+        ("usage", {"profile": "example", "refresh": False, "timeout": 7}),
+        ("quota", {"profile": "example", "refresh": False, "timeout": 7, "model": "supported-codex-model"}),
+        ("quota", {"profile": "other", "refresh": False, "timeout": 7}),
+    ]
+
+
+def test_quota_model_unset_or_blank_preserves_chatcrs_default(monkeypatch) -> None:
+    module = load_collector_module()
+    for value in (None, "", "   ", "{}", '{"example":" "}'):
+        if value is None:
+            monkeypatch.delenv("CHATGLANCE_ACCOUNT_LIMITS_MODELS", raising=False)
+        else:
+            monkeypatch.setenv("CHATGLANCE_ACCOUNT_LIMITS_MODELS", value)
+        calls = []
+        api = SimpleNamespace(inspect_quota=lambda **kwargs: calls.append(kwargs) or {"ok": True, "status": 200})
+        module.call_chatcrs_api("quota", profile="example", refresh=False, timeout=7, codex_direct=api)
+        assert calls == [{"profile": "example", "refresh": False, "timeout": 7}]
+
+
+def test_quota_model_invalid_mapping_fails_without_api_request(monkeypatch) -> None:
+    module = load_collector_module()
+    for value in ("[]", "null", '{"example":123}', "not-json"):
+        monkeypatch.setenv("CHATGLANCE_ACCOUNT_LIMITS_MODELS", value)
+        calls = []
+        api = SimpleNamespace(inspect_quota=lambda **kwargs: calls.append(kwargs) or {"ok": True, "status": 200})
+        result = module.call_chatcrs_api("quota", profile="example", refresh=False, timeout=7, codex_direct=api)
+        assert result["ok"] is False
+        assert calls == []
