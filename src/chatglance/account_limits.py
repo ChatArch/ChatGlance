@@ -543,6 +543,7 @@ def dump_yaml(data: dict[str, Any]) -> str:
 
 RESET_ACTION_LABELS = {
     "disabled": "未开启", "dry_run": "预演（未消费）", "conditions_not_met": "条件未达",
+    "conditions_expired": "条件已变化（未消费）",
     "query_failed": "查询失败（不执行）", "reset_verified": "已重置（读回已验证）",
     "uncertain": "待人工核对", "blocked_pending": "待人工核对（已阻止重试）",
     "pending": "待人工核对 / 正在处理", "cooldown": "冷却中（不重复消费）",

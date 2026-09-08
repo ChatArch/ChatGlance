@@ -185,3 +185,33 @@ def test_created_ledger_is_private(tmp_path):
     m = module()
     m.scan_profile('sample', policy=m.ResetPolicy(enabled=True), execute=True, client=FakeClient('timeout'), state_dir=tmp_path, now=NOW)
     assert stat.S_IMODE((tmp_path/'codex-reset-ledger.sqlite3').stat().st_mode) == 0o600
+
+
+def test_query_latency_rechecks_current_deadline(tmp_path, monkeypatch):
+    m = module()
+    current = [NOW]
+    monkeypatch.setattr(m.time, 'time', lambda: current[0])
+    class Slow(FakeClient):
+        def reset_credits(self):
+            current[0] += 2
+            return credits()
+    client = Slow()
+    result = m.scan_profile('work', policy=m.ResetPolicy(enabled=True), execute=True, client=client, state_dir=tmp_path)
+    assert not client.posts
+    assert not result['auto_reset']['eligible']
+
+
+def test_reservation_latency_rechecks_before_post(tmp_path, monkeypatch):
+    m = module()
+    current = [NOW]
+    monkeypatch.setattr(m.time, 'time', lambda: current[0])
+    reserve = m._reserve
+    def slow_reserve(*args):
+        result = reserve(*args)
+        current[0] += 2
+        return result
+    monkeypatch.setattr(m, '_reserve', slow_reserve)
+    client = FakeClient()
+    result = m.scan_profile('work', policy=m.ResetPolicy(enabled=True), execute=True, client=client, state_dir=tmp_path)
+    assert not client.posts
+    assert result['auto_reset']['status'] == 'conditions_expired'

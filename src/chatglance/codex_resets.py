@@ -196,7 +196,7 @@ def _block(row: dict | None, fingerprint: str, now: float) -> str | None:
         return None
     if row["status"] in UNRESOLVED:
         return "blocked_pending"
-    if row["status"] not in KNOWN_NO_RESET | {"reset_verified"}:
+    if row["status"] not in KNOWN_NO_RESET | {"reset_verified", "conditions_expired"}:
         return "blocked_pending"
     if row["cooldown_until"] > now:
         return "cooldown"
@@ -257,7 +257,8 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
     policy = policy if policy is not None else ResetPolicy()
     if type(execute) is not bool:
         raise ValueError("execute must be a boolean")
-    now = time.time() if now is None else now
+    clock = time.time if now is None else (lambda fixed=now: fixed)
+    now = clock()
     if not _number(now) or _epoch(now) is None:
         raise ValueError("now must be a valid timestamp")
     auto = {"policy": asdict(policy), "execute": execute, "status": "disabled",
@@ -286,6 +287,11 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
         except Exception as exc:
             if kind == "usage" and getattr(exc, "status", None) in (401, 403):
                 row["credential_status"] = "invalid_or_expired"
+    # Network latency must not be counted as remaining natural-reset time.
+    now = clock()
+    if not _number(now) or _epoch(now) is None:
+        raise ValueError("now must be a valid timestamp")
+    row["observed_at"] = _iso(now)
     usage_ok = _fresh(rawusage) and bool(_windows(rawusage, now))
     row["windows"] = _windows(rawusage, now)
     row["reset_credits"] = _credits_summary(rawcredits, rawusage, now)
@@ -315,7 +321,17 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
             request_id, reservation = _reserve(path, identity, fingerprint, now)
             auto.update(reservation)
             if request_id:
-                _consume_and_verify(client, rawusage, rawcredits, target, row, path, identity, request_id, now)
+                # The reservation can wait on another process. Recheck using
+                # wall-clock time immediately before the only consuming call.
+                post_now = clock()
+                post_decision = evaluate_policy(rawusage, rawcredits, policy, now=post_now)
+                if not post_decision["eligible"]:
+                    _finish(path, identity, request_id, "conditions_expired", post_now)
+                    auto.update(post_decision)
+                    auto.update(status="conditions_expired", last_action={"status": "conditions_expired", "at": _iso(post_now)})
+                    row["windows"] = _windows(rawusage, post_now)
+                else:
+                    _consume_and_verify(client, rawusage, rawcredits, post_decision["target"], row, path, identity, request_id, post_now)
     except (OSError, sqlite3.Error, RuntimeError):
         # Never proceed when durable state is unavailable. If a POST happened,
         # its persisted pending row remains a fail-closed barrier.
