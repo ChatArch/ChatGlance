@@ -46,7 +46,7 @@ def test_refresh_account_limits_script_refuses_to_print_secret_values() -> None:
 
 
 def test_collect_codex_account_limits_script_fetches_public_reset_tracker() -> None:
-    collector = Path(__file__).resolve().parents[1] / "scripts" / "collect-codex-account-limits.py"
+    collector = Path(__file__).resolve().parents[1] / "src" / "chatglance" / "codex_collector.py"
 
     assert collector.exists()
     text = collector.read_text(encoding="utf-8")

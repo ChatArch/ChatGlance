@@ -13,6 +13,7 @@ chatglance
 ├── --tree  # Print the registered CLI tree and exit.
 ├── --tree-brief  # Print the registered CLI tree without parameter signatures and exit.
 ├── account-limits  # Render the `订阅详情` Glance page.
+│   ├── collect [--profiles PROFILES] [--output OUTPUT-PATH] [--history HISTORY-PATH] [--timeout TIMEOUT] [--reset-timeout RESET-TIMEOUT] [--no-public-reset] [--reset-policies RESET-POLICIES] [--reset-base-url RESET-BASE-URL] [--execute-resets] [--fail-on-profile-error]  # Scan usage/reset cards without model requests and write a safe snapshot.
 │   ├── json [--data DATA-PATH] [--output OUTPUT-PATH]  # Write normalized, redacted account/quota JSON.
 │   ├── render-page [--data DATA-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME] [--page-slug PAGE-SLUG] [--widget-title WIDGET-TITLE]  # Write the `订阅详情` page YAML from account-limits JSON.
 │   └── update-config [--data DATA-PATH] [--config CONFIG-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME] [--page-slug PAGE-SLUG] [--widget-title WIDGET-TITLE]  # Write a config copy with the generated account-limits page replaced.
@@ -54,6 +55,7 @@ chatglance
 ├── --tree  # Print the registered CLI tree and exit.
 ├── --tree-brief  # Print the registered CLI tree without parameter signatures and exit.
 ├── account-limits  # Render the `订阅详情` Glance page.
+│   ├── collect  # Scan usage/reset cards without model requests and write a safe snapshot.
 │   ├── json  # Write normalized, redacted account/quota JSON.
 │   ├── render-page  # Write the `订阅详情` page YAML from account-limits JSON.
 │   └── update-config  # Write a config copy with the generated account-limits page replaced.

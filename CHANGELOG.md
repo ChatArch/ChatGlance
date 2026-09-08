@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.1.9 - 2026-09-09
+
+- Show real banked-reset count/expiry and per-profile policy/action status in subscription cards.
+- Add published `account-limits collect` and importable collector using ChatCRS 0.3.3 GET-only reads instead of routine model probes.
+- Require enabled policy, explicit execution, usage >=95%, more than 24h until natural reset and available cards >0; reserve account-scoped idempotency state before POST and block ambiguous outcomes.
+- Keep the page read-only, configuration backend-owned, and stale/partial data display-only.
+
+- Allow per-profile Codex quota probe models via `CHATGLANCE_ACCOUNT_LIMITS_MODELS`, preserving defaults for profiles without an override.
 
 - Draw a red ring around today's Beijing date in the Codex reset calendar, while preserving the reset-event highlight when today is also a reset day.
 - Always show the current month (by Beijing date) first in the Codex reset calendar switcher, so a new month appears automatically as the date advances even before any reset event is confirmed in it.
