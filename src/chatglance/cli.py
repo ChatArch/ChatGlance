@@ -430,6 +430,31 @@ def account_limits() -> None:
     """Render the `订阅详情` Glance page."""
 
 
+@account_limits.command("collect")
+@click.option("--profiles", required=True, help="Space/comma-separated Codex profile names to scan.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True)
+@click.option("--history", "history_path", type=click.Path(path_type=Path, dir_okay=False))
+@click.option("--timeout", type=click.FloatRange(min=0.1), default=20.0, show_default=True)
+@click.option("--reset-timeout", type=click.FloatRange(min=0.1), default=20.0, show_default=True)
+@click.option("--no-public-reset", is_flag=True, help="Skip the public reset calendar source.")
+@click.option("--reset-policies", default=None, help="Per-profile policy JSON; otherwise use process env / typed ChatEnv settings.")
+@click.option("--reset-base-url", default=None, help="Explicit HTTPS base for reset-card endpoints only.")
+@click.option("--execute-resets/--no-execute-resets", default=None, help="Opt into real policy-driven consumption. Default is disabled; explicit no wins over configuration.")
+@click.option("--fail-on-profile-error", is_flag=True)
+def collect_account_limits(profiles, output_path, history_path, timeout, reset_timeout, no_public_reset, reset_policies, reset_base_url, execute_resets, fail_on_profile_error):
+    """Scan usage/reset cards without model requests and write a safe snapshot."""
+    from chatglance.codex_collector import collect_account_limits as collect
+    try:
+        result = collect(profiles=profiles, output_path=output_path, history_path=history_path,
+                         timeout=timeout, reset_timeout=reset_timeout, no_public_reset=no_public_reset,
+                         reset_policies=reset_policies, reset_base_url=reset_base_url, execute_resets=execute_resets)
+    except (ValueError, OSError):
+        raise click.ClickException("Account scan failed; verify collector settings and output path.") from None
+    click.echo(f"wrote {output_path} profiles={len(result['codex'])} version={__version__}")
+    if fail_on_profile_error and result['refresh_status']['failed_count']:
+        raise click.exceptions.Exit(1)
+
+
 @account_limits.command("json")
 @click.option("--data", "data_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Raw account-limits JSON to normalize and redact.")
 @click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Output normalized account-limits JSON path.")

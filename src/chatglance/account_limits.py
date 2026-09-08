@@ -541,6 +541,50 @@ def dump_yaml(data: dict[str, Any]) -> str:
     return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
 
 
+RESET_ACTION_LABELS = {
+    "disabled": "未开启", "dry_run": "预演（未消费）", "conditions_not_met": "条件未达",
+    "query_failed": "查询失败（不执行）", "reset_verified": "已重置（读回已验证）",
+    "uncertain": "待人工核对", "blocked_pending": "待人工核对（已阻止重试）",
+    "pending": "待人工核对 / 正在处理", "cooldown": "冷却中（不重复消费）",
+    "already_processed": "本窗口已处理", "nothing_to_reset": "无可重置额度",
+    "no_credit": "无可用重置卡", "state_error": "状态存储异常（不执行）",
+}
+
+
+def _render_reset_policy(profile: dict[str, Any]) -> str:
+    credits = profile.get("reset_credits") if isinstance(profile.get("reset_credits"), dict) else {}
+    auto = profile.get("auto_reset") if isinstance(profile.get("auto_reset"), dict) else {}
+    policy = auto.get("policy") if isinstance(auto.get("policy"), dict) else {}
+    count = credits.get("available_count")
+    count_label = f"{count} 张" if type(count) is int and count >= 0 else "未知"
+    credit_status = credits.get("status")
+    if credit_status == "count_only":
+        count_label += "（仅数量；详情查询失败）"
+    elif credit_status == "stale":
+        count_label += "（上次已知；不用于执行）"
+    expiry = _fmt_reset(credits.get("next_expires_at")) if credits.get("next_expires_at") else "未知"
+    threshold = _safe_number(policy.get("threshold_percent", 95))
+    seconds = _safe_number(policy.get("min_remaining_seconds", 86400))
+    hours = seconds / 3600 if seconds is not None else None
+    rule = f"主额度 ≥{_fmt_number(threshold)}% 且自然重置 >{_fmt_number(hours)}小时 且可用卡 >0"
+    enabled = policy.get("enabled") is True
+    mode = "执行已开启" if auto.get("execute") is True else "仅预演"
+    switch = f"已启用 · {mode}" if enabled else "未开启"
+    action = RESET_ACTION_LABELS.get(auto.get("status", "disabled"), "未知")
+    last = auto.get("last_action")
+    last_html = ""
+    if isinstance(last, dict):
+        last_label = RESET_ACTION_LABELS.get(last.get("status"), "未知")
+        last_html = f'<p class="limit-muted">最近动作：{html_text(last_label)} · {html_text(_fmt_reset(last.get("at")))}</p>'
+    return (
+        f'<div class="reset-credit-details"><div class="reset-row"><span>重置卡</span><strong>{html_text(count_label)}</strong></div>'
+        f'<div class="reset-row"><span>最近到期</span><strong>{html_text(expiry)}</strong></div>'
+        f'<p class="limit-muted">规则：{html_text(rule)}</p>'
+        f'<p class="limit-status-line">自动重置：{html_text(switch)} · {html_text(action)}</p>'
+        f'{last_html}</div>'
+    )
+
+
 def render_account_limits_html(data: dict[str, Any]) -> str:
     normalized = normalize_account_limits_data(data)
     counts = normalized["counts"]
@@ -579,6 +623,7 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
     <div class="usage-row"><span>使用额度</span><strong>{html_text(used_percent)}</strong></div>
     <div class="limit-progress" aria-label="使用额度 {html_text(used_percent)}"><span style="width: {html_text(progress_width)}"></span></div>
     <div class="reset-row"><span>重置时间</span><strong>{html_text(reset_time)}</strong></div>
+    {_render_reset_policy(profile)}
     {error_html}
   </div>
 </article>"""

@@ -93,7 +93,7 @@ collector_args=(
 if [[ -f "$DATA_PATH" ]]; then
   collector_args+=(--history "$DATA_PATH")
 fi
-"$PYTHON_BIN" "$COLLECTOR" "${collector_args[@]}"
+"$CHATGLANCE_BIN" account-limits collect "${collector_args[@]}"
 
 "$CHATGLANCE_BIN" account-limits render-page \
   --data "$NEXT_DATA_PATH" \

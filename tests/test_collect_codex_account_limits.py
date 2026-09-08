@@ -7,11 +7,7 @@ from types import SimpleNamespace
 
 
 def load_collector_module():
-    path = Path(__file__).resolve().parents[1] / "scripts" / "collect-codex-account-limits.py"
-    spec = importlib.util.spec_from_file_location("collect_codex_account_limits", path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    import chatglance.codex_collector as module
     return module
 
 
@@ -103,28 +99,11 @@ def test_collector_calls_chatcrs_python_api_without_shelling_to_cli(monkeypatch)
 
 def test_profile_payload_records_chatcrs_token_service(monkeypatch) -> None:
     module = load_collector_module()
-
-    def fake_bundle(profile: str, refresh: bool, timeout: int):
-        assert profile == "allis"
-        assert refresh is False
-        assert timeout == 7
-        return (
-            {"ok": True, "json": {"ok": True, "status": 200, "token_service": "Codex", "rate_limits": {}}},
-            {
-                "ok": True,
-                "json": {
-                    "ok": True,
-                    "status": 200,
-                    "token_service": "Codex",
-                    "rate_limits": {"primary_used_percent": 1.0, "primary_reset_after_seconds": 60, "primary_window_minutes": 300},
-                },
-            },
-        )
-
-    monkeypatch.setattr(module, "request_bundle", fake_bundle)
-
-    payload = module.profile_payload("allis", 7)
-
+    def scan(profile, timeout, **options):
+        assert profile == "work" and timeout == 7
+        return {"profile": profile, "status": "ok", "token_service": "Codex"}
+    monkeypatch.setattr(module, "scan_profile", scan)
+    payload = module.profile_payload("work", 7)
     assert payload["status"] == "ok"
     assert payload["token_service"] == "Codex"
 
