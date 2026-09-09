@@ -242,7 +242,7 @@ chatglance sites collect \
 chatglance sites export-covers \
   --data ~/.chatarch/glance/data/site-services.json \
   --output-dir playground/site-covers \
-  --public-base-url https://share.public.wzhecnu.cn/chatglance-site-covers/ \
+  --public-base-url https://share.public.example.org/chatglance-site-covers/ \
   --updated-data ~/.chatarch/glance/data/site-services.json
 
 chatglance sites render-page \
@@ -257,7 +257,9 @@ chatglance sites update-config \
 ~/.chatarch/glance/bin/glance -config ~/.chatarch/glance/config/glance.yml.sites-candidate config:validate
 ```
 
-如果 inventory 里已经写了 `cover_url`（例如 Share 图床 URL），页面直接使用该图片；否则会使用内联 SVG 兜底。
+推荐省略 inventory 的 `cover_url`，直接使用内置 SVG；上面的 `export-covers` 是可选文件导出，不是站点部署必需步骤。显式 `cover_url` 仍可覆盖默认图片。SVG 地址文案读取服务的实际 `public_url`，不再使用固定域名。
+
+服务默认地址必须通过 `page.public_domain` 或 `CHATGLANCE_SITES_PUBLIC_DOMAIN` 配置，也可以逐服务显式设置 `public_url`。未配置时采集报错，不会回退到任何生产站点。可选的 `page.local_domain` / `CHATGLANCE_SITES_LOCAL_DOMAIN` 只用于内部探测；`page.uptime_base_url` / `CHATGLANCE_SITES_UPTIME_BASE_URL` 为空时不生成 Uptime 跳转。变量支持现有 ChatEnv `ChatGlance` active profile。完整优先级和新机迁移边界见[网站服务配置](site-services.md)。
 
 确认通过后，再把 candidate 提升为 live config，并保留备份：
 

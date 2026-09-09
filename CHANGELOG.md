@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Derive default SVG destination labels from each service public URL; omit credentials, query strings and fragments.
+- Resolve website-service domain/Uptime defaults from runtime inventory or typed ChatEnv, with no production-domain fallback.
+- Document portable default inline SVG covers and optional explicit external covers.
+
 ## 0.1.9 - 2026-09-09
 
 - Show real banked-reset count/expiry and per-profile policy/action status in subscription cards.

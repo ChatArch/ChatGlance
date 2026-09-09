@@ -91,7 +91,7 @@ bash scripts/refresh-server-status.sh
 
 The script calls `chatglance servers collect/render-page/update-config`, writes a candidate config, runs `glance config:validate`, then backs up/replaces the live config when content changed; service-manager actions stay in the outer cron/systemd wrapper or a manual operator step. See [`docs/infra.md`](docs/infra.md) for the full mechanism.
 
-The `网站服务` page refresh uses a fixed reviewed inventory and does not auto-scan Nginx. Covers can be generated as SVG files with `chatglance sites export-covers`, uploaded to Share or another image host, and persisted as `cover_url` values in the runtime inventory. If a service lacks `cover_url`, the page uses an inline generated SVG fallback:
+The `网站服务` page refresh uses a fixed reviewed inventory and does not auto-scan Nginx. Omit `cover_url` for the default inline SVG: no image host is needed, and its destination label comes from the service's actual `public_url`. External images remain an explicit opt-in. Configure domain/Uptime defaults in runtime inventory or the existing ChatEnv `ChatGlance` profile; see [website-service configuration](docs/site-services.en.md):
 
 ```bash
 cp examples/site-services.example.yml ~/.chatarch/glance/config/site-services.yml
@@ -175,7 +175,7 @@ chatglance sites collect \
 chatglance sites export-covers \
   --data ~/.chatarch/glance/data/site-services.json \
   --output-dir playground/site-covers \
-  --public-base-url https://share.public.wzhecnu.cn/chatglance-site-covers/ \
+  --public-base-url https://share.public.example.org/chatglance-site-covers/ \
   --updated-data ~/.chatarch/glance/data/site-services.json
 
 chatglance sites render-page \

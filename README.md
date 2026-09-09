@@ -91,7 +91,7 @@ bash scripts/refresh-server-status.sh
 
 脚本内部调用 `chatglance servers collect/render-page/update-config`，先生成 candidate config 并执行 `glance config:validate`，验证通过且内容变化时才备份 live config、替换；service manager 动作留给外层 cron/systemd wrapper 或人工操作。完整机制见 [`docs/infra.md`](docs/infra.md)。
 
-刷新 `网站服务` 页使用固定 reviewed inventory，不自动扫描 Nginx。封面图可以由 `chatglance sites export-covers` 生成 SVG 并上传到 Share/其它图床，然后把 `cover_url` 写进 runtime inventory；没有 `cover_url` 时页面会使用内联 SVG 兜底：
+刷新 `网站服务` 页使用固定 reviewed inventory，不自动扫描 Nginx。默认省略 `cover_url`，直接使用内置 SVG，无需图床；SVG 地址文案来自服务实际 `public_url`，不会拼接固定部署域名。只有明确需要自定义图片时才设置 `cover_url`。域名与 Uptime 入口通过 runtime inventory 或现有 ChatEnv `ChatGlance` profile 管理，见[网站服务配置](docs/site-services.md)：
 
 ```bash
 cp examples/site-services.example.yml ~/.chatarch/glance/config/site-services.yml
@@ -175,7 +175,7 @@ chatglance sites collect \
 chatglance sites export-covers \
   --data ~/.chatarch/glance/data/site-services.json \
   --output-dir playground/site-covers \
-  --public-base-url https://share.public.wzhecnu.cn/chatglance-site-covers/ \
+  --public-base-url https://share.public.example.org/chatglance-site-covers/ \
   --updated-data ~/.chatarch/glance/data/site-services.json
 
 chatglance sites render-page \
