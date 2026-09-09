@@ -2,7 +2,9 @@ page:
   name: 网站服务
   slug: sites
   widget_title: 网站服务
-  uptime_base_url: https://uptime.public.wzhecnu.cn/
+  public_domain: public.example.org
+  local_domain: internal.example.org
+  uptime_base_url: https://uptime.public.example.org/
 
 sites:
   - name: bilisum

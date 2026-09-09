@@ -1,5 +1,8 @@
 """Typed ChatEnv configuration for ChatGlance."""
 
+import re
+from urllib.parse import urlsplit
+
 from chatenv import BaseEnvConfig, EnvField
 
 
@@ -14,6 +17,19 @@ class ChatGlanceConfig(BaseEnvConfig):
         "CHATGLANCE_GITHUB_TOKEN",
         desc="GitHub token used for private repository metadata reads.",
         is_sensitive=True,
+    )
+
+    CHATGLANCE_SITES_PUBLIC_DOMAIN = EnvField(
+        "CHATGLANCE_SITES_PUBLIC_DOMAIN",
+        desc="Public DNS suffix for website services; required unless public_url is explicit.",
+    )
+    CHATGLANCE_SITES_LOCAL_DOMAIN = EnvField(
+        "CHATGLANCE_SITES_LOCAL_DOMAIN",
+        desc="Optional internal DNS suffix for website-service probes, never shown on cards.",
+    )
+    CHATGLANCE_SITES_UPTIME_BASE_URL = EnvField(
+        "CHATGLANCE_SITES_UPTIME_BASE_URL",
+        desc="Optional HTTP(S) base URL of the website-services Uptime dashboard.",
     )
 
     CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES = EnvField(
@@ -31,10 +47,11 @@ class ChatGlanceConfig(BaseEnvConfig):
 
     @classmethod
     def test(cls) -> None:
-        """Validate schema registration without making a network request."""
+        """Validate configured site defaults without making a network request."""
 
         print(f"Testing {cls._title}...")
-        print("Schema loaded; no network test is required.")
+        validate_site_settings(site_settings())
+        print("Site defaults validated; no network test is required.")
 
 
 def collection_settings(*, home=None) -> dict:
@@ -59,4 +76,40 @@ def collection_settings(*, home=None) -> dict:
             "execute_resets": execute}
 
 
-__all__ = ["ChatGlanceConfig", "collection_settings"]
+def site_settings(*, home=None) -> dict[str, str]:
+    """Resolve site defaults from process env, then the active ChatEnv profile."""
+    import os
+    from chatenv import EnvStore, get_paths
+
+    values = EnvStore(get_paths(home).envs_dir).load_active(ChatGlanceConfig)
+    result = {}
+    for field in ("public_domain", "local_domain", "uptime_base_url"):
+        key = "CHATGLANCE_SITES_" + field.upper()
+        value = os.environ[key] if key in os.environ else values.get(key, "")
+        result[field] = str(value or "").strip()
+    return result
+
+
+def validate_site_settings(settings: dict[str, str]) -> None:
+    """Reject malformed domain suffixes and unsafe Uptime base URLs."""
+    label = r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+    for key in ("public_domain", "local_domain"):
+        domain = settings.get(key, "")
+        if domain and (len(domain) > 253 or not re.fullmatch(rf"{label}(?:\.{label})*", domain)):
+            raise ValueError(f"{key} must be a DNS domain suffix without scheme, port or path")
+    url = settings.get("uptime_base_url", "")
+    if url:
+        try:
+            parsed = urlsplit(url)
+            valid = (parsed.scheme in {"http", "https"} and bool(parsed.hostname)
+                     and parsed.username is None and parsed.password is None
+                     and "?" not in url and "#" not in url
+                     and not any(char.isspace() for char in url))
+            parsed.port  # Validate port syntax/range as well as hostname parsing.
+        except ValueError:
+            valid = False
+        if not valid:
+            raise ValueError("CHATGLANCE_SITES_UPTIME_BASE_URL must be an HTTP(S) base URL without credentials, query or fragment")
+
+
+__all__ = ["ChatGlanceConfig", "collection_settings", "site_settings", "validate_site_settings"]

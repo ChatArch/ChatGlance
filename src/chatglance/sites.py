@@ -11,14 +11,17 @@ from pathlib import Path
 import re
 import sqlite3
 from typing import Any, cast
+from urllib.parse import urlsplit
 
 import yaml
+
+from .config import site_settings, validate_site_settings
 
 SITES_PAGE_NAME = "网站服务"
 LEGACY_SITES_PAGE_NAMES = {"Sites", "Website Services", "站点", "网站"}
 DEFAULT_PAGE_SLUG = "sites"
 DEFAULT_WIDGET_TITLE = "网站服务"
-DEFAULT_UPTIME_BASE_URL = "https://uptime.public.wzhecnu.cn/"
+DEFAULT_UPTIME_BASE_URL = ""
 DEFAULT_GATUS_GROUP = "ChatArch Services"
 BEIJING_TZ = timezone(timedelta(hours=8))
 
@@ -60,16 +63,38 @@ def _ensure_trailing_slash(url: str) -> str:
     return url if url.endswith("/") else url + "/"
 
 
-def _public_url(name: str) -> str:
-    return f"https://{name}.public.wzhecnu.cn/"
+def _service_host(name: str, domain: str) -> str:
+    label = r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+    if not re.fullmatch(label, name) or not re.fullmatch(rf"{label}(?:\.{label})*", domain) or len(f"{name}.{domain}") > 253:
+        raise ValueError("site name and domain must be DNS labels, without scheme, port or path")
+    return f"{name}.{domain}"
 
 
-def _local_host(name: str) -> str:
-    return f"{name}.local.wzhecnu.cn"
+def _public_url(name: str, domain: str) -> str:
+    if not domain:
+        raise ValueError("site requires public_url or CHATGLANCE_SITES_PUBLIC_DOMAIN (page.public_domain)")
+    return f"https://{_service_host(name, domain)}/"
 
 
 def _uptime_url(name: str, base_url: str = DEFAULT_UPTIME_BASE_URL) -> str:
+    if not base_url:
+        return ""
     return _ensure_trailing_slash(base_url) + "endpoints/" + gatus_endpoint_key(name)
+
+
+def _cover_url_label(public_url: str) -> str:
+    """Show the actual public destination without credentials, query or fragment."""
+    try:
+        parsed = urlsplit(public_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            return ""
+        host = parsed.hostname
+        if ":" in host:
+            host = f"[{host}]"
+        port = f":{parsed.port}" if parsed.port else ""
+        return host + port + parsed.path.rstrip("/")
+    except ValueError:
+        return ""
 
 
 def _cover_svg(site: dict[str, Any]) -> str:
@@ -79,7 +104,7 @@ def _cover_svg(site: dict[str, Any]) -> str:
     label = (text_value(site.get("cover_label")) or title[:2]).upper()
     palette = PALETTE[sum(ord(ch) for ch in name) % len(PALETTE)]
     safe_title = html.escape(title)
-    safe_name = html.escape(name)
+    safe_destination = html.escape(_cover_url_label(text_value(site.get("public_url"))))
     safe_summary = html.escape(summary[:42])
     safe_label = html.escape(label[:4])
     return f"""<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"640\" height=\"280\" viewBox=\"0 0 640 280\" role=\"img\" aria-label=\"{safe_title} cover\">
@@ -100,7 +125,7 @@ def _cover_svg(site: dict[str, Any]) -> str:
     <text x=\"123\" y=\"146\" text-anchor=\"middle\" font-family=\"Inter, ui-sans-serif, system-ui, sans-serif\" font-size=\"48\" font-weight=\"800\" fill=\"{palette[1]}\">{safe_label}</text>
   </g>
   <text x=\"230\" y=\"112\" font-family=\"Inter, ui-sans-serif, system-ui, sans-serif\" font-size=\"42\" font-weight=\"800\" fill=\"#ffffff\">{safe_title}</text>
-  <text x=\"232\" y=\"160\" font-family=\"Inter, ui-sans-serif, system-ui, sans-serif\" font-size=\"22\" font-weight=\"600\" fill=\"#ffffff\" opacity=\"0.82\">{safe_name}.public.wzhecnu.cn</text>
+  <text x=\"232\" y=\"160\" font-family=\"Inter, ui-sans-serif, system-ui, sans-serif\" font-size=\"22\" font-weight=\"600\" fill=\"#ffffff\" opacity=\"0.82\">{safe_destination}</text>
   <path d=\"M232 194 H500\" stroke=\"#fff\" stroke-width=\"3\" stroke-linecap=\"round\" opacity=\"0.38\"/>
   <text x="232" y="230" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="18" fill="#ffffff" opacity="0.78">{safe_summary}</text>
 </svg>"""
@@ -202,7 +227,10 @@ def load_sites_inventory(path: str | Path, *, generated_at: str | None = None) -
     if not isinstance(raw, dict):
         raise ValueError("site inventory config must be a YAML object")
     page = raw.get("page") if isinstance(raw.get("page"), dict) else {}
-    uptime_base_url = text_value(cast(dict[str, Any], page).get("uptime_base_url"), DEFAULT_UPTIME_BASE_URL)
+    settings = site_settings()
+    defaults = {key: text_value(page[key]) if key in page else value for key, value in settings.items()}
+    validate_site_settings(defaults)
+    uptime_base_url = defaults["uptime_base_url"]
     entries = raw.get("sites") or []
     if not isinstance(entries, list):
         raise ValueError("sites must be a list")
@@ -216,9 +244,11 @@ def load_sites_inventory(path: str | Path, *, generated_at: str | None = None) -
         site = dict(entry)
         site.setdefault("title", name)
         site.setdefault("kind", "ChatArch service")
-        site["public_url"] = text_value(site.get("public_url"), _public_url(name))
-        site["local_host"] = text_value(site.get("local_host"), _local_host(name))
-        site["uptime_url"] = text_value(site.get("uptime_url"), _uptime_url(name, uptime_base_url))
+        site["public_url"] = text_value(site.get("public_url")) or _public_url(name, defaults["public_domain"])
+        site["local_host"] = text_value(site.get("local_host")) or (
+            _service_host(name, defaults["local_domain"]) if defaults["local_domain"] else ""
+        )
+        site["uptime_url"] = text_value(site.get("uptime_url")) or _uptime_url(name, uptime_base_url)
         site.setdefault("status", "unknown")
         sites.append(site)
     return _recount({"generated_at": generated_at or beijing_now(), "sites": sites})

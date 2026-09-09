@@ -2,6 +2,8 @@
 # PyPI wheel/sdist artifacts are public, so do not ship exact host/path records.
 recursive-exclude docs/deployment *
 include docs/quickstart.md
+include docs/site-services.md
+include docs/site-services.en.md
 include docs/infra.md
 include docs/cli-tree.md
 include docs/codex-reset-policy.md
