@@ -63,45 +63,28 @@ python -m build
 python -m twine check dist/*
 ```
 
-## CLI 树
+## 手动刷新与 CLI 树
 
-完整命令面见 [`docs/cli-tree.md`](docs/cli-tree.md)。`chatglance --tree` 由 ChatStyle 从真实 Click registry 生成带参数签名的完整树；`chatglance --tree-brief` 保留相同节点和说明但省略签名。源码测试会直接运行两个入口，并与文档中的树逐字对齐。
-
-刷新 `项目` 页的推荐入口同样是仓库脚本；它用 ChatGH Python API 获取当前 repo 列表并刷新 PR/Issue/时间字段，只读读取默认分支 manifest/entrypoint 证据，并从 PyPI 读取版本。默认用当前 runtime JSON 作为 baseline 保留人工 review 过的分类证据，同时优先用 latest PyPI `--tree-brief`（回退到 `--tree`/help）结果校正 Python 包成熟度；脚本会生成 `project-cli-tree-report.tsv` 作为审计报告。private repo 内容读取按显式 token 环境变量、当前 checkout 的 repo-local GitHub credential、ChatGlance typed ChatEnv active profile、ChatGH shared ChatEnv profile 的顺序回退，并且不打印 token。详细验收见 [`docs/projects.md`](docs/projects.md)：
+安装包即可刷新已有 runtime，不再要求进入源码目录运行脚本：
 
 ```bash
-CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
-CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
-bash scripts/refresh-projects-page.sh
+python -m pip install ChatGlance==0.1.10
+chatglance refresh
+chatglance refresh account-limits
+chatglance refresh projects sites
 ```
 
-生成的项目页会在概览里显示 `刷新时间`，用于判断 PR/Issue 数据的新鲜度；一览表里的“详情”按钮会展示仓库基本信息、CLI entrypoint 和非密钥 ChatEnv/ENV schema metadata。
+- 不指定页面时，只刷新当前 Glance 配置里的生成页；支持 `projects`、`servers`、`sites`、`account-limits`。
+- 默认运行目录为有效 ChatArch home 下的 `glance/`，可用 `--runtime-home` 指定已有实例。
+- 使用已有 inventory、ChatEnv/当前快照中的账号列表和 GitHub 凭据。不会重新初始化服务、发现新网站或兑换重置卡。
+- 手动刷新与定时器共享锁；先采集、生成候选并校验，再备份替换，保留原页面顺序和非生成内容；最多重启一次已有 Glance 用户服务。
+- 失败页面保留原产物，成功页继续更新。部分失败/缓存降级返回非零退出码，不把旧值报告成新鲜成功。
+- `--no-restart` 只更新产物；`--json-output` 输出机器可读结果。已在线服务器变为不可达默认不覆盖旧快照，确认要展示新离线状态时使用 `--allow-offline-regression`。
+- 项目页默认复用**相同发行版本、包名和命令入口**的 CLI 树证据，避免每次手动刷新都安装所有包；`--actual-cli-tree` 才重新探测当前发行包。
 
-刷新 Infra/`服务器` 页的推荐入口是外部脚本，而不是手改 JSON：
+可选的 `scripts/refresh-manual.sh` 只是 `chatglance refresh` 的薄包装，不是安装包的运行依赖。既有分页面脚本继续供调度/兼容流程使用，不再是日常手动入口。手动刷新不改变既有自动重置策略。
 
-```bash
-cp examples/server-inventory.example.yml ~/.chatarch/glance/config/server-inventory.yml
-$EDITOR ~/.chatarch/glance/config/server-inventory.yml
-
-CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
-CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
-CHATGLANCE_INFRA_CONFIG=~/.chatarch/glance/config/server-inventory.yml \
-bash scripts/refresh-server-status.sh
-```
-
-脚本内部调用 `chatglance servers collect/render-page/update-config`，先生成 candidate config 并执行 `glance config:validate`，验证通过且内容变化时才备份 live config、替换；service manager 动作留给外层 cron/systemd wrapper 或人工操作。完整机制见 [`docs/infra.md`](docs/infra.md)。
-
-刷新 `网站服务` 页使用固定 reviewed inventory，不自动扫描 Nginx。封面图可以由 `chatglance sites export-covers` 生成 SVG 并上传到 Share/其它图床，然后把 `cover_url` 写进 runtime inventory；没有 `cover_url` 时页面会使用内联 SVG 兜底：
-
-```bash
-cp examples/site-services.example.yml ~/.chatarch/glance/config/site-services.yml
-$EDITOR ~/.chatarch/glance/config/site-services.yml
-
-CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
-CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
-CHATGLANCE_SITES_CONFIG=~/.chatarch/glance/config/site-services.yml \
-bash scripts/refresh-sites-page.sh
-```
+完整命令面见 [CLI 树](docs/cli-tree.md)，运行 `chatglance --tree` / `chatglance --tree-brief` 读取真实注册命令。配置清单和低层步骤见 [手动刷新](docs/refresh.md)、[项目页](docs/projects.md) 和 [服务器页](docs/infra.md)。
 
 ## CLI 示例
 

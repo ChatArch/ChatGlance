@@ -63,45 +63,26 @@ python -m build
 python -m twine check dist/*
 ```
 
-## CLI tree
+## Manual refresh and CLI tree
 
-See [`docs/cli-tree.md`](docs/cli-tree.md) for the complete command surface. ChatStyle renders `chatglance --tree` from the real Click registry with parameter signatures; `chatglance --tree-brief` keeps the same nodes and descriptions without signatures. Tests run both entry points and compare them byte-for-byte with the documented trees.
-
-The recommended `项目` refresh entry point is also a repository script. It uses ChatGH's Python API for the current repository list and PR/Issue/timestamp fields, then reads default-branch manifest/entrypoint evidence without cloning, building, or executing repository source trees. For Python package maturity, it probes the latest published PyPI package with `uvx --from <package>@latest <entrypoint> --tree-brief`, falling back to `--tree` or help output, and writes `project-cli-tree-report.tsv` as audit evidence. Private repository reads fall back in order from explicit token environment variables, to the current checkout's repo-local GitHub credential, to the typed active ChatGlance ChatEnv profile, and finally to ChatGH's shared ChatEnv profile. Token values are never printed:
+The installed package can refresh an existing runtime without a source checkout:
 
 ```bash
-CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
-CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
-bash scripts/refresh-projects-page.sh
+python -m pip install ChatGlance==0.1.10
+chatglance refresh
+chatglance refresh account-limits
+chatglance refresh projects sites
 ```
 
-The generated project overview includes a `刷新时间` item so operators can see when the PR/Issue data was refreshed. The table's detail button also shows repository basics, CLI entrypoints, and non-secret ChatEnv/ENV schema metadata.
+With no page arguments, refresh only generated pages already configured in Glance. Supported keys are `projects`, `servers`, `sites`, and `account-limits`. The default runtime is `glance/` under the effective ChatArch home; override it with `--runtime-home`.
 
-The recommended Infra/`服务器` refresh entry point is the external script, not hand-editing JSON:
+The command reuses reviewed inventories, existing ChatEnv/snapshot account profiles, and existing GitHub credentials. Manual refresh never redeems reset cards or changes their configured policy. It shares the scheduled-refresh lock, validates candidates before publication, preserves page order and unrelated content, backs up changes, and restarts the existing Glance user service at most once.
 
-```bash
-cp examples/server-inventory.example.yml ~/.chatarch/glance/config/server-inventory.yml
-$EDITOR ~/.chatarch/glance/config/server-inventory.yml
+Failed pages keep their old artifacts while successful pages continue. Partial/cached results exit nonzero. Use `--no-restart` for external lifecycle ownership, `--json-output` for automation, or `--allow-offline-regression` to intentionally publish newly offline servers. Project refresh reuses CLI evidence only for the same released version, package identity, and entrypoints; `--actual-cli-tree` explicitly re-probes published packages.
 
-CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
-CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
-CHATGLANCE_INFRA_CONFIG=~/.chatarch/glance/config/server-inventory.yml \
-bash scripts/refresh-server-status.sh
-```
+`scripts/refresh-manual.sh` is an optional thin wrapper around the public command. Legacy per-page scripts remain available for scheduled/compatibility workflows, but are not required by the installed package.
 
-The script calls `chatglance servers collect/render-page/update-config`, writes a candidate config, runs `glance config:validate`, then backs up/replaces the live config when content changed; service-manager actions stay in the outer cron/systemd wrapper or a manual operator step. See [`docs/infra.md`](docs/infra.md) for the full mechanism.
-
-The `网站服务` page refresh uses a fixed reviewed inventory and does not auto-scan Nginx. Covers can be generated as SVG files with `chatglance sites export-covers`, uploaded to Share or another image host, and persisted as `cover_url` values in the runtime inventory. If a service lacks `cover_url`, the page uses an inline generated SVG fallback:
-
-```bash
-cp examples/site-services.example.yml ~/.chatarch/glance/config/site-services.yml
-$EDITOR ~/.chatarch/glance/config/site-services.yml
-
-CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
-CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
-CHATGLANCE_SITES_CONFIG=~/.chatarch/glance/config/site-services.yml \
-bash scripts/refresh-sites-page.sh
-```
+Read the live command surface with `chatglance --tree` / `--tree-brief`; see [CLI tree](docs/cli-tree.md) and [manual refresh](docs/refresh.md) for configuration and side-effect details.
 
 ## CLI examples
 

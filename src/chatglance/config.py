@@ -16,6 +16,11 @@ class ChatGlanceConfig(BaseEnvConfig):
         is_sensitive=True,
     )
 
+    CHATGLANCE_ACCOUNT_LIMITS_PROFILES = EnvField(
+        "CHATGLANCE_ACCOUNT_LIMITS_PROFILES", default="",
+        desc="Space- or comma-separated Codex profiles for manual refresh; empty uses the current snapshot.",
+    )
+
     CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES = EnvField(
         "CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES", default="{}",
         desc="Per-profile reset policy JSON: enabled, threshold_percent and min_remaining_seconds.",
@@ -54,7 +59,8 @@ def collection_settings(*, home=None) -> dict:
         execute = raw.lower() in ("1", "true", "yes", "on")
     else:
         raise ValueError("CHATGLANCE_ACCOUNT_LIMITS_RESET_EXECUTE must be an explicit boolean")
-    return {"reset_policies": resolve("CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES", "{}"),
+    return {"profiles": resolve("CHATGLANCE_ACCOUNT_LIMITS_PROFILES", ""),
+            "reset_policies": resolve("CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES", "{}"),
             "reset_base_url": resolve("CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL", "") or None,
             "execute_resets": execute}
 
