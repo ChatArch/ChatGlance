@@ -252,24 +252,9 @@ def _normalize_public_reset_event(event: dict[str, Any]) -> dict[str, Any] | Non
     }
 
 
-def _normalize_account_reset_event(profile: dict[str, Any], event: dict[str, Any]) -> dict[str, Any] | None:
-    reset_at = event.get("reset_at")
-    if not reset_at:
-        return None
-    return {
-        "kind": "account-window",
-        "profile": text_value(profile.get("profile"), "default"),
-        "label": text_value(event.get("label"), "账号窗口采样"),
-        "reset_at": reset_at,
-        "observed_at": event.get("observed_at"),
-        "used_percent": event.get("used_percent"),
-        "source": "账号窗口采样",
-    }
-
-
-def _normalize_codex_reset(safe: dict[str, Any], codex_profiles: list[dict[str, Any]]) -> dict[str, Any]:
+def _normalize_codex_reset(safe: dict[str, Any]) -> dict[str, Any]:
     raw_reset = safe.get("codex_reset") if isinstance(safe.get("codex_reset"), dict) else {}
-    source = text_value(raw_reset.get("source"), "账号窗口采样") if isinstance(raw_reset, dict) else "账号窗口采样"
+    source = text_value(raw_reset.get("source"), "https://codexreset.org/")
     status = text_value(raw_reset.get("status"), "ok") if isinstance(raw_reset, dict) else "ok"
     raw_events = raw_reset.get("events") if isinstance(raw_reset, dict) and isinstance(raw_reset.get("events"), list) else []
     events: list[dict[str, Any]] = []
@@ -280,19 +265,6 @@ def _normalize_codex_reset(safe: dict[str, Any], codex_profiles: list[dict[str, 
         if event is not None:
             events.append(event)
 
-    used_fallback = False
-    if not events:
-        used_fallback = True
-        source = "账号窗口采样"
-        for profile in codex_profiles:
-            history = profile.get("reset_history") if isinstance(profile.get("reset_history"), list) else []
-            for raw_event in history:
-                if not isinstance(raw_event, dict):
-                    continue
-                event = _normalize_account_reset_event(profile, raw_event)
-                if event is not None:
-                    events.append(event)
-
     events.sort(key=lambda item: text_value(item.get("reset_at")), reverse=True)
     latest = events[0] if events else raw_reset.get("latest") if isinstance(raw_reset, dict) and isinstance(raw_reset.get("latest"), dict) else {}
     return {
@@ -300,7 +272,9 @@ def _normalize_codex_reset(safe: dict[str, Any], codex_profiles: list[dict[str, 
         "status": status,
         "latest": latest,
         "events": events,
-        "used_fallback": used_fallback,
+        "used_fallback": False,
+        "using_last_known_values": bool(raw_reset.get("using_last_known_values")),
+        "last_successful_at": text_value(raw_reset.get("last_successful_at")),
         "confirmed_reset_count": raw_reset.get("confirmed_reset_count", len(events)) if isinstance(raw_reset, dict) else len(events),
     }
 
@@ -473,7 +447,7 @@ def _render_reset_calendar(
         month_panels.append(
             f"""
 <article class="codex-calendar-month {month_class}">
-  <div class="codex-calendar-heading"><h3>{html_text(label)}</h3><span>{len(days)} 次 reset</span></div>
+  <div class="codex-calendar-heading"><h3>{html_text(label)}</h3><span>{sum(len(events) for events in days.values())} 次 reset</span></div>
   <div class="codex-reset-weekdays"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
   <div class="codex-reset-grid">{''.join(cells)}</div>
 </article>"""
@@ -509,7 +483,7 @@ def normalize_account_limits_data(data: dict[str, Any]) -> dict[str, Any]:
             accounts.append(account)
     codex_profiles = [item for item in safe.get("codex", []) if isinstance(item, dict)]
     codex_windows = sum(len(item.get("windows") or []) for item in codex_profiles if isinstance(item.get("windows"), list))
-    codex_reset = _normalize_codex_reset(safe, codex_profiles)
+    codex_reset = _normalize_codex_reset(safe)
     codex_reset_events = len(codex_reset["events"])
     return {
         "generated_at": generated_at,
@@ -633,7 +607,7 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
     codex_reset = normalized["codex_reset"]
     reset_events = codex_reset["events"]
     reset_calendar = _render_reset_calendar(reset_events)
-    reset_source = text_value(codex_reset.get("source"), "账号窗口采样")
+    reset_source = text_value(codex_reset.get("source"), "https://codexreset.org/")
     source_label = "codexreset.org" if "codexreset.org" in reset_source else reset_source
     source_url = _safe_http_url(reset_source)
     source_html = f'<a href="{html_text(source_url)}">{html_text(source_label)}</a>' if source_url else "未知来源"
@@ -642,8 +616,13 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
     reset_intro_parts = [f"来源：{source_html}"]
     if latest_time:
         reset_intro_parts.append(f"最新：{html_text(latest_time)}")
-    if codex_reset.get("used_fallback"):
-        reset_intro_parts.append("账号窗口采样")
+    if codex_reset.get("using_last_known_values"):
+        reset_intro_parts.append("更新失败，显示缓存")
+        last_success = text_value(codex_reset.get("last_successful_at"))
+        if last_success:
+            reset_intro_parts.append(f"上次成功：{html_text(last_success)}")
+    elif not reset_events:
+        reset_intro_parts.append("官方重置记录暂不可用")
     reset_intro = " · ".join(reset_intro_parts)
     refresh_status = normalized["refresh_status"]
     status_class = text_value(refresh_status.get("status"), "ok")

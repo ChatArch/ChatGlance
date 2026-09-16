@@ -87,6 +87,37 @@ def main() -> None:
     """Generate and maintain ChatArch Glance dashboard config."""
 
 
+@main.command("refresh")
+@click.argument("pages", nargs=-1, type=click.Choice(["projects", "servers", "sites", "account-limits"]))
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), help="Runtime home; defaults to the effective ChatArch home/glance.")
+@click.option("--glance-bin", type=click.Path(path_type=Path, dir_okay=False), help="Glance executable for mandatory candidate validation.")
+@click.option("--service-name", default="chatarch-glance.service", show_default=True, help="Existing systemd user service restarted at most once.")
+@click.option("--no-restart", is_flag=True, help="Publish validated artifacts without restarting the service.")
+@click.option("--profiles", help="Explicit account profiles; otherwise use ChatEnv or the current snapshot.")
+@click.option("--actual-cli-tree", is_flag=True, help="Also install/probe current package CLI trees; default reuses same-version evidence.")
+@click.option("--allow-offline-regression", is_flag=True, help="Allow fresh server probes to replace previously online hosts with offline state.")
+@click.option("--json-output", is_flag=True, help="Emit a structured refresh result.")
+def refresh(pages, runtime_home, glance_bin, service_name, no_restart, profiles, actual_cli_tree, allow_offline_regression, json_output) -> None:
+    """Refresh configured pages; optional PAGES select a subset. Never redeem reset cards."""
+    from chatglance.codex_collector import parse_profiles
+    from chatglance.refresh import RefreshError, refresh_runtime
+    import yaml
+    try:
+        result = refresh_runtime(runtime_home, pages, glance_bin=glance_bin, restart=not no_restart, service_name=service_name, profiles=parse_profiles(profiles) if profiles else None, actual_cli_tree=actual_cli_tree, allow_offline_regression=allow_offline_regression)
+    except RefreshError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        raise click.ClickException(f"refresh failed ({type(exc).__name__}); check runtime configuration") from exc
+    if json_output:
+        click.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        for page in result["pages"]:
+            click.echo(f"{page['page']}: {page['status']}" + (f" ({page['error_type']}; live artifacts unchanged)" if page.get("error_type") else ""))
+        click.echo(f"changed={str(result['changed']).lower()} restarted={str(result['restarted']).lower()} reset_execution=false")
+    if not result["ok"]:
+        raise click.exceptions.Exit(1)
+
+
 @main.group()
 def projects() -> None:
     """Generate Glance project dashboard pages."""
@@ -535,16 +566,21 @@ def maintain_runtime(runtime_home: Path, config_path: Path, data_path: Path, bac
     backups = runtime_path(runtime_home, backup_dir) if backup_dir else None
     binary = runtime_path(runtime_home, glance_bin) if validate else None
     mountpoints = discover_meaningful_mountpoints()
-    result = maintain_config(
-        config_path=config,
-        data_path=data,
-        output_path=config,
-        backup_dir=backups,
-        validate_bin=binary,
-        page_name=page_name,
-        restart_service=restart_service,
-        mountpoints=mountpoints,
-    )
+    from chatglance.refresh import RefreshError, _refresh_lock
+    try:
+        with _refresh_lock(runtime_home):
+            result = maintain_config(
+                config_path=config,
+                data_path=data,
+                output_path=config,
+                backup_dir=backups,
+                validate_bin=binary,
+                page_name=page_name,
+                restart_service=restart_service,
+                mountpoints=mountpoints,
+            )
+    except RefreshError as exc:
+        raise click.ClickException(str(exc)) from exc
     click.echo(
         " ".join(
             [
