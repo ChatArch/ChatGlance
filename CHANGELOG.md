@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- 官方重置日历抓取失败或解析为空时，保留上次成功的完整历史，并显示缓存及最后成功时间；连续失败不会伪造缓存更新时间。
+- 官方日历不再混入账号预计重置窗口采样，避免历史月份消失及错误高亮；同一天多次重置按实际事件数统计。
+- 缓存仅用于展示，不参与自动重置卡决策；显式停用公共记录采集仍然生效。
+
 ## 0.1.9 - 2026-09-09
 
 - Show real banked-reset count/expiry and per-profile policy/action status in subscription cards.

@@ -16,6 +16,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -415,6 +416,44 @@ def apply_last_known_values(current: list[dict[str, Any]], previous: dict[str, d
             payload["last_successful_at"] = last_successful_at
 
 
+def apply_last_known_public_reset(
+    current: dict[str, Any], history: Path | None, *, generated_at: str
+) -> dict[str, Any]:
+    """Retain confirmed public history on failure without making it look fresh."""
+    result = deepcopy(current)
+    if result.get("status") == "ok" and result.get("events"):
+        result["using_last_known_values"] = False
+        result["last_successful_at"] = generated_at
+        return result
+    if result.get("status") == "skipped" or history is None:
+        return result
+    try:
+        snapshot = json.loads(history.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return result
+    if not isinstance(snapshot, dict):
+        return result
+    previous = snapshot.get("codex_reset")
+    if not isinstance(previous, dict) or not (
+        previous.get("status") == "ok" or previous.get("using_last_known_values") is True
+    ):
+        return result
+    events = previous.get("events")
+    if not isinstance(events, list) or not events or not all(isinstance(item, dict) for item in events):
+        return result
+    result.update(
+        source=previous.get("source") or PUBLIC_RESET_SOURCE,
+        events=deepcopy(events),
+        latest=deepcopy(previous.get("latest") or events[0]),
+        confirmed_reset_count=len(events),
+        using_last_known_values=True,
+        last_successful_at=previous.get("last_successful_at") or (
+            snapshot.get("generated_at") if previous.get("status") == "ok" else None
+        ),
+    )
+    return result
+
+
 def merge_history(current: list[dict[str, Any]], previous: list[dict[str, Any]]) -> list[dict[str, Any]]:
     merged: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
@@ -457,9 +496,12 @@ def collect_account_limits(*, profiles, output_path: str | Path, history_path: s
     merged_history = merge_history([event for item in payloads for event in item.get('reset_history', [])], load_history(history))
     for payload in payloads:
         payload['reset_history'] = [event for event in merged_history if event.get('profile') == payload['profile']]
-    result = {'generated_at': iso_now(), 'collector_version': __version__, 'refresh_status': refresh_status(payloads),
+    public_reset = {'source': PUBLIC_RESET_SOURCE, 'status': 'skipped', 'events': []} if no_public_reset else fetch_public_codex_reset(reset_timeout)
+    generated_at = iso_now()
+    public_reset = apply_last_known_public_reset(public_reset, history, generated_at=generated_at)
+    result = {'generated_at': generated_at, 'collector_version': __version__, 'refresh_status': refresh_status(payloads),
               'accounts': [], 'codex': payloads,
-              'codex_reset': {'source': PUBLIC_RESET_SOURCE, 'status': 'skipped', 'events': []} if no_public_reset else fetch_public_codex_reset(reset_timeout),
+              'codex_reset': public_reset,
               'resources': [{'kind': 'codex', 'title': 'Codex account usage', 'profiles': profiles, 'sections': ['usage_cards','reset_calendar']}]}
     output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + '\n', encoding='utf-8')
     return result

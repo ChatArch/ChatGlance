@@ -25,3 +25,17 @@ CHATGLANCE_ACCOUNT_LIMITS_RESET_EXECUTE=false
 定期采集只GET，不发quota模型探测，不隐式刷新OAuth；过期凭据显示失败，由原有凭据维护流程处理。缺字段、失败或陈旧数据不触发用卡，旧值仅作展示。相同账号及别名共享持久化去重记录，位于ChatArch home下的`chatglance/`；先落盘请求ID再POST，一轮至多一张，超时/结果不明停止自动重试并显示待核对。只有明确reset结果且GET读回卡数下降、用量恢复才报成功。用卡会改变自然重置日期，不会购买Credits。
 
 Python接口：`chatglance.codex_collector.collect_account_limits`、`chatglance.codex_resets.scan_profile`、`ResetPolicy`。发布包拥有采集逻辑，旧脚本仅为薄入口。
+
+## 官方重置日历缓存
+
+官方重置日历只展示公共来源确认的历史事件，不把账号预计重置窗口采样当作官方重置。
+采集时传入 `--history` 指向上次快照；现有页面刷新脚本会自动传入该路径。
+
+```bash
+chatglance account-limits collect --profiles "work personal" --history account-limits.json --output account-limits.next.json --no-execute-resets
+```
+
+来源请求失败或解析为空时，保留上次成功的事件、月份和日期高亮，并显示“更新失败，显示缓存”和最后成功时间。
+连续失败不会把缓存时间改成本次刷新时间。恢复成功后使用新记录并清除缓存提示。
+如果没有有效历史快照，则显示官方记录暂不可用；显式 `--no-public-reset` 不会重新启用旧记录。
+同一天多次重置计入多次事件，但只高亮对应的一个日期格。该缓存仅影响展示，不参与重置卡消费决策。
