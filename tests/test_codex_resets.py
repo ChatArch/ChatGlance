@@ -172,9 +172,10 @@ def test_card_displays_credit_and_policy_without_controls():
     m = module(); from chatglance.account_limits import render_account_limits_html
     data = {'codex':[m.scan_profile('sample', policy=m.ResetPolicy(enabled=True), client=FakeClient(), now=NOW)]}
     html = render_account_limits_html(data)
-    assert '重置卡' in html and '95%' in html and '24' in html
+    assert '重置卡' in html and '2 张' in html and '最近到期' in html
+    assert '仅预演' not in html and '自动重置：' not in html
     assert '到期' in html and '2030-01-01' in html
-    assert 'button' not in html.lower()
+    assert '<button' not in html.lower()
 
 
 def test_created_ledger_is_private(tmp_path):

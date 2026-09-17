@@ -14,9 +14,13 @@
 
 # ChatGlance
 
-`ChatGlance` 是 ChatArch/WZHECNU Glance 网站部署相关源码与运维记录的 private repo。它沉淀当前站点的页面生成逻辑、配置转换规则、user-level service 模板、验收记录和安全边界；`chatglance` CLI 只是辅助执行这些记录和规则的管理入口。
+`ChatGlance` 是 ChatArch/WZHECNU Glance 网站部署相关源码与运维工具仓库。它沉淀当前站点的页面生成逻辑、配置转换规则、user-level service 模板、验收记录和安全边界；`chatglance` CLI 只是辅助执行这些记录和规则的管理入口。
 
 它不是 NPM 项目，也不是重新实现 Glance 后端：上游 Glance 仍然是 Go 单二进制 dashboard server；`ChatGlance` 负责把 ChatArch 项目清单、Glance YAML 页面、inline HTML 表格、user-level systemd 单元和部署记录组织成可复用、可审查的源码与文档。
+
+## 重置判据与人工开关
+
+订阅卡片默认折叠重置卡信息，预测只在居中小窗中显示。每个账号只有一个“自动用卡”开关，并纳入同一执行清单与暂停/等待/就绪状态；继承网站字体和配色。开启须明确确认，不提供立即兑换按钮。部署与安全边界见 [重置控制](docs/reset-controls.md)。
 
 ## Repo 内容
 
@@ -233,9 +237,9 @@ chatglance runtime status
 
 ## Codex 重置卡与自动扫描
 
-订阅详情按账号显示可用卡数、最近到期时间、策略和最近动作。页面只展示，无阈值设置或消费按钮；未知卡数不会显示成0。
+订阅详情按账号显示可用卡数、最近到期和最近动作。卡片中的“自动用卡设置”打开独立账号小窗，只有一个自动用卡开关；未知卡数不显示成0，没有立即兑换按钮。
 
-默认规则是：主额度窗口已用量 **至少95%**、距下一次自然重置 **超过24小时**、可用卡数 **大于0**，三项同时满足才可用卡。primary/secondary按实际时间判断，不假设哪个是周窗口；额外模型限额不触发。每个profile独立配置，缺省关闭；实际消费还需显式执行开关。
+默认规则是：主额度窗口已用量 **至少95%**、距下一次自然重置 **超过24小时**、可用卡数 **大于0**，三项同时满足才可用卡。primary/secondary按实际时间判断，不假设哪个是周窗口；额外模型限额不触发。每个profile独立配置，缺省关闭；没有额外的全局开关。
 
 ```bash
 chatglance account-limits collect --profiles "work personal" --output account-limits.json --no-execute-resets
@@ -245,13 +249,12 @@ chatglance account-limits render-page --data account-limits.json --output accoun
 后端设置可来自进程环境或ChatEnv的ChatGlance schema，明确CLI值优先：
 
 ```dotenv
-CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES={"work":{"enabled":true,"threshold_percent":95,"min_remaining_seconds":86400},"personal":{"enabled":false}}
+CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES={"work":{"enabled":false,"threshold_percent":95,"min_remaining_seconds":86400},"personal":{"enabled":false}}
 CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL=https://chatgpt.com/backend-api
-CHATGLANCE_ACCOUNT_LIMITS_RESET_EXECUTE=false
 ```
 
-只有审核后才能将执行开关设为true或传`--execute-resets`。只读验收传`--no-execute-resets`，覆盖已有配置。reset base是可选的显式覆盖，只用于重置卡接口，usage保留Codex profile的base；网络/代理由部署环境提供。
+某账号的`enabled=true`即允许该账号在全部条件满足时自动用卡，不影响其他账号。只读检查传`--no-execute-resets`；`chatglance refresh`也始终不消费。旧全局字段须先迁移，见[重置控制](docs/reset-controls.md)。reset base是可选的显式覆盖，只用于重置卡接口，usage保留Codex profile的base；网络/代理由部署环境提供。
 
-定期采集只GET，不发quota模型探测，不隐式刷新OAuth；过期凭据显示失败，由原有凭据维护流程处理。缺字段、失败或陈旧数据不触发用卡，旧值仅作展示。相同账号及别名共享持久化去重记录，位于ChatArch home下的`chatglance/`；先落盘请求ID再POST，一轮至多一张，超时/结果不明停止自动重试并显示待核对。只有明确reset结果且GET读回卡数下降、用量恢复才报成功。用卡会改变自然重置日期，不会购买Credits。
+定期采集通过GET获取数据，已开启账号满足全部条件时才POST兑换；不发quota模型探测，不隐式刷新OAuth；过期凭据显示失败，由原有凭据维护流程处理。缺字段、失败或陈旧数据不触发用卡，旧值仅作展示。相同账号及别名共享持久化去重记录，位于ChatArch home下的`chatglance/`；先落盘请求ID再POST，一轮至多一张，超时/结果不明停止自动重试并显示待核对。只有明确reset结果且GET读回卡数下降、用量恢复才报成功。用卡会改变自然重置日期，不会购买Credits。
 
 Python接口：`chatglance.codex_collector.collect_account_limits`、`chatglance.codex_resets.scan_profile`、`ResetPolicy`。发布包拥有采集逻辑，旧脚本仅为薄入口。

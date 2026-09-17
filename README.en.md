@@ -14,9 +14,13 @@
 
 # ChatGlance
 
-`ChatGlance` is the private ChatArch/WZHECNU repository for Glance website deployment source and operations records. It preserves the current site's page-generation logic, configuration transformations, user-level service templates, verification notes, and safety boundaries; the `chatglance` CLI is only the helper entrypoint for applying those rules.
+`ChatGlance` is the ChatArch/WZHECNU repository for Glance website deployment source and operations helpers. It preserves the current site's page-generation logic, configuration transformations, user-level service templates, verification notes, and safety boundaries; the `chatglance` CLI is only the helper entrypoint for applying those rules.
 
 It is not an npm project and does not reimplement the Glance backend. Upstream Glance remains a Go single-binary dashboard server; `ChatGlance` owns reusable Python code and private deployment records for repository inventory rendering, Glance YAML page generation, inline HTML table generation, selected Disk mountpoint display, and user-level runtime maintenance.
+
+## Reset decisions and manual controls
+
+Subscription cards collapse reset information by default. Forecast details live only in the centered, host-themed popup. Each account has one independent automatic-reset switch, included in the execution checklist and paused/waiting/ready summary. Enabling requires explicit confirmation; there is no immediate-redemption button. See [reset controls](docs/reset-controls.md) for deployment and security boundaries.
 
 ## Repository contents
 
@@ -231,9 +235,9 @@ Only the matching profile quota probe is affected; other profiles, usage GET, cr
 
 ## Banked Codex resets and scanning
 
-Subscription cards show available reset count, next expiry, per-profile policy and latest action. The page is read-only, with no configuration or redemption buttons. Unknown counts are not zero.
+Subscription cards show available cards, next expiry and latest actions. The authenticated popup contains one independent automatic-reset switch per account; there is no global gate or immediate-redemption button. Unknown counts are not zero.
 
-All three conditions must hold: main-window **usage >=95%**, **more than24 hours until natural reset**, and **available cards >0**. Primary/secondary are interpreted by actual timing; extra model limits never trigger. Each profile defaults to disabled; real consumption additionally requires explicit execution.
+All three conditions must hold: main-window **usage >=95%**, **more than24 hours until natural reset**, and **available cards >0**. Primary/secondary are interpreted by actual timing; extra model limits never trigger. Each profile defaults to disabled; enabling it is that account's only durable execution permission.
 
 ```bash
 chatglance account-limits collect --profiles "work personal" --output account-limits.json --no-execute-resets
@@ -243,13 +247,12 @@ chatglance account-limits render-page --data account-limits.json --output accoun
 Backend settings come from process environment or the typed ChatGlance ChatEnv schema; explicit CLI options win:
 
 ```dotenv
-CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES={"work":{"enabled":true,"threshold_percent":95,"min_remaining_seconds":86400},"personal":{"enabled":false}}
+CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES={"work":{"enabled":false,"threshold_percent":95,"min_remaining_seconds":86400},"personal":{"enabled":false}}
 CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL=https://chatgpt.com/backend-api
-CHATGLANCE_ACCOUNT_LIMITS_RESET_EXECUTE=false
 ```
 
-Only enable execution after reviewing policy. `--no-execute-resets` overrides configuration for read-only acceptance. The optional reset base changes reset endpoints only, preserving the Codex profile usage base. Egress/proxy setup is deployment-owned.
+Set an account's `enabled=true` only after reviewing its policy; it can then consume when all conditions hold. `--no-execute-resets` and `chatglance refresh` remain non-consuming inspection paths. Retire legacy global settings using the migration in [reset controls](docs/reset-controls.md). The optional reset base changes reset endpoints only, preserving the Codex profile usage base. Egress/proxy setup is deployment-owned.
 
-Periodic collection makes GET requests, not quota model probes or implicit OAuth refreshes. Missing, failed or stale data cannot authorize consumption. Last-known values are display-only. Account aliases share durable de-duplication state under ChatArch home's `chatglance/` directory. Persist a request ID before POST; at most one card per scan; ambiguous outcomes block further automatic retries. Success requires explicit reset plus credit-count and usage GET readback. Redemption changes the natural reset schedule and never purchases Credits.
+Collection uses GETs for inspection and POSTs for eligible enabled-account redemption, never quota model probes or implicit OAuth refreshes. Missing, failed or stale data cannot authorize consumption. Last-known values are display-only. Account aliases share durable de-duplication state under ChatArch home's `chatglance/` directory. Persist a request ID before POST; at most one card per scan; ambiguous outcomes block further automatic retries. Success requires explicit reset plus credit-count and usage GET readback. Redemption changes the natural reset schedule and never purchases Credits.
 
 Python APIs: `chatglance.codex_collector.collect_account_limits`, `chatglance.codex_resets.scan_profile`, `ResetPolicy`. The published package owns collection; the old script is a thin entrypoint.

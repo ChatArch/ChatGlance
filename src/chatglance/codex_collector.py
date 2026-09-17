@@ -23,6 +23,7 @@ from typing import Any
 
 from chatglance import __version__
 from chatglance.codex_resets import ResetPolicy, parse_policies, scan_profile
+from chatglance.codex_forecast import MAX_PUBLIC_BODY_BYTES, parse_public_forecast
 from chatglance.config import collection_settings
 
 EXPECTED_QUOTA_KEYS = {
@@ -212,9 +213,13 @@ def fetch_public_codex_reset(timeout: int) -> dict[str, Any]:
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
-            body = response.read(1_000_000).decode("utf-8", errors="replace")
-    except (OSError, urllib.error.URLError) as exc:
-        return {"source": PUBLIC_RESET_SOURCE, "status": "error", "error": type(exc).__name__, "events": []}
+            raw = response.read(MAX_PUBLIC_BODY_BYTES + 1)
+            if len(raw) > MAX_PUBLIC_BODY_BYTES:
+                raise ValueError("Public source exceeds size limit")
+            body = raw.decode("utf-8", errors="replace")
+    except (OSError, urllib.error.URLError, ValueError) as exc:
+        return {"source": PUBLIC_RESET_SOURCE, "status": "error", "error": type(exc).__name__,
+                "events": [], "forecast": parse_public_forecast("")}
     events = parse_public_reset_events(body)
     return {
         "source": PUBLIC_RESET_SOURCE,
@@ -222,6 +227,7 @@ def fetch_public_codex_reset(timeout: int) -> dict[str, Any]:
         "confirmed_reset_count": len(events),
         "latest": events[0] if events else {},
         "events": events,
+        "forecast": parse_public_forecast(body),
     }
 
 
@@ -479,7 +485,9 @@ def collect_account_limits(*, profiles, output_path: str | Path, history_path: s
     settings = collection_settings(home=home)
     reset_policies = settings['reset_policies'] if reset_policies is None else reset_policies
     reset_base_url = settings['reset_base_url'] if reset_base_url is None else reset_base_url
-    execute_resets = settings['execute_resets'] if execute_resets is None else execute_resets
+    # A configured account's enabled flag is its only persistent permission.
+    # Explicit False is a per-call inspection mode, not another account setting.
+    execute_resets = True if execute_resets is None else execute_resets
     if type(execute_resets) is not bool:
         raise ValueError('execute_resets must be boolean')
     policies = parse_policies(reset_policies)
@@ -490,18 +498,23 @@ def collect_account_limits(*, profiles, output_path: str | Path, history_path: s
     output_path.parent.mkdir(parents=True, exist_ok=True)
     history = Path(history_path) if history_path is not None else None
     previous_profiles = load_previous_profiles(history)
+    # Fetch fresh forecast before any account may authorize a consuming request.
+    # History cache is still applied only after decisions and never supplies it.
+    public_reset = ({'source': PUBLIC_RESET_SOURCE, 'status': 'skipped', 'events': [], 'forecast': None}
+                    if no_public_reset else fetch_public_codex_reset(reset_timeout))
     payloads = [profile_payload(profile, timeout, policy=policies.get(profile, ResetPolicy()),
-                execute=execute_resets, reset_base_url=reset_base_url or None, home=home) for profile in profiles]
+                execute=execute_resets, reset_base_url=reset_base_url or None, home=home,
+                forecast=public_reset.get('forecast')) for profile in profiles]
     apply_last_known_values(payloads, previous_profiles)
     merged_history = merge_history([event for item in payloads for event in item.get('reset_history', [])], load_history(history))
     for payload in payloads:
         payload['reset_history'] = [event for event in merged_history if event.get('profile') == payload['profile']]
-    public_reset = {'source': PUBLIC_RESET_SOURCE, 'status': 'skipped', 'events': []} if no_public_reset else fetch_public_codex_reset(reset_timeout)
     generated_at = iso_now()
     public_reset = apply_last_known_public_reset(public_reset, history, generated_at=generated_at)
     result = {'generated_at': generated_at, 'collector_version': __version__, 'refresh_status': refresh_status(payloads),
               'accounts': [], 'codex': payloads,
               'codex_reset': public_reset,
+              'reset_control_path': settings.get('control_path', ''),
               'resources': [{'kind': 'codex', 'title': 'Codex account usage', 'profiles': profiles, 'sections': ['usage_cards','reset_calendar']}]}
     output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + '\n', encoding='utf-8')
     return result
