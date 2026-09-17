@@ -162,7 +162,7 @@ def test_account_refresh_is_monitor_only_even_if_reset_is_enabled(runtime, monke
     m = importlib.import_module("chatglance.refresh")
     from chatglance import codex_collector
     (runtime / "data/account-limits.json").write_text(json.dumps({"codex": [{"profile": "work"}], "codex_reset": {"status": "ok", "events": []}}))
-    monkeypatch.setenv("CHATGLANCE_ACCOUNT_LIMITS_RESET_EXECUTE", "true")
+    monkeypatch.setenv("CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES", '{"test":{"enabled":true}}')
     calls = []
     def collect(**kwargs):
         calls.append(kwargs)

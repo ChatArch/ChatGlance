@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.11 - 2026-09-17
+
+- Show separate five-hour and seven-day usage bars with their own reset times when both windows are provided; do not invent absent windows or change the selected reset-policy window.
+- Group reset-card information in a collapsible account-card section and add an authenticated decision popup with one independent automatic-reset switch per account.
+- Retire the persistent global execution setting. Legacy configurations fail closed until migrated with their effective per-account states preserved; normal collection follows account switches, while explicit inspection and manual refresh never consume.
+- Keep card typography native, center the popup, and highlight rolling-24h forecast probability, source update time and veto/unavailable states without claiming a low probability is safe.
+- Parse only the current successful SSR route's snapshot from real inline script nodes; reject history, comments, inert markup and ambiguous data.
+
+- Add optional exact quota-window selection for reset policy and the account card, so a weekly/total allowance never falls back to a five-hour window.
+- Add an optional rolling-24h public forecast veto, with strict threshold, source timestamps, a two-hour freshness limit and fail-closed handling; this is an experimental probability, not prediction accuracy.
+- Fetch the fresh public forecast before account decisions, keep cached history display-only, and recheck every guard before consumption. Manual refresh remains non-consuming.
+
 ## 0.1.10
 
 - 新增安装包自带的 `chatglance refresh [PAGES]...` 与可复用 Python API，支持全部已配置页面或指定页面的只读手动刷新，不兑换重置卡。

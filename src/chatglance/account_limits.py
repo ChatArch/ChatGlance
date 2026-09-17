@@ -6,11 +6,13 @@ from copy import deepcopy
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 import html
+import hashlib
 import json
 import calendar
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 import yaml
 
@@ -359,9 +361,37 @@ def _refresh_status(safe: dict[str, Any], codex_profiles: list[dict[str, Any]]) 
     }
 
 
+def _reset_policy(profile: dict[str, Any]) -> dict[str, Any]:
+    auto = profile.get("auto_reset") if isinstance(profile.get("auto_reset"), dict) else {}
+    return auto.get("policy") if isinstance(auto.get("policy"), dict) else {}
+
+
+def _quota_label(profile: dict[str, Any]) -> str:
+    seconds = _safe_number(_reset_policy(profile).get("target_window_seconds"))
+    if seconds is not None and seconds > 0:
+        if seconds >= 86400:
+            return f"总额度（{_fmt_number(seconds / 86400)}天窗口）"
+        return f"指定额度（{_fmt_number(seconds / 3600)}小时窗口）"
+    return "使用额度"
+
+
 def _primary_window(profile: dict[str, Any]) -> dict[str, Any] | None:
     windows = profile.get("windows") if isinstance(profile.get("windows"), list) else []
     candidates = [window for window in windows if isinstance(window, dict)]
+    configured = _reset_policy(profile).get("target_window_seconds")
+    if configured is not None:
+        target = _safe_number(configured)
+        if target is None or target <= 0:
+            return None
+        matches = []
+        for window in candidates:
+            duration = _safe_number(window.get("window_seconds"))
+            if duration is None:
+                minutes = _safe_number(window.get("window_minutes"))
+                duration = minutes * 60 if minutes is not None else None
+            if duration == target:
+                matches.append(window)
+        return matches[0] if len(matches) == 1 else None
     for window in candidates:
         if text_value(window.get("label")).lower() == "primary":
             return window
@@ -490,6 +520,7 @@ def normalize_account_limits_data(data: dict[str, Any]) -> dict[str, Any]:
         "accounts": accounts,
         "codex": codex_profiles,
         "codex_reset": codex_reset,
+        "reset_control_path": _control_path(safe.get("reset_control_path")),
         "refresh_status": _refresh_status(safe, codex_profiles),
         "counts": {
             "accounts": len(accounts),
@@ -529,35 +560,89 @@ RESET_ACTION_LABELS = {
 def _render_reset_policy(profile: dict[str, Any]) -> str:
     credits = profile.get("reset_credits") if isinstance(profile.get("reset_credits"), dict) else {}
     auto = profile.get("auto_reset") if isinstance(profile.get("auto_reset"), dict) else {}
-    policy = auto.get("policy") if isinstance(auto.get("policy"), dict) else {}
     count = credits.get("available_count")
     count_label = f"{count} 张" if type(count) is int and count >= 0 else "未知"
-    credit_status = credits.get("status")
-    if credit_status == "count_only":
-        count_label += "（仅数量；详情查询失败）"
-    elif credit_status == "stale":
-        count_label += "（上次已知；不用于执行）"
+    if credits.get("status") == "count_only":
+        count_label += "（详情待核对）"
+    elif credits.get("status") == "stale":
+        count_label += "（上次已知）"
     expiry = _fmt_reset(credits.get("next_expires_at")) if credits.get("next_expires_at") else "未知"
-    threshold = _safe_number(policy.get("threshold_percent", 95))
-    seconds = _safe_number(policy.get("min_remaining_seconds", 86400))
-    hours = seconds / 3600 if seconds is not None else None
-    rule = f"主额度 ≥{_fmt_number(threshold)}% 且自然重置 >{_fmt_number(hours)}小时 且可用卡 >0"
-    enabled = policy.get("enabled") is True
-    mode = "执行已开启" if auto.get("execute") is True else "仅预演"
-    switch = f"已启用 · {mode}" if enabled else "未开启"
-    action = RESET_ACTION_LABELS.get(auto.get("status", "disabled"), "未知")
+    history = ""
+    quota_warning = {
+        "target_window_missing": "总额度窗口未知（不用卡）",
+        "target_window_ambiguous": "总额度窗口不明确（不用卡）",
+    }.get(auto.get("reason"))
+    if quota_warning:
+        history += f'<p class="limit-status-line">{html_text(quota_warning)}</p>'
+    if auto.get("status") in {"uncertain", "blocked_pending", "pending", "state_error"}:
+        history += f'<p class="limit-status-line">最近检查：{html_text(RESET_ACTION_LABELS[auto["status"]])}</p>'
     last = auto.get("last_action")
-    last_html = ""
     if isinstance(last, dict):
-        last_label = RESET_ACTION_LABELS.get(last.get("status"), "未知")
-        last_html = f'<p class="limit-muted">最近动作：{html_text(last_label)} · {html_text(_fmt_reset(last.get("at")))}</p>'
+        label = RESET_ACTION_LABELS.get(last.get("status"), "未知")
+        history += f'<p class="limit-muted">最近动作：{html_text(label)} · {html_text(_fmt_reset(last.get("at")))}</p>'
     return (
-        f'<div class="reset-credit-details"><div class="reset-row"><span>重置卡</span><strong>{html_text(count_label)}</strong></div>'
-        f'<div class="reset-row"><span>最近到期</span><strong>{html_text(expiry)}</strong></div>'
-        f'<p class="limit-muted">规则：{html_text(rule)}</p>'
-        f'<p class="limit-status-line">自动重置：{html_text(switch)} · {html_text(action)}</p>'
-        f'{last_html}</div>'
+        f'<div class="reset-credit-details"><div class="reset-row"><span>可用重置卡</span><strong>{html_text(count_label)}</strong></div>'
+        f'<div class="reset-row"><span>最近到期</span><strong>{html_text(expiry)}</strong></div>{history}</div>'
     )
+
+
+def _control_path(value: Any) -> str:
+    return value if isinstance(value, str) and re.fullmatch(r"/[A-Za-z0-9_/-]+/", value) and not value.startswith("//") else ""
+
+
+def _render_policy_control(profile: dict[str, Any], path: str) -> str:
+    if not path:
+        return ""
+    name = text_value(profile.get("profile"))
+    identifier = "reset-policy-" + hashlib.sha256(name.encode()).hexdigest()[:12]
+    url = path + "?" + urlencode({"profile": name})
+    return (
+        f'<button type="button" class="reset-policy-trigger" popovertarget="{identifier}">自动用卡设置</button>'
+        f'<div id="{identifier}" popover class="reset-policy-popover">'
+        f'<div class="reset-policy-heading"><strong>自动用卡</strong><button type="button" aria-label="关闭小窗" popovertarget="{identifier}" popovertargetaction="hide">×</button></div>'
+        f'<iframe loading="lazy" title="{html_text(name)} 的重置卡判据与设置" src="{html_text(url)}"></iframe></div>'
+    )
+
+
+def _render_quota_windows(profile: dict[str, Any]) -> str:
+    """Show each known main quota; display never selects the reset policy."""
+    def duration(window):
+        seconds = _safe_number(window.get("window_seconds"))
+        if seconds is None:
+            minutes = _safe_number(window.get("window_minutes"))
+            seconds = minutes * 60 if minutes is not None else None
+        return seconds
+
+    raw = profile.get("windows")
+    windows = [w for w in raw if isinstance(w, dict) and w.get("name") in
+               ("primary_window", "secondary_window")] if isinstance(raw, list) else []
+    target = _safe_number(_reset_policy(profile).get("target_window_seconds"))
+    selected = _primary_window(profile)
+    rows = []
+    for seconds, label in ((18000, "5小时额度"), (604800, "总额度（7天窗口）")):
+        matches = [w for w in windows if duration(w) == seconds]
+        if matches or target == seconds:
+            window = matches[0] if len(matches) == 1 else None
+            if target == seconds:
+                window = selected
+            rows.append((seconds, label, window))
+    if not rows or (target is not None and target not in (18000, 604800)):
+        seconds = duration(selected) if selected else target
+        rows.append((int(seconds) if seconds is not None and seconds > 0 else 0,
+                     _quota_label(profile), selected))
+    rendered = []
+    for seconds, label, window in rows:
+        used = _fmt_percent(window.get("used_percent")) if window else "—"
+        reset = _fmt_reset(window.get("reset_at")) if window else "—"
+        value = _progress_percent(window.get("used_percent")) if window else None
+        width = f"{value:.1f}%" if value is not None else "0%"
+        rendered.append(
+            f'<section class="quota-window" data-window-seconds="{seconds}">'
+            f'<div class="usage-row"><span>{html_text(label)}</span><strong>{html_text(used)}</strong></div>'
+            f'<div class="limit-progress" aria-label="{html_text(label)} {html_text(used)}"><span style="width: {width}"></span></div>'
+            f'<div class="reset-row"><span>重置时间</span><strong>{html_text(reset)}</strong></div></section>'
+        )
+    return "".join(rendered)
 
 
 def render_account_limits_html(data: dict[str, Any]) -> str:
@@ -566,11 +651,7 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 
     codex_cards = []
     for profile in normalized["codex"]:
-        primary = _primary_window(profile)
-        used_percent = _fmt_percent(primary.get("used_percent")) if primary else "—"
-        reset_time = _fmt_reset(primary.get("reset_at")) if primary else "—"
-        progress_value = _progress_percent(primary.get("used_percent")) if primary else None
-        progress_width = f"{progress_value:.1f}%" if progress_value is not None else "0%"
+
         status = text_value(profile.get("status"))
         credential = _profile_probe_status(profile)
         error_bits = []
@@ -595,10 +676,11 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 <article class="codex-account-card site-style-card">
   <div class="codex-account-card-body">
     <div class="codex-account-card-head"><h3>{html_text(profile.get('account_name') or profile.get('profile'), 'default')}</h3></div>
-    <div class="usage-row"><span>使用额度</span><strong>{html_text(used_percent)}</strong></div>
-    <div class="limit-progress" aria-label="使用额度 {html_text(used_percent)}"><span style="width: {html_text(progress_width)}"></span></div>
-    <div class="reset-row"><span>重置时间</span><strong>{html_text(reset_time)}</strong></div>
+    {_render_quota_windows(profile)}
+    <details class="reset-card-panel"><summary>重置卡 <span>展开 / 收起</span></summary>
     {_render_reset_policy(profile)}
+    {_render_policy_control(profile, normalized['reset_control_path'])}
+    </details>
     {error_html}
   </div>
 </article>"""
@@ -656,6 +738,25 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 
     return f"""
 <style>
+.reset-card-panel {{ border-top:1px solid var(--color-separator); margin-top:0.7rem; padding-top:0.45rem; }}
+.reset-card-panel summary {{ cursor:pointer; color:var(--color-primary); font-size:0.8rem; padding:0.25rem 0; }}
+.reset-card-panel summary span {{ color:var(--color-text-subdue); font-size:0.7rem; margin-left:0.3rem; }}
+.reset-card-panel[open] summary {{ margin-bottom:0.45rem; }}
+.reset-policy-trigger {{ margin-top:0.65rem; padding:0.4rem 0.65rem; border:1px solid var(--color-separator); border-radius:8px; color:var(--color-primary); background:transparent; cursor:pointer; font:inherit; font-size:0.8rem; text-align:left; }}
+.reset-policy-popover {{ position:fixed; inset:0; margin:auto; width:min(680px,calc(100vw - 24px)); max-height:90vh; padding:0; border:1px solid var(--color-separator); border-radius:14px; background:var(--color-widget-background); color:var(--color-text-base); box-shadow:0 14px 70px #0008; }}
+.reset-policy-popover::backdrop {{ background:#0007; }}
+.reset-policy-heading {{ display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--color-separator); }}
+.reset-policy-heading button {{ cursor:pointer; border:0; background:transparent; color:var(--color-text-subdue); padding:0 6px; font-size:24px; }}
+.reset-policy-popover iframe {{ display:block; width:100%; height:min(690px,78vh); border:0; }}
+.codex-account-card :is(h3,.usage-row span,.reset-row span,.usage-row strong,.reset-row strong,.reset-card-panel summary,.reset-policy-trigger), .reset-policy-heading {{ font-size:var(--font-size-base,13px); line-height:1.6; }}
+.codex-account-card :is(.limit-muted,.limit-status-line), .reset-card-panel summary span {{ font-size:12px; }}
+.codex-account-card-body {{ padding:14px; }}
+.quota-window + .quota-window {{ margin-top:12px; padding-top:12px; border-top:1px solid var(--color-separator); }}
+.account-limits-resource-layout :is(.codex-reset-panel h2,.codex-accounts-panel h2,.codex-calendar-heading h3) {{ font-size:var(--font-size-base,13px); color:var(--color-text-highlight); }}
+.account-limits-resource-layout :is(.limit-muted,.codex-calendar-option,.codex-calendar-heading span,.codex-reset-weekdays span,.codex-reset-day) {{ font-size:12px; }}
+.account-limits-resource-layout .codex-reset-day {{ min-height:24px; }}
+.account-limits-resource-layout .codex-reset-day.is-today .day-number {{ inline-size:22px; block-size:22px; }}
+
 .limit-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); }}
 .limit-muted {{ color: var(--color-text-subdue); font-size: 0.76rem; margin-top: 0.18rem; }}
 .limit-status-banner {{ display: flex; flex-direction: column; gap: 0.25rem; border: 1px solid var(--color-separator); border-radius: 14px; padding: 0.62rem 0.75rem; margin-bottom: 0.8rem; background: color-mix(in srgb, var(--color-negative) 9%, var(--color-widget-background)); }}

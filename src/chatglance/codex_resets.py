@@ -19,6 +19,7 @@ from uuid import uuid4
 
 from chatenv import get_paths
 from chatcrs.reset_credits import CodexResetClient as CodexClient
+from chatglance.codex_forecast import forecast_snapshot
 
 BJT = timezone(timedelta(hours=8))
 COOLDOWN_SECONDS = 3600
@@ -35,6 +36,8 @@ class ResetPolicy:
     enabled: bool = False
     threshold_percent: float = 95
     min_remaining_seconds: float = 86400
+    target_window_seconds: float | None = None
+    skip_if_forecast_24h_above: float | None = None
 
     def __post_init__(self) -> None:
         if type(self.enabled) is not bool:
@@ -43,6 +46,12 @@ class ResetPolicy:
             raise ValueError("threshold_percent must be a finite number between 0 and 100")
         if not _number(self.min_remaining_seconds) or self.min_remaining_seconds < 0:
             raise ValueError("min_remaining_seconds must be a finite nonnegative number")
+        if self.target_window_seconds is not None and (
+                not _number(self.target_window_seconds) or self.target_window_seconds <= 0):
+            raise ValueError("target_window_seconds must be a finite positive number or null")
+        if self.skip_if_forecast_24h_above is not None and (
+                not _number(self.skip_if_forecast_24h_above) or not 0 <= self.skip_if_forecast_24h_above <= 100):
+            raise ValueError("skip_if_forecast_24h_above must be a finite number between 0 and 100 or null")
 
 
 def parse_policies(text: str | None) -> dict[str, ResetPolicy]:
@@ -66,7 +75,7 @@ def parse_policies(text: str | None) -> dict[str, ResetPolicy]:
             result[profile] = ResetPolicy(**policy)
         return result
     except (ValueError, TypeError):
-        raise ValueError("Reset policies must map profile names to enabled, threshold_percent and min_remaining_seconds") from None
+        raise ValueError("Reset policies must map profile names to enabled, threshold_percent, min_remaining_seconds, target_window_seconds and skip_if_forecast_24h_above") from None
 
 
 def _epoch(value: Any) -> float | None:
@@ -115,17 +124,20 @@ def _windows(raw: Any, now: float) -> list[dict[str, Any]]:
         windows.append({"name": name, "label": name.split("_")[0].title(), "used_percent": used,
                         "reset_at": _iso(reset), "reset_epoch": reset,
                         "reset_after_seconds": reset - now if reset is not None else None,
+                        "window_seconds": duration if _number(duration) and duration > 0 else None,
                         "window_minutes": duration / 60 if _number(duration) and duration > 0 else None})
     return windows
 
 
-def evaluate_policy(rawusage: dict, rawcredits: dict, policy: ResetPolicy, *, now: float) -> dict:
+def evaluate_policy(rawusage: dict, rawcredits: dict, policy: ResetPolicy, *, now: float,
+                    forecast: dict | None = None) -> dict:
     """AND of main-window usage, actual absolute reset time, and available cards.
 
     Primary is not assumed to be the short window. Unanchored relative countdowns
     and additional/model/review limits are deliberately ineligible.
     """
-    result = {"eligible": False, "reason": "disabled", "target": None}
+    result = {"eligible": False, "reason": "disabled", "target": None,
+              "forecast": forecast_snapshot(forecast, now=now)}
     if not policy.enabled:
         return result
     if not _number(now) or _epoch(now) is None or not _fresh(rawusage) or not _fresh(rawcredits):
@@ -135,11 +147,23 @@ def evaluate_policy(rawusage: dict, rawcredits: dict, policy: ResetPolicy, *, no
         return {**result, "reason": "credits_unknown"}
     if count == 0:
         return {**result, "reason": "no_credit"}
-    for window in _windows(rawusage, now):
+    if policy.skip_if_forecast_24h_above is not None:
+        if result["forecast"]["status"] != "ok":
+            return {**result, "reason": "forecast_unavailable"}
+        if result["forecast"]["probability_24h_percent"] > policy.skip_if_forecast_24h_above:
+            return {**result, "reason": "forecast_above_threshold"}
+    windows = _windows(rawusage, now)
+    if policy.target_window_seconds is not None:
+        windows = [w for w in windows if w["window_seconds"] == policy.target_window_seconds]
+        if not windows:
+            return {**result, "reason": "target_window_missing"}
+        if len(windows) > 1:
+            return {**result, "reason": "target_window_ambiguous"}
+    for window in windows:
         if (window["used_percent"] is not None and window["used_percent"] >= policy.threshold_percent
                 and window["reset_after_seconds"] is not None
                 and window["reset_after_seconds"] > policy.min_remaining_seconds):
-            return {"eligible": True, "reason": "eligible", "target": window}
+            return {**result, "eligible": True, "reason": "eligible", "target": window}
     return {**result, "reason": "conditions_not_met"}
 
 
@@ -248,7 +272,8 @@ def _finish(path: Path, identity: str, request_id: str, status: str, now: float)
 def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bool = False,
                  client: Any = None, home: str | Path | None = None,
                  state_dir: str | Path | None = None, now: float | None = None,
-                 reset_base_url: str | None = None, timeout: float = 20) -> dict:
+                 reset_base_url: str | None = None, timeout: float = 20,
+                 forecast: dict | None = None) -> dict:
     """Return a redacted Glance row; execute requires both opt-in gates.
 
     Dry runs do not create state. Uncertain POSTs/readbacks stay blocked without
@@ -262,7 +287,8 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
     if not _number(now) or _epoch(now) is None:
         raise ValueError("now must be a valid timestamp")
     auto = {"policy": asdict(policy), "execute": execute, "status": "disabled",
-            "eligible": False, "reason": "disabled", "last_action": None}
+            "eligible": False, "reason": "disabled", "last_action": None,
+            "forecast": forecast_snapshot(forecast, now=now)}
     row = {"profile": profile, "account_name": profile, "plan": "Codex", "status": "error",
            "credential_status": "probe_failed", "token_service": "Codex", "refresh_attempted": False,
            "observed_at": _iso(now), "windows": [], "reset_history": [], "auto_reset": auto,
@@ -301,7 +327,7 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
     row["status"] = "ok" if usage_ok and credits_ok else "partial" if usage_ok else "error"
     if row["status"] != "ok":
         row.update(error_type="CodexProbeError", error="额度或重置卡详情查询失败 / 数据不完整")
-    decision = evaluate_policy(rawusage, rawcredits, policy, now=now)
+    decision = evaluate_policy(rawusage, rawcredits, policy, now=now, forecast=forecast)
     auto.update(decision)
     auto["status"] = "disabled" if not policy.enabled else "conditions_not_met"
     if policy.enabled and row["status"] != "ok":
@@ -324,10 +350,10 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
                 # The reservation can wait on another process. Recheck using
                 # wall-clock time immediately before the only consuming call.
                 post_now = clock()
-                post_decision = evaluate_policy(rawusage, rawcredits, policy, now=post_now)
+                post_decision = evaluate_policy(rawusage, rawcredits, policy, now=post_now, forecast=forecast)
+                auto.update(post_decision)
                 if not post_decision["eligible"]:
                     _finish(path, identity, request_id, "conditions_expired", post_now)
-                    auto.update(post_decision)
                     auto.update(status="conditions_expired", last_action={"status": "conditions_expired", "at": _iso(post_now)})
                     row["windows"] = _windows(rawusage, post_now)
                 else:

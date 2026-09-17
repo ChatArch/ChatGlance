@@ -461,6 +461,23 @@ def account_limits() -> None:
     """Render the `订阅详情` Glance page."""
 
 
+@account_limits.command("control-serve")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), default=None)
+@click.option("--public-origin", required=True, help="Exact HTTPS origin used for CSRF protection; no path.")
+@click.option("--port", type=click.IntRange(1, 65535), default=5679, show_default=True)
+def serve_reset_controls(runtime_home: Path | None, public_origin: str, port: int) -> None:
+    """Serve authenticated reset switches on loopback; never redeem cards."""
+    from chatenv import get_paths
+    from chatglance.reset_control import ControlError, serve_controls
+    root = runtime_home.expanduser() if runtime_home is not None else get_paths().home_dir / "glance"
+    try:
+        serve_controls(runtime_home=root, public_origin=public_origin, port=port)
+    except ControlError as exc:
+        raise click.ClickException(str(exc)) from None
+    except OSError:
+        raise click.ClickException("Could not start the loopback control service.") from None
+
+
 @account_limits.command("collect")
 @click.option("--profiles", required=True, help="Space/comma-separated Codex profile names to scan.")
 @click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True)
@@ -470,7 +487,7 @@ def account_limits() -> None:
 @click.option("--no-public-reset", is_flag=True, help="Skip the public reset calendar source.")
 @click.option("--reset-policies", default=None, help="Per-profile policy JSON; otherwise use process env / typed ChatEnv settings.")
 @click.option("--reset-base-url", default=None, help="Explicit HTTPS base for reset-card endpoints only.")
-@click.option("--execute-resets/--no-execute-resets", default=None, help="Opt into real policy-driven consumption. Default is disabled; explicit no wins over configuration.")
+@click.option("--execute-resets/--no-execute-resets", default=None, help="Default follows each account's enabled switch. Explicit --no-execute-resets is a one-call read-only inspection.")
 @click.option("--fail-on-profile-error", is_flag=True)
 def collect_account_limits(profiles, output_path, history_path, timeout, reset_timeout, no_public_reset, reset_policies, reset_base_url, execute_resets, fail_on_profile_error):
     """Scan usage/reset cards without model requests and write a safe snapshot."""
