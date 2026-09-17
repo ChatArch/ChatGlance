@@ -69,8 +69,9 @@ def test_explicit_weekly_card_uses_secondary_without_embedding_policy_controls()
     assert _primary_window(row)["used_percent"] == 12
     text = render(row)
     assert "总额度（7天窗口）" in text
-    assert "12%" in text
-    assert ">99%" not in text
+    assert ">12.0%</strong>" in text
+    weekly = text.split('data-window-seconds="604800">', 1)[1].split('</section>', 1)[0]
+    assert "99.0%" not in weekly
     assert "自然重置 >36小时" not in text
     assert "未来24小时重置预测" not in text
     assert "实验性概率" in popup(row) and "28%" in popup(row)
@@ -85,7 +86,8 @@ def test_missing_target_window_is_unknown_not_a_short_window_fallback():
     assert _primary_window(row) is None
     text = render(row)
     assert "总额度窗口未知（不用卡）" in text
-    assert ">99%" not in text
+    weekly = text.split('data-window-seconds="604800">', 1)[1].split('</section>', 1)[0]
+    assert "99.0%" not in weekly
 
 
 def test_legacy_snapshot_minutes_can_identify_the_same_weekly_window():

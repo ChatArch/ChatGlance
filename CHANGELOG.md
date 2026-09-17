@@ -2,6 +2,7 @@
 
 ## 0.1.11 - 2026-09-17
 
+- Show separate five-hour and seven-day usage bars with their own reset times when both windows are provided; do not invent absent windows or change the selected reset-policy window.
 - Group reset-card information in a collapsible account-card section and add an authenticated decision popup with one independent automatic-reset switch per account.
 - Retire the persistent global execution setting. Legacy configurations fail closed until migrated with their effective per-account states preserved; normal collection follows account switches, while explicit inspection and manual refresh never consume.
 - Keep card typography native, center the popup, and highlight rolling-24h forecast probability, source update time and veto/unavailable states without claiming a low probability is safe.

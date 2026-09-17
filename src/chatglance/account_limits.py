@@ -604,17 +604,54 @@ def _render_policy_control(profile: dict[str, Any], path: str) -> str:
     )
 
 
+def _render_quota_windows(profile: dict[str, Any]) -> str:
+    """Show each known main quota; display never selects the reset policy."""
+    def duration(window):
+        seconds = _safe_number(window.get("window_seconds"))
+        if seconds is None:
+            minutes = _safe_number(window.get("window_minutes"))
+            seconds = minutes * 60 if minutes is not None else None
+        return seconds
+
+    raw = profile.get("windows")
+    windows = [w for w in raw if isinstance(w, dict) and w.get("name") in
+               ("primary_window", "secondary_window")] if isinstance(raw, list) else []
+    target = _safe_number(_reset_policy(profile).get("target_window_seconds"))
+    selected = _primary_window(profile)
+    rows = []
+    for seconds, label in ((18000, "5小时额度"), (604800, "总额度（7天窗口）")):
+        matches = [w for w in windows if duration(w) == seconds]
+        if matches or target == seconds:
+            window = matches[0] if len(matches) == 1 else None
+            if target == seconds:
+                window = selected
+            rows.append((seconds, label, window))
+    if not rows or (target is not None and target not in (18000, 604800)):
+        seconds = duration(selected) if selected else target
+        rows.append((int(seconds) if seconds is not None and seconds > 0 else 0,
+                     _quota_label(profile), selected))
+    rendered = []
+    for seconds, label, window in rows:
+        used = _fmt_percent(window.get("used_percent")) if window else "—"
+        reset = _fmt_reset(window.get("reset_at")) if window else "—"
+        value = _progress_percent(window.get("used_percent")) if window else None
+        width = f"{value:.1f}%" if value is not None else "0%"
+        rendered.append(
+            f'<section class="quota-window" data-window-seconds="{seconds}">'
+            f'<div class="usage-row"><span>{html_text(label)}</span><strong>{html_text(used)}</strong></div>'
+            f'<div class="limit-progress" aria-label="{html_text(label)} {html_text(used)}"><span style="width: {width}"></span></div>'
+            f'<div class="reset-row"><span>重置时间</span><strong>{html_text(reset)}</strong></div></section>'
+        )
+    return "".join(rendered)
+
+
 def render_account_limits_html(data: dict[str, Any]) -> str:
     normalized = normalize_account_limits_data(data)
     counts = normalized["counts"]
 
     codex_cards = []
     for profile in normalized["codex"]:
-        primary = _primary_window(profile)
-        used_percent = _fmt_percent(primary.get("used_percent")) if primary else "—"
-        reset_time = _fmt_reset(primary.get("reset_at")) if primary else "—"
-        progress_value = _progress_percent(primary.get("used_percent")) if primary else None
-        progress_width = f"{progress_value:.1f}%" if progress_value is not None else "0%"
+
         status = text_value(profile.get("status"))
         credential = _profile_probe_status(profile)
         error_bits = []
@@ -639,9 +676,7 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 <article class="codex-account-card site-style-card">
   <div class="codex-account-card-body">
     <div class="codex-account-card-head"><h3>{html_text(profile.get('account_name') or profile.get('profile'), 'default')}</h3></div>
-    <div class="usage-row"><span>{html_text(_quota_label(profile))}</span><strong>{html_text(used_percent)}</strong></div>
-    <div class="limit-progress" aria-label="{html_text(_quota_label(profile))} {html_text(used_percent)}"><span style="width: {html_text(progress_width)}"></span></div>
-    <div class="reset-row"><span>重置时间</span><strong>{html_text(reset_time)}</strong></div>
+    {_render_quota_windows(profile)}
     <details class="reset-card-panel"><summary>重置卡 <span>展开 / 收起</span></summary>
     {_render_reset_policy(profile)}
     {_render_policy_control(profile, normalized['reset_control_path'])}
@@ -716,6 +751,7 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 .codex-account-card :is(h3,.usage-row span,.reset-row span,.usage-row strong,.reset-row strong,.reset-card-panel summary,.reset-policy-trigger), .reset-policy-heading {{ font-size:var(--font-size-base,13px); line-height:1.6; }}
 .codex-account-card :is(.limit-muted,.limit-status-line), .reset-card-panel summary span {{ font-size:12px; }}
 .codex-account-card-body {{ padding:14px; }}
+.quota-window + .quota-window {{ margin-top:12px; padding-top:12px; border-top:1px solid var(--color-separator); }}
 .account-limits-resource-layout :is(.codex-reset-panel h2,.codex-accounts-panel h2,.codex-calendar-heading h3) {{ font-size:var(--font-size-base,13px); color:var(--color-text-highlight); }}
 .account-limits-resource-layout :is(.limit-muted,.codex-calendar-option,.codex-calendar-heading span,.codex-reset-weekdays span,.codex-reset-day) {{ font-size:12px; }}
 .account-limits-resource-layout .codex-reset-day {{ min-height:24px; }}
