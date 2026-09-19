@@ -31,10 +31,10 @@
 - `docs/site-architecture.md`：ChatGlance 作为 Python 包、Glance runtime、生成配置和 runtime 数据脚本之间的边界。
 - `docs/projects.md`：`项目` 页展示内容、PyPI-only 版本规则、entrypoint-only 展示规则、actual CLI tree 分类证据和刷新验收清单。
 - `docs/infra.md`：Infra/`服务器` 页的配置机制、外部数据生成链路、刷新方式和 cron/timer 模板。
-- `docs/deployment/current-site.md`：当前线上 Glance 网站的私有部署记录，包括服务拓扑、路径、user service/timer、local/public entry、验收和安全边界。
+- `docs/deployment/current-site.md`：原生 CLI 与 user service/timer 的部署约定；具体拓扑、密钥和现场验收保留在外部运行态。
 - `examples/server-inventory.example.yml` / `examples/site-services.example.yml`：可提交的脱敏 inventory 配置示例；真实 inventory 放在 runtime config 目录。
-- `scripts/refresh-projects-page.sh`：刷新 GitHub/ChatGH 当前项目数据、生成 `项目` 页并安全替换 candidate config 的脚本模板。
-- `scripts/refresh-server-status.sh` / `scripts/refresh-sites-page.sh`：可手动运行或挂 cron/systemd timer 的外部刷新脚本模板。
+- `chatglance refresh [PAGES]...`：安装包内置的采集、候选校验与发布入口，不依赖源码 checkout 或机器本地业务脚本。
+- `chatglance refresh --scheduled`：供现有 timer 调用的显式计划运行方式；保留每账号自动策略和统一锁。
 - `README.md` / `README.en.md` / `CHANGELOG.md`：对外/协作入口；避免写入 live auth、token、password hash 或代理凭据。
 
 ## 当前能力
@@ -86,7 +86,13 @@ chatglance refresh projects sites
 - `--no-restart` 只更新产物；`--json-output` 输出机器可读结果。已在线服务器变为不可达默认不覆盖旧快照，确认要展示新离线状态时使用 `--allow-offline-regression`。
 - 项目页默认复用**相同发行版本、包名和命令入口**的 CLI 树证据，避免每次手动刷新都安装所有包；`--actual-cli-tree` 才重新探测当前发行包。
 
-可选的 `scripts/refresh-manual.sh` 只是 `chatglance refresh` 的薄包装，不是安装包的运行依赖。既有分页面脚本继续供调度/兼容流程使用，不再是日常手动入口。手动刷新不改变既有自动重置策略。
+手动与定时刷新都直接调用安装包 CLI。迁移后停用机器本地和源码目录下的旧业务脚本入口；外部仅保留 ChatEnv/密钥、inventory、数据与薄 systemd 配置。手动刷新不改变既有自动重置策略，也不消费卡片；必要的 OAuth 续期由 ChatCRS 0.3.4 的标准 ChatEnv 流程处理。
+
+```bash
+chatglance refresh --scheduled --runtime-home "$HOME/.chatarch/glance" --json-output
+```
+
+账号请求使用 profile 中的反向代理 Base URL，ChatCRS 忽略所有本地 Proxy；不在刷新命令前调用 `proxy_on`。可用 `--server-inventory`、`--sites-inventory`、`--gatus-db` 和其他采集参数显式选择非敏感配置。只读诊断不要传 `--scheduled`。
 
 完整命令面见 [CLI 树](docs/cli-tree.md)，运行 `chatglance --tree` / `chatglance --tree-brief` 读取真实注册命令。配置清单和低层步骤见 [手动刷新](docs/refresh.md)、[项目页](docs/projects.md) 和 [服务器页](docs/infra.md)。
 

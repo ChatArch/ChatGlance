@@ -1,177 +1,62 @@
-# Infra / Server Status Page Configuration
+# Server inventory and native refresh
 
-`ChatGlance` treats the Glance Infra page as a reproducible pipeline:
+ChatGlance owns collection, rendering, candidate validation, backups and publication in the installed package. The server page is generated from a reviewed inventory and read-only SSH probes; it does not require a source checkout or a machine-local business script.
 
-1. **Source code** in this repository defines the renderer and safe config patchers.
-2. **Infra inventory config** lists which SSH aliases belong on the page and how they are labelled.
-3. **External generated data** is collected as a static JSON snapshot by read-only SSH probes.
-4. **Generated Glance YAML** is rendered from the staged JSON and inserted into a candidate `glance.yml`.
-5. The candidate config is validated before replacing the live JSON, rendered page YAML, and config together; service-manager actions stay in the outer scheduler/wrapper.
+## Inventory
 
-The live Glance auth config, password hashes, cookies, tokens, full runtime backups, and host-specific secrets must stay outside this repository and outside PyPI artifacts.
-
-## What is marked as Infra?
-
-A server appears on the Infra/`服务器` page only when it is selected by the server inventory config or by the safe default candidate filter. For the live ChatArch site, prefer an explicit runtime inventory and keep host membership reviewed; do not treat every historical SSH alias, local-only alias, or temporary public host as a dashboard server.
-
-Recommended explicit config:
+Keep the real inventory beside the runtime configuration, outside Git and distribution artifacts. For example:
 
 ```yaml
 page:
   name: "服务器"
   slug: "servers"
   widget_title: "服务器状态"
-
 inventory:
   default_candidates: false
-  exclude: []
   hosts:
-    - alias: "infra-cube-1"
-      hostname: "172.23.0.10"
-      port: 3322
-      user: "zhihong"
-      strict_host_key_checking: "accept-new"
-      label: "cube-1"
-      group: "cube"
+    - alias: "infra-primary"
+      hostname: "192.0.2.10"
+      port: 22
+      user: "service-user"
+      label: "primary"
+      group: "infra"
       connection_kind: "内网连接"
-    - alias: "infra-public-1"
-      label: "public-1"
-      group: "public"
-      connection_kind: "公网连接"
-
 collection:
   timeout: 18
-  workers: 8
+  workers: 4
 ```
 
-Fields:
+`alias` selects existing SSH configuration and keys. Optional `hostname`, `port`, `user` and `strict_host_key_checking` override only the selected connection. Review membership explicitly; do not include every historical SSH alias automatically. The template `examples/server-inventory.example.yml` documents the same structure.
 
-- `inventory.hosts[].alias`: SSH config alias on the control machine. This is the stable selector.
-- `hostname`, `port`, `user`: optional SSH endpoint overrides. When present, ChatGlance still runs `ssh <alias>` so alias-scoped key settings are reused, but passes `-o HostName=...` / `-o Port=...` / `-o User=...` to avoid stale SSH config or DNS entries.
-- `strict_host_key_checking`: optional per-host SSH host-key policy, commonly `accept-new` for non-interactive refreshes after reviewed IP changes.
-- `label` / `display_name`: optional page label override.
-- `group`: presentation/sorting hint such as `cube`, `public`, or `other`.
-- `connection_kind`: optional display override, normally `内网连接` or `公网连接`.
-- `inventory.exclude`: aliases to keep out even if `default_candidates: true` would select them.
-- `collection.timeout` and `collection.workers`: defaults used by `chatglance servers collect` unless CLI flags override them.
-
-A sanitized template lives at `examples/server-inventory.example.yml`. The real live inventory file should be stored with the runtime config, for example:
-
-```text
-~/.chatarch/glance/config/server-inventory.yml
-```
-
-## What depends on external generated data?
-
-The following are generated artifacts, not source-of-truth source files:
-
-- `server-status.json`: read-only SSH probe output for the current snapshot; the refresh script stages it as `server-status.json.next` first.
-- `server-page.yml`: rendered Glance page object for the Infra/`服务器` page; the refresh script stages it as `server-page.yml.next` first.
-- `glance.yml.infra-candidate`: temporary candidate full Glance config after replacing the generated page.
-- timestamped backups under the runtime backup directory.
-
-Only the code, templates, and documentation belong in this repository. Runtime data should live under the Glance runtime directory, usually:
-
-```text
-~/.chatarch/glance/data/server-status.json
-~/.chatarch/glance/data/server-page.yml
-~/.chatarch/glance/config/glance.yml
-~/.chatarch/glance/config/backups/
-```
-
-## How do I refresh the Infra page?
-
-Use the external script template:
+## Refresh through the installed CLI
 
 ```bash
-CHATGLANCE_INFRA_CONFIG=~/.chatarch/glance/config/server-inventory.yml \
-CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
-CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
-bash scripts/refresh-server-status.sh
+chatglance refresh servers \
+  --runtime-home "$HOME/.chatarch/glance" \
+  --server-inventory "$HOME/.chatarch/glance/config/server-inventory.yml" \
+  --json-output
 ```
 
-Equivalent manual commands:
+The command shares the runtime lock, collects a candidate snapshot, renders the page, validates the complete candidate with the configured Glance binary, backs up replaced artifacts and publishes transactionally. It restarts the configured Glance service at most once if content changed. Use `--no-restart` when a supervisor owns the separate apply step.
 
-```bash
-chatglance servers collect \
-  --inventory-config ~/.chatarch/glance/config/server-inventory.yml \
-  --output ~/.chatarch/glance/data/server-status.json.next
+Manual refresh protects previously online servers from unexpected offline regression. Use `--allow-offline-regression` after reviewing an intentional offline transition. Explicit `--scheduled` mode publishes reviewed live outages by default, preserving the existing scheduled behavior; a removed inventory member is a membership change, not an outage.
 
-chatglance servers validate-refresh \
-  --previous ~/.chatarch/glance/data/server-status.json \
-  --next ~/.chatarch/glance/data/server-status.json.next
+## Scheduled execution
 
-chatglance servers render-page \
-  --inventory-config ~/.chatarch/glance/config/server-inventory.yml \
-  --data ~/.chatarch/glance/data/server-status.json.next \
-  --output ~/.chatarch/glance/data/server-page.yml.next
+Point the existing user timer at the installed command, not `scripts/refresh-server-status.sh` or a source checkout:
 
-chatglance servers update-config \
-  --inventory-config ~/.chatarch/glance/config/server-inventory.yml \
-  --data ~/.chatarch/glance/data/server-status.json.next \
-  --config ~/.chatarch/glance/config/glance.yml \
-  --output ~/.chatarch/glance/config/glance.yml.infra-candidate
-
-~/.chatarch/glance/bin/glance -config ~/.chatarch/glance/config/glance.yml.infra-candidate config:validate
+```ini
+[Service]
+Type=oneshot
+ExecStart=%h/.chatarch/venv/bin/chatglance refresh servers --scheduled --runtime-home %h/.chatarch/glance --json-output
 ```
 
-If validation passes and the candidate differs from the live config, back up `glance.yml`, `server-status.json`, and `server-page.yml`, then move the staged JSON/page YAML and candidate config into place together. Let the outer scheduler or operator perform the service-manager action when needed:
+Preserve the established timer cadence. For a complete site use `chatglance refresh --scheduled`; without page arguments it selects configured generated pages. Retire old wrapper references after verifying the installed command and service.
 
-```bash
-mkdir -p ~/.chatarch/glance/config/backups
-cp ~/.chatarch/glance/config/glance.yml \
-  ~/.chatarch/glance/config/backups/glance.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%S+0800).yml
-cp ~/.chatarch/glance/data/server-status.json \
-  ~/.chatarch/glance/config/backups/server-status.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%S+0800).json
-cp ~/.chatarch/glance/data/server-page.yml \
-  ~/.chatarch/glance/config/backups/server-page.$(TZ=Asia/Shanghai date +%Y%m%dT%H%M%S+0800).yml
-mv ~/.chatarch/glance/data/server-status.json.next \
-  ~/.chatarch/glance/data/server-status.json
-mv ~/.chatarch/glance/data/server-page.yml.next \
-  ~/.chatarch/glance/data/server-page.yml
-mv ~/.chatarch/glance/config/glance.yml.infra-candidate \
-  ~/.chatarch/glance/config/glance.yml
-```
+## Runtime artifacts and acceptance
 
-The bundled refresh script intentionally does not call the service manager. It prints `changed=true ... service_action=external` when the live config changed, so a cron wrapper or systemd user unit can decide how to apply the service lifecycle action.
+Runtime files include `data/server-status.json`, the rendered page YAML, `config/glance.yml`, staging candidates and backups. They are data, not another implementation of the refresh pipeline. Credentials and private deployment values stay outside the repository.
 
-The `validate-refresh` gate fails closed by default when a host that is still in
-the new inventory would change from `online` to a non-online status. This avoids
-publishing stale controller SSH/DNS/key problems as live server outages during
-manual one-off runs. Set `CHATGLANCE_ALLOW_SERVER_OFFLINE_REGRESSION=1` for an
-intentional offline publication. The bundled `refresh-live-pages.sh` orchestrator
-sets this to `1` by default because the live dashboard should show the current
-reviewed server state, including real outages such as a timed-out server; set it
-to `0` explicitly if you need a temporary fail-closed maintenance run. If a host
-is removed from the runtime inventory, its absence is treated as an intentional
-membership change rather than an outage regression.
+Verify the CLI exit status and each page's result, not only systemd `active` or exit zero from an older wrapper. Re-read snapshot timestamps, changed/partial status and the real authenticated page. A failed page retains prior display values and must not be described as freshly collected.
 
-## Cron or timer usage
-
-The refresh script has no embedded secrets and can be scheduled externally. Example cron entry:
-
-```cron
-*/30 * * * * CHATGLANCE_BIN=$HOME/.chatarch/venv/bin/chatglance CHATGLANCE_RUNTIME_HOME=$HOME/.chatarch/glance CHATGLANCE_INFRA_CONFIG=$HOME/.chatarch/glance/config/server-inventory.yml bash /path/to/ChatGlance/scripts/refresh-server-status.sh >> $HOME/.chatarch/glance/logs/server-status-refresh.log 2>&1
-```
-
-Use a systemd user timer instead of cron if you need unit logging and status. Keep the script path and runtime paths explicit. The combined `refresh-live-pages.sh` uses a non-blocking lock at `$CHATGLANCE_REFRESH_LOCK` (default `$CHATGLANCE_RUNTIME_HOME/logs/refresh-live-pages.lock`) so manual runs and timer runs do not publish overlapping candidates.
-
-## Probe contract
-
-`chatglance servers collect` is read-only. It connects to each selected SSH alias and collects:
-
-- hostname, SSH user, kernel, collected time, `Last Reboot`, and uptime seconds; collected and reboot timestamps are rendered in Beijing time (`+08:00`);
-- IPs and connection/display IP policy;
-- CPU, memory, `df`, filtered `lsblk`, GPU information, and safe disk summaries;
-- optional cube `getdevices.sh` output only when it can be run without installing packages.
-
-It does not install packages, write remote files, or persist credentials.
-
-## Review checklist before changing Infra config
-
-1. Update the runtime inventory file (`server-inventory.yml`) rather than editing generated JSON by hand.
-2. Run `chatglance servers candidates --inventory-config ...` to inspect selected aliases.
-3. Run the refresh script once manually and read its `changed=...` output.
-4. Confirm `glance config:validate` passes before replacing live config.
-5. Confirm public unauthenticated access still redirects to `/login`.
-6. Log the refresh in the project `progress.md` when it changes live content.
+The lower-level `servers collect`, `validate-refresh`, `render-page` and `update-config` commands remain available for explicit staged workflows. They are not prerequisites for writing a new orchestration shell script.

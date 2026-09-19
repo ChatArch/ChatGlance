@@ -26,7 +26,7 @@ chatglance
 │   ├── collect [--owner OWNER] [--repo-list-json REPO-LIST-JSON] [--baseline-data BASELINE-DATA] [--output OUTPUT-PATH] [--uvx-bin UVX-BIN] [--limit LIMIT] [--workers WORKERS] [--timeout TIMEOUT] [--actual-cli-tree] [--cli-tree-timeout CLI-TREE-TIMEOUT]  # Write refreshed project inventory JSON from read-only GitHub metadata.
 │   ├── render-page [--data DATA-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME]  # Write the `项目` page YAML from inventory JSON.
 │   └── update-config [--data DATA-PATH] [--config CONFIG-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME]  # Write a config copy with the generated project page replaced.
-├── refresh [PAGES...] [--runtime-home RUNTIME-HOME] [--glance-bin GLANCE-BIN] [--service-name SERVICE-NAME] [--no-restart] [--profiles PROFILES] [--actual-cli-tree] [--allow-offline-regression] [--json-output]  # Refresh configured pages; optional PAGES select a subset. Never redeem reset cards.
+├── refresh [PAGES...] [--runtime-home RUNTIME-HOME] [--glance-bin GLANCE-BIN] [--service-name SERVICE-NAME] [--no-restart] [--scheduled] [--profiles PROFILES] [--actual-cli-tree] [--allow-offline-regression] [--projects-owner PROJECTS-OWNER] [--project-workers PROJECT-WORKERS] [--uvx-bin UVX-BIN] [--cli-tree-timeout CLI-TREE-TIMEOUT] [--server-inventory SERVER-INVENTORY] [--sites-inventory SITES-INVENTORY] [--gatus-db GATUS-DB] [--account-timeout ACCOUNT-TIMEOUT] [--reset-timeout RESET-TIMEOUT] [--no-public-reset] [--reset-base-url RESET-BASE-URL] [--json-output]  # Refresh configured pages natively; manual mode never redeems reset cards.
 ├── runtime  # Maintain a durable Glance service runtime.
 │   ├── install-systemd [--runtime-home RUNTIME-HOME] [--chatglance-bin CHATGLANCE-BIN] [--output-dir OUTPUT-DIR] [--service-name SERVICE-NAME] [--maintenance-service-name MAINTENANCE-SERVICE-NAME] [--timer-name TIMER-NAME] [--interval INTERVAL] [--verify] [--enable] [--start]  # Install, verify, enable, and optionally start user-level systemd units.
 │   ├── maintain [--runtime-home RUNTIME-HOME] [--config CONFIG-PATH] [--data DATA-PATH] [--backup-dir BACKUP-DIR] [--page-name PAGE-NAME] [--validate] [--glance-bin GLANCE-BIN] [--restart-service RESTART-SERVICE]  # Update runtime config atomically and optionally restart a service.
@@ -70,7 +70,7 @@ chatglance
 │   ├── collect  # Write refreshed project inventory JSON from read-only GitHub metadata.
 │   ├── render-page  # Write the `项目` page YAML from inventory JSON.
 │   └── update-config  # Write a config copy with the generated project page replaced.
-├── refresh  # Refresh configured pages; optional PAGES select a subset. Never redeem reset cards.
+├── refresh  # Refresh configured pages natively; manual mode never redeems reset cards.
 ├── runtime  # Maintain a durable Glance service runtime.
 │   ├── install-systemd  # Install, verify, enable, and optionally start user-level systemd units.
 │   ├── maintain  # Update runtime config atomically and optionally restart a service.

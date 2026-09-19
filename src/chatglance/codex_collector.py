@@ -2,7 +2,7 @@
 """Collect Codex usage and banked reset details for ChatGlance.
 
 Periodic scans use GET only unless both per-profile policy and real-execution
-settings are enabled. No model request or automatic OAuth refresh is made.
+settings are enabled. No model request is made; ChatCRS owns OAuth refresh.
 Policy/ledger decisions are made on fresh data before display-only stale fallbacks.
 """
 from __future__ import annotations
@@ -480,7 +480,8 @@ def collect_account_limits(*, profiles, output_path: str | Path, history_path: s
     """Collect fresh usage/credits and apply policy, then write the safe snapshot.
 
     This importable API is also used by the published CLI. No model smoke or
-    automatic token refresh is performed. Last-known values are display-only.
+    package-local token refresh is performed; ChatCRS uses its standard token
+    lifecycle. Last-known values are display-only.
     """
     settings = collection_settings(home=home)
     reset_policies = settings['reset_policies'] if reset_policies is None else reset_policies
