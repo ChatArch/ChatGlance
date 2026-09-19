@@ -1,4 +1,4 @@
-"""Manual, read-only collection and transactional dashboard publication."""
+"""Package-owned collection and transactional dashboard publication."""
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -41,6 +41,23 @@ class PageUpdate:
     partial: bool = False
 
 
+@dataclass(frozen=True)
+class CollectionOptions:
+    """Non-secret collector inputs; credentials stay with ChatEnv/providers."""
+
+    projects_owner: str | None = None
+    project_workers: int = 4
+    uvx_bin: str = "uvx"
+    cli_tree_timeout: int = 90
+    server_inventory: Path | None = None
+    sites_inventory: Path | None = None
+    gatus_db: Path | None = None
+    account_timeout: int = 60
+    reset_timeout: int = 20
+    no_public_reset: bool = False
+    reset_base_url: str | None = None
+
+
 def default_runtime_home() -> Path:
     return Path(get_paths().home_dir) / "glance"
 
@@ -72,9 +89,9 @@ def _refresh_lock(root: Path):
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
-def _configured_pages(config: dict[str, Any], root: Path) -> list[str]:
+def _configured_pages(config: dict[str, Any], root: Path, collection: CollectionOptions) -> list[str]:
     identities = {key: {key, spec[0]} for key, spec in PAGE_SPECS.items()}
-    inventory = root / "config/server-inventory.yml"
+    inventory = collection.server_inventory or root / "config/server-inventory.yml"
     if inventory.exists():
         from .servers import load_server_inventory_config, page_options_from_inventory_config
         options = page_options_from_inventory_config(load_server_inventory_config(inventory))
@@ -130,7 +147,8 @@ def _cli_report(data: dict) -> str:
     return output.getvalue()
 
 
-def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] | None, actual_cli_tree: bool, allow_offline_regression: bool) -> PageUpdate:
+def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] | None, actual_cli_tree: bool, allow_offline_regression: bool, scheduled: bool = False, collection: CollectionOptions | None = None) -> PageUpdate:
+    collection = collection or CollectionOptions()
     previous_path = root / "data" / PAGE_SPECS[key][1]
     previous = _json(previous_path)
     if key == "account-limits":
@@ -141,19 +159,25 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
         selected = list(profiles or parse_profiles(configured) or [item["profile"] for item in previous.get("codex", []) if item.get("profile")])
         if not selected:
             raise RefreshError("no configured account profiles")
-        data = collect_account_limits(profiles=selected, output_path=stage / "account-limits.json", history_path=previous_path if previous_path.exists() else None, timeout=60, execute_resets=False)
+        data = collect_account_limits(
+            profiles=selected, output_path=stage / "account-limits.json",
+            history_path=previous_path if previous_path.exists() else None,
+            timeout=collection.account_timeout, reset_timeout=collection.reset_timeout,
+            no_public_reset=collection.no_public_reset, reset_base_url=collection.reset_base_url,
+            execute_resets=scheduled,
+        )
         partial = bool(data.get("refresh_status", {}).get("failed_count")) or data.get("codex_reset", {}).get("status") not in {"ok", "skipped"}
         return PageUpdate(key, data, build_account_limits_page(data), partial=partial)
     if key == "sites":
         from .sites import load_sites_inventory, apply_gatus_status, build_sites_page
-        data = load_sites_inventory(root / "config/site-services.yml")
-        database = root.parent / "uptime-gatus/data/gatus.db"
+        data = load_sites_inventory(collection.sites_inventory or root / "config/site-services.yml")
+        database = collection.gatus_db or root.parent / "uptime-gatus/data/gatus.db"
         if database.exists():
             data = apply_gatus_status(data, database)
         return PageUpdate(key, data, build_sites_page(data))
     if key == "servers":
         from .servers import (load_server_inventory_config, aliases_from_inventory_config, collection_options_from_inventory_config, host_connection_overrides_from_inventory_config, collect_server_status, apply_server_inventory_config, page_options_from_inventory_config, build_servers_page, server_status_regressions)
-        inventory = load_server_inventory_config(root / "config/server-inventory.yml")
+        inventory = load_server_inventory_config(collection.server_inventory or root / "config/server-inventory.yml")
         aliases = aliases_from_inventory_config(inventory)
         if not aliases:
             raise RefreshError("no configured servers")
@@ -165,10 +189,10 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
         return PageUpdate(key, data, build_servers_page(data, **page_options_from_inventory_config(inventory)))
     from .project_inventory import RefreshOptions, refresh_project_inventory
     from .projects import build_projects_page
-    owner = (previous.get("source") or {}).get("owner") or "ChatArch"
+    owner = collection.projects_owner or (previous.get("source") or {}).get("owner") or "ChatArch"
     overrides = root / "config/project-category-overrides.json"
     baseline = overrides if overrides.exists() else previous_path if previous_path.exists() else None
-    data = refresh_project_inventory(output_path=stage / "projects.json", baseline_data=baseline, options=RefreshOptions(owner=owner, workers=4, collect_actual_cli_trees=actual_cli_tree))
+    data = refresh_project_inventory(output_path=stage / "projects.json", baseline_data=baseline, options=RefreshOptions(owner=owner, workers=collection.project_workers, collect_actual_cli_trees=actual_cli_tree, uvx_bin=collection.uvx_bin, cli_tree_timeout=collection.cli_tree_timeout))
     if not actual_cli_tree:
         _preserve_same_version_trees(data, previous)
     return PageUpdate(key, data, build_projects_page(data), {"project-cli-tree-report.tsv": _cli_report(data)})
@@ -211,8 +235,8 @@ def _publish(root: Path, stage: Path, payloads: dict[Path, str]) -> str | None:
     return str(backup)
 
 
-def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str] = (), *, glance_bin: str | Path | None = None, restart: bool = True, service_name: str = "chatarch-glance.service", profiles: Sequence[str] | None = None, actual_cli_tree: bool = False, allow_offline_regression: bool = False) -> dict[str, Any]:
-    """Collect selected configured pages without model/reset mutations.
+def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str] = (), *, glance_bin: str | Path | None = None, restart: bool = True, service_name: str = "chatarch-glance.service", profiles: Sequence[str] | None = None, actual_cli_tree: bool | None = None, allow_offline_regression: bool | None = None, scheduled: bool = False, collection: CollectionOptions | None = None) -> dict[str, Any]:
+    """Collect configured pages; only explicit scheduled mode may execute policy.
 
     Failed pages retain their previous snapshots; successful and cached partial
     pages are validated and published together. Partial results return ok=False.
@@ -220,6 +244,11 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
     selected = list(dict.fromkeys(pages))
     if any(key not in PAGE_SPECS for key in selected):
         raise RefreshError("unknown refresh page")
+    if type(scheduled) is not bool:
+        raise RefreshError("scheduled must be boolean")
+    collection = collection or CollectionOptions()
+    actual_cli_tree = scheduled if actual_cli_tree is None else actual_cli_tree
+    allow_offline_regression = scheduled if allow_offline_regression is None else allow_offline_regression
     root = Path(runtime_home).expanduser().resolve() if runtime_home is not None else default_runtime_home()
     config_path = root / "config/glance.yml"
     if not config_path.is_file():
@@ -231,7 +260,7 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
         initial = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         if not isinstance(initial, dict) or not isinstance(initial.get("pages"), list):
             raise RefreshError("runtime config must contain pages")
-        selected = selected or _configured_pages(initial, root)
+        selected = selected or _configured_pages(initial, root, collection)
         if not selected:
             raise RefreshError("no configured generated pages to refresh")
         staging = root / "staging"
@@ -241,7 +270,7 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
             updates, rows = [], []
             for key in selected:
                 try:
-                    update = _collect_page(key, root, stage, profiles=profiles, actual_cli_tree=actual_cli_tree, allow_offline_regression=allow_offline_regression)
+                    update = _collect_page(key, root, stage, profiles=profiles, actual_cli_tree=actual_cli_tree, allow_offline_regression=allow_offline_regression, scheduled=scheduled, collection=collection)
                     counts = update.data.get("counts", {})
                     details = {}
                     if key == "servers":
@@ -255,7 +284,7 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
                 except Exception as exc:
                     # Raw upstream exceptions can contain tokens, headers or URLs.
                     rows.append({"page": key, "status": "error", "error_type": type(exc).__name__, "message": "collection failed; live artifacts unchanged"})
-            result = {"ok": all(row["status"] == "ok" for row in rows), "runtime_home": str(root), "pages": rows, "changed": False, "restarted": False, "reset_execution": False, "backup_dir": None}
+            result = {"ok": all(row["status"] == "ok" for row in rows), "runtime_home": str(root), "pages": rows, "changed": False, "restarted": False, "reset_execution": scheduled and "account-limits" in selected, "backup_dir": None}
             if not updates:
                 return result
             # Rebase onto the latest config so unrelated edits made during slow

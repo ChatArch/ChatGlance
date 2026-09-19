@@ -31,10 +31,10 @@ Subscription cards collapse reset information by default. Forecast details live 
 - `docs/site-architecture.md`: boundary between ChatGlance as a Python package, the Glance runtime, generated config, and runtime data refresh scripts.
 - `docs/projects.md`: project-page display contract, PyPI-only version rule, entrypoint-only display rule, actual CLI-tree classification evidence, and refresh review checklist.
 - `docs/infra.md`: configuration mechanism, external data-generation chain, refresh workflow, and cron/timer template for the Infra/`服务器` page.
-- `docs/deployment/current-site.md`: private repository-only deployment record for the current live Glance site. It is excluded from public package artifacts.
+- `docs/deployment/current-site.md`: native CLI and user service/timer deployment contract; concrete topology, secrets and live evidence remain outside the repository.
 - `examples/server-inventory.example.yml` / `examples/site-services.example.yml`: sanitized inventory config templates. Real inventories belong in the runtime config directory.
-- `scripts/refresh-projects-page.sh`: script template that refreshes current GitHub/ChatGH project data, renders the `项目` page, validates a candidate config, and safely replaces it.
-- `scripts/refresh-server-status.sh` / `scripts/refresh-sites-page.sh`: external refresh script templates for manual runs, cron, or systemd user timers.
+- `chatglance refresh [PAGES]...`: installed-package collection, validation and publication without a source checkout or host-local business scripts.
+- `chatglance refresh --scheduled`: explicit scheduled execution for the existing timer, preserving per-account policies and the shared lock.
 - `README.md` / `README.en.md` / `CHANGELOG.md`: collaboration and package-facing entry points; do not include live auth, tokens, password hashes, proxy credentials, or secret-bearing files.
 
 ## Current capabilities
@@ -84,7 +84,13 @@ The command reuses reviewed inventories, existing ChatEnv/snapshot account profi
 
 Failed pages keep their old artifacts while successful pages continue. Partial/cached results exit nonzero. Use `--no-restart` for external lifecycle ownership, `--json-output` for automation, or `--allow-offline-regression` to intentionally publish newly offline servers. Project refresh reuses CLI evidence only for the same released version, package identity, and entrypoints; `--actual-cli-tree` explicitly re-probes published packages.
 
-`scripts/refresh-manual.sh` is an optional thin wrapper around the public command. Legacy per-page scripts remain available for scheduled/compatibility workflows, but are not required by the installed package.
+Both manual and scheduled refreshes call the installed CLI directly. Retire host-local and checkout-based business-script entrypoints after migration; keep only ChatEnv/secrets, inventories, data and thin service-manager configuration outside the package. Manual refresh neither changes automatic-reset policies nor consumes cards. Required OAuth renewal belongs to ChatCRS 0.3.4 and the standard ChatEnv token lifecycle.
+
+```bash
+chatglance refresh --scheduled --runtime-home "$HOME/.chatarch/glance" --json-output
+```
+
+Account requests use the profile's reverse-proxy Base URLs, and ChatCRS ignores local proxies. Do not prepend `proxy_on`. Select non-secret inputs explicitly with `--server-inventory`, `--sites-inventory`, `--gatus-db` and the other collector options. Omit `--scheduled` for non-consuming diagnostics.
 
 Read the live command surface with `chatglance --tree` / `--tree-brief`; see [CLI tree](docs/cli-tree.md) and [manual refresh](docs/refresh.md) for configuration and side-effect details.
 

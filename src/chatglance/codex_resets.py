@@ -1,7 +1,8 @@
 """Conservative, profile-scoped Codex reset policy and durable reservations.
 
-ChatCRS owns credentials and HTTP. This module never refreshes OAuth, probes a
-model, or retries a consume request. Only fresh GET data may authorize a reset.
+ChatCRS owns credentials, standard OAuth refresh and no-proxy HTTP. This module
+never implements OAuth, probes a model, or retries a consume request.
+Only fresh GET data may authorize a reset.
 """
 from __future__ import annotations
 
@@ -290,15 +291,18 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
             "eligible": False, "reason": "disabled", "last_action": None,
             "forecast": forecast_snapshot(forecast, now=now)}
     row = {"profile": profile, "account_name": profile, "plan": "Codex", "status": "error",
-           "credential_status": "probe_failed", "token_service": "Codex", "refresh_attempted": False,
+           "credential_status": "probe_failed", "token_service": "Codex",
+           "refresh_requested": client is None, "refresh_attempted": None,
            "observed_at": _iso(now), "windows": [], "reset_history": [], "auto_reset": auto,
            "reset_credits": _credits_summary(None, None, now)}
     try:
         client = client if client is not None else CodexClient.from_profile(
-            profile, home=home, reset_base_url=reset_base_url, timeout=timeout)
+            profile, home=home, reset_base_url=reset_base_url, timeout=timeout, refresh=True)
         identity = _identity(client)
-    except Exception:
-        row.update(error_type="CodexProbeError", error="Codex 凭据配置不可用")
+    except Exception as exc:
+        if getattr(exc, "status", None) in (401, 403):
+            row["credential_status"] = "invalid_or_expired"
+        row.update(error_type="CodexProbeError", error="Codex 凭据配置或续期不可用")
         auto.update(status="query_failed", reason="client_unavailable")
         return row
     row["account_id"] = "hash:" + identity[:12]
@@ -325,6 +329,8 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
     if usage_ok:
         row["credential_status"] = "valid"
     row["status"] = "ok" if usage_ok and credits_ok else "partial" if usage_ok else "error"
+    if row["status"] == "ok":
+        row["last_successful_at"] = row["observed_at"]
     if row["status"] != "ok":
         row.update(error_type="CodexProbeError", error="额度或重置卡详情查询失败 / 数据不完整")
     decision = evaluate_policy(rawusage, rawcredits, policy, now=now, forecast=forecast)

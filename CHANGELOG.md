@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.12 - 2026-09-20
+
+- Extend the package-owned `chatglance refresh` pipeline with explicit scheduled mode and non-secret collector inputs, so installed-package refreshes do not need a source checkout or host-local business scripts.
+- Keep manual refresh non-consuming; explicit `--scheduled` follows the existing per-account policies while retaining the shared lock, partial-result handling, validated publication and at most one service restart.
+- Request standard profile renewal from ChatCRS 0.3.4 and inherit each profile's backend Base URL for reset queries unless explicitly overridden; do not implement OAuth or activate local proxies in the dashboard.
+- Preserve safe credential/error status and successful-observation timestamps; keep stale data display-only.
+
 ## 0.1.11 - 2026-09-17
 
 - Show separate five-hour and seven-day usage bars with their own reset times when both windows are provided; do not invent absent windows or change the selected reset-policy window.

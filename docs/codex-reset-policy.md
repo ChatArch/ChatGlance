@@ -22,19 +22,19 @@ chatglance account-limits render-page --data account-limits.json --output accoun
 
 ```dotenv
 CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES={"work":{"enabled":false,"threshold_percent":95,"min_remaining_seconds":129600,"target_window_seconds":604800,"skip_if_forecast_24h_above":70},"personal":{"enabled":false}}
-CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL=https://chatgpt.com/backend-api
+CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL=https://gpt-relay.example.com/backend-api
 ```
 
-某账号的`enabled=true`即允许该账号在全部条件满足时自动用卡，不影响其他账号。只读检查传`--no-execute-resets`；`chatglance refresh`也始终不消费。旧全局字段须先迁移，见[重置控制](reset-controls.md)。reset base是可选的显式覆盖，只用于重置卡接口，usage保留Codex profile的base；网络/代理由部署环境提供。
+某账号的`enabled=true`即允许该账号在全部条件满足时自动用卡，不影响其他账号。只读检查传`--no-execute-resets`；不带`--scheduled`的`chatglance refresh`也不消费。显式计划运行保留原每账号策略。旧全局字段须先迁移，见[重置控制](reset-controls.md)。reset base是可选的显式覆盖；不设置时继承Codex profile的backend base，usage始终保留该profile的base。ChatCRS禁用环境/系统Proxy，不启用本机代理或静默改走官方地址。
 
-定期采集通过GET获取数据，已开启账号满足全部条件时才POST兑换；不发quota模型探测，不隐式刷新OAuth；过期凭据显示失败，由原有凭据维护流程处理。缺字段、失败或陈旧数据不触发用卡，旧值仅作展示。相同账号及别名共享持久化去重记录，位于ChatArch home下的`chatglance/`；先落盘请求ID再POST，一轮至多一张，超时/结果不明停止自动重试并显示待核对。只有明确reset结果且GET读回卡数下降、用量恢复才报成功。用卡会改变自然重置日期，不会购买Credits。
+定期采集通过GET获取数据，已开启账号满足全部条件时才POST兑换，不发quota模型探测。ChatGlance请求ChatCRS按标准ChatEnv流程保证access token有效，轮换值仅写入运行态token store；不在页面包内实现OAuth。续期被拒绝时显示凭据配置或续期失败，需要重新授权。缺字段、失败或陈旧数据不触发用卡，旧值仅作展示。相同账号及别名共享持久化去重记录，位于ChatArch home下的`chatglance/`；先落盘请求ID再POST，一轮至多一张，超时/结果不明停止自动重试并显示待核对。只有明确reset结果且GET读回卡数下降、用量恢复才报成功。用卡会改变自然重置日期，不会购买Credits。
 
-Python接口：`chatglance.codex_collector.collect_account_limits`、`chatglance.codex_resets.scan_profile`、`ResetPolicy`。发布包拥有采集逻辑，旧脚本仅为薄入口。
+Python接口：`chatglance.codex_collector.collect_account_limits`、`chatglance.codex_resets.scan_profile`、`ResetPolicy`。发布包拥有采集逻辑，定时器直接调用`chatglance refresh --scheduled`，不依赖外部业务脚本。
 
 ## 官方重置日历缓存
 
 官方重置日历只展示公共来源确认的历史事件，不把账号预计重置窗口采样当作官方重置。
-采集时传入 `--history` 指向上次快照；现有页面刷新脚本会自动传入该路径。
+采集时传入 `--history` 指向上次快照；内置 `chatglance refresh` 会自动传入该路径。
 
 ```bash
 chatglance account-limits collect --profiles "work personal" --history account-limits.json --output account-limits.next.json --no-execute-resets

@@ -89,21 +89,38 @@ def main() -> None:
 
 @main.command("refresh")
 @click.argument("pages", nargs=-1, type=click.Choice(["projects", "servers", "sites", "account-limits"]))
-@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), help="Runtime home; defaults to the effective ChatArch home/glance.")
-@click.option("--glance-bin", type=click.Path(path_type=Path, dir_okay=False), help="Glance executable for mandatory candidate validation.")
-@click.option("--service-name", default="chatarch-glance.service", show_default=True, help="Existing systemd user service restarted at most once.")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), envvar="CHATGLANCE_RUNTIME_HOME", help="Runtime home; defaults to the effective ChatArch home/glance.")
+@click.option("--glance-bin", type=click.Path(path_type=Path, dir_okay=False), envvar="GLANCE_BIN", help="Glance executable for mandatory candidate validation.")
+@click.option("--service-name", default="chatarch-glance.service", envvar="CHATGLANCE_SERVICE_NAME", show_default=True, help="Existing systemd user service restarted at most once.")
 @click.option("--no-restart", is_flag=True, help="Publish validated artifacts without restarting the service.")
+@click.option("--scheduled", is_flag=True, help="Run existing per-account automatic policies; defaults to fresh CLI trees and publishing offline servers. No persistent switch is changed.")
 @click.option("--profiles", help="Explicit account profiles; otherwise use ChatEnv or the current snapshot.")
-@click.option("--actual-cli-tree", is_flag=True, help="Also install/probe current package CLI trees; default reuses same-version evidence.")
-@click.option("--allow-offline-regression", is_flag=True, help="Allow fresh server probes to replace previously online hosts with offline state.")
-@click.option("--json-output", is_flag=True, help="Emit a structured refresh result.")
-def refresh(pages, runtime_home, glance_bin, service_name, no_restart, profiles, actual_cli_tree, allow_offline_regression, json_output) -> None:
-    """Refresh configured pages; optional PAGES select a subset. Never redeem reset cards."""
+@click.option("--actual-cli-tree/--no-actual-cli-tree", default=None, help="Install/probe current package CLI trees; default on for scheduled, off for manual.")
+@click.option("--allow-offline-regression/--no-allow-offline-regression", default=None, help="Publish offline server probes; default on for scheduled, off for manual.")
+@click.option("--projects-owner", envvar="CHATGLANCE_PROJECTS_OWNER", help="GitHub organization; otherwise reuse the snapshot owner or ChatArch.")
+@click.option("--project-workers", type=click.IntRange(min=1), default=4, envvar="CHATGLANCE_PROJECTS_WORKERS", show_default=True, help="Concurrent project metadata workers.")
+@click.option("--uvx-bin", default="uvx", envvar="CHATGLANCE_UVX_BIN", show_default=True, help="uvx executable for optional released-package CLI tree probes.")
+@click.option("--cli-tree-timeout", type=click.IntRange(min=1), default=90, envvar="CHATGLANCE_CLI_TREE_TIMEOUT", show_default=True, help="Per-entrypoint CLI tree timeout in seconds.")
+@click.option("--server-inventory", type=click.Path(path_type=Path, dir_okay=False), envvar="CHATGLANCE_INFRA_CONFIG", help="Reviewed inventory; defaults to runtime config/server-inventory.yml.")
+@click.option("--sites-inventory", type=click.Path(path_type=Path, dir_okay=False), envvar="CHATGLANCE_SITES_CONFIG", help="Reviewed inventory; defaults to runtime config/site-services.yml.")
+@click.option("--gatus-db", type=click.Path(path_type=Path, dir_okay=False), envvar="CHATGLANCE_GATUS_DB", help="Existing monitor database; defaults to sibling uptime-gatus/data/gatus.db if present.")
+@click.option("--account-timeout", type=click.IntRange(min=1), default=60, envvar="CHATGLANCE_ACCOUNT_LIMITS_TIMEOUT", show_default=True, help="Per-account ChatCRS request timeout in seconds.")
+@click.option("--reset-timeout", type=click.IntRange(min=1), default=20, show_default=True, help="Public calendar/forecast request timeout in seconds.")
+@click.option("--no-public-reset", is_flag=True, help="Skip the public reset calendar and forecast; required forecast policies fail closed.")
+@click.option("--reset-base-url", help="Explicit non-secret reset backend override; otherwise ChatEnv setting or the account's backend base.")
+@click.option("--json-output", is_flag=True, help="Emit a structured refresh result; partial failures exit 1.")
+def refresh(pages, runtime_home, glance_bin, service_name, no_restart, scheduled, profiles, actual_cli_tree, allow_offline_regression, json_output, **collection_options) -> None:
+    """Refresh configured pages natively; manual mode never redeems reset cards."""
     from chatglance.codex_collector import parse_profiles
-    from chatglance.refresh import RefreshError, refresh_runtime
+    from chatglance.refresh import CollectionOptions, RefreshError, refresh_runtime
     import yaml
     try:
-        result = refresh_runtime(runtime_home, pages, glance_bin=glance_bin, restart=not no_restart, service_name=service_name, profiles=parse_profiles(profiles) if profiles else None, actual_cli_tree=actual_cli_tree, allow_offline_regression=allow_offline_regression)
+        result = refresh_runtime(
+            runtime_home, pages, glance_bin=glance_bin, restart=not no_restart,
+            service_name=service_name, profiles=parse_profiles(profiles) if profiles else None,
+            actual_cli_tree=actual_cli_tree, allow_offline_regression=allow_offline_regression,
+            scheduled=scheduled, collection=CollectionOptions(**collection_options),
+        )
     except RefreshError as exc:
         raise click.ClickException(str(exc)) from exc
     except (OSError, ValueError, yaml.YAMLError) as exc:
@@ -113,7 +130,7 @@ def refresh(pages, runtime_home, glance_bin, service_name, no_restart, profiles,
     else:
         for page in result["pages"]:
             click.echo(f"{page['page']}: {page['status']}" + (f" ({page['error_type']}; live artifacts unchanged)" if page.get("error_type") else ""))
-        click.echo(f"changed={str(result['changed']).lower()} restarted={str(result['restarted']).lower()} reset_execution=false")
+        click.echo(f"changed={str(result['changed']).lower()} restarted={str(result['restarted']).lower()} reset_execution={str(result['reset_execution']).lower()}")
     if not result["ok"]:
         raise click.exceptions.Exit(1)
 
