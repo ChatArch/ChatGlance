@@ -473,6 +473,44 @@ def merge_history(current: list[dict[str, Any]], previous: list[dict[str, Any]])
     return merged[:120]
 
 
+def _managed_client_options(settings: dict, profiles: list[str]) -> dict:
+    """Choose one credential owner for the whole collection, never a fallback."""
+    crs_profile = settings.get('crs_profile') or ''
+    if not crs_profile:
+        return {}
+    if not isinstance(crs_profile, str) or not crs_profile.strip() or crs_profile != crs_profile.strip():
+        raise ValueError('CRS profile must be an explicit nonempty name')
+
+    def unique(pairs):
+        values = {}
+        for key, value in pairs:
+            if key in values:
+                raise ValueError('Duplicate CRS account mapping')
+            values[key] = value
+        return values
+
+    try:
+        accounts = json.loads(settings.get('crs_accounts') or '{}', object_pairs_hook=unique)
+        if not isinstance(accounts, dict) or any(
+            not isinstance(label, str) or not label or label != label.strip()
+            or not isinstance(account, str) or not account or account != account.strip()
+            for label, account in accounts.items()
+        ) or any(label not in accounts for label in profiles):
+            raise ValueError
+    except (TypeError, ValueError):
+        raise ValueError('CRS account mapping must map every selected label to one nonempty account ID') from None
+
+    def factory(label, *, home=None, timeout=20):
+        # Import lazily: older released providers must not affect local mode.
+        from chatcrs.managed_codex import CrsManagedCodexClient
+        return CrsManagedCodexClient.from_profile(
+            crs_profile, account_id=accounts[label], home=home, timeout=timeout,
+            require_management_key=True,
+        )
+
+    return {'client_factory': factory, 'token_service': 'CRS'}
+
+
 def collect_account_limits(*, profiles, output_path: str | Path, history_path: str | Path | None = None,
                            timeout: float = 20, reset_timeout: float = 20, no_public_reset: bool = False,
                            reset_policies: str | None = None, reset_base_url: str | None = None,
@@ -495,6 +533,7 @@ def collect_account_limits(*, profiles, output_path: str | Path, history_path: s
     profiles = parse_profiles(profiles if isinstance(profiles, str) else ' '.join(profiles))
     if not profiles:
         raise ValueError('At least one explicit Codex profile is required')
+    client_options = _managed_client_options(settings, profiles)
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     history = Path(history_path) if history_path is not None else None
@@ -505,7 +544,7 @@ def collect_account_limits(*, profiles, output_path: str | Path, history_path: s
                     if no_public_reset else fetch_public_codex_reset(reset_timeout))
     payloads = [profile_payload(profile, timeout, policy=policies.get(profile, ResetPolicy()),
                 execute=execute_resets, reset_base_url=reset_base_url or None, home=home,
-                forecast=public_reset.get('forecast')) for profile in profiles]
+                forecast=public_reset.get('forecast'), **client_options) for profile in profiles]
     apply_last_known_values(payloads, previous_profiles)
     merged_history = merge_history([event for item in payloads for event in item.get('reset_history', [])], load_history(history))
     for payload in payloads:

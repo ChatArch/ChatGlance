@@ -22,6 +22,10 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 
 Subscription cards collapse reset information by default. Forecast details live only in the centered, host-themed popup. Each account has one independent automatic-reset switch, included in the execution checklist and paused/waiting/ready summary. Enabling requires explicit confirmation; there is no immediate-redemption button. See [reset controls](docs/reset-controls.md) for deployment and security boundaries.
 
+## CRS-managed subscriptions (unreleased)
+
+An explicit CRS profile containing a dedicated management Key and fixed account-ID mapping can route subscription collection entirely through the CRS service, keeping upstream OAuth server-owned. This candidate mode requires the corresponding native CRS API and managed ChatCRS client; missing configuration, capabilities or authorization never fall back to local OAuth. Existing mode is not switched automatically, and manual refresh remains non-consuming. See [Codex reset policy](docs/codex-reset-policy.md) for configuration and migration boundaries.
+
 ## Repository contents
 
 - `src/chatglance/`: helper code for project, server, and website-service card page generation, Glance YAML patching, runtime maintenance, and user-level systemd unit rendering/installation.

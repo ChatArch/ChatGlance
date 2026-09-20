@@ -22,6 +22,10 @@
 
 订阅卡片默认折叠重置卡信息，预测只在居中小窗中显示。每个账号只有一个“自动用卡”开关，并纳入同一执行清单与暂停/等待/就绪状态；继承网站字体和配色。开启须明确确认，不提供立即兑换按钮。部署与安全边界见 [重置控制](docs/reset-controls.md)。
 
+## CRS 托管订阅（未发布）
+
+可显式选择包含专用管理 Key 的 CRS 配置与固定账号映射，让订阅采集只调用 CRS 服务、上游 OAuth 留在服务端。此候选模式需要配套原生 CRS API 和新的 ChatCRS 管理客户端；缺配置/能力/权限时不会回退到本地 OAuth，旧模式不被自动切换。手动刷新仍不消费。配置与迁移边界见 [Codex 重置策略](docs/codex-reset-policy.md)。
+
 ## Repo 内容
 
 - `src/chatglance/`：项目页、服务器页、网站服务卡片页生成，Glance YAML patch、runtime maintenance、user-level systemd unit 渲染/安装等辅助代码。

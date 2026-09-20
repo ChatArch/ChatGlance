@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 import sqlite3
 import time
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from chatenv import get_paths
@@ -274,7 +274,8 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
                  client: Any = None, home: str | Path | None = None,
                  state_dir: str | Path | None = None, now: float | None = None,
                  reset_base_url: str | None = None, timeout: float = 20,
-                 forecast: dict | None = None) -> dict:
+                 forecast: dict | None = None, client_factory: Callable | None = None,
+                 token_service: str = 'Codex') -> dict:
     """Return a redacted Glance row; execute requires both opt-in gates.
 
     Dry runs do not create state. Uncertain POSTs/readbacks stay blocked without
@@ -291,18 +292,26 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
             "eligible": False, "reason": "disabled", "last_action": None,
             "forecast": forecast_snapshot(forecast, now=now)}
     row = {"profile": profile, "account_name": profile, "plan": "Codex", "status": "error",
-           "credential_status": "probe_failed", "token_service": "Codex",
+           "credential_status": "probe_failed", "token_service": token_service,
            "refresh_requested": client is None, "refresh_attempted": None,
            "observed_at": _iso(now), "windows": [], "reset_history": [], "auto_reset": auto,
            "reset_credits": _credits_summary(None, None, now)}
     try:
-        client = client if client is not None else CodexClient.from_profile(
-            profile, home=home, reset_base_url=reset_base_url, timeout=timeout, refresh=True)
+        if client is None:
+            if client_factory is not None:
+                client = client_factory(profile, home=home, timeout=timeout)
+            elif token_service == 'CRS':
+                raise ValueError('A CRS client factory is required')
+            else:
+                client = CodexClient.from_profile(
+                    profile, home=home, reset_base_url=reset_base_url, timeout=timeout, refresh=True)
         identity = _identity(client)
     except Exception as exc:
         if getattr(exc, "status", None) in (401, 403):
             row["credential_status"] = "invalid_or_expired"
-        row.update(error_type="CodexProbeError", error="Codex 凭据配置或续期不可用")
+        row.update(error_type="CodexProbeError", error=(
+            "CRS 托管账号接口或管理鉴权不可用；未回退本机 OAuth"
+            if token_service == 'CRS' else "Codex 凭据配置或续期不可用"))
         auto.update(status="query_failed", reason="client_unavailable")
         return row
     row["account_id"] = "hash:" + identity[:12]
