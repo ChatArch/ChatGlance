@@ -22,9 +22,9 @@
 
 订阅卡片默认折叠重置卡信息，预测只在居中小窗中显示。每个账号只有一个“自动用卡”开关，并纳入同一执行清单与暂停/等待/就绪状态；继承网站字体和配色。开启须明确确认，不提供立即兑换按钮。部署与安全边界见 [重置控制](docs/reset-controls.md)。
 
-## CRS 托管订阅（未发布）
+## CRS 托管订阅（0.1.13）
 
-可显式选择包含专用管理 Key 的 CRS 配置与固定账号映射，让订阅采集只调用 CRS 服务、上游 OAuth 留在服务端。此候选模式需要配套原生 CRS API 和新的 ChatCRS 管理客户端；缺配置/能力/权限时不会回退到本地 OAuth，旧模式不被自动切换。手动刷新仍不消费。配置与迁移边界见 [Codex 重置策略](docs/codex-reset-policy.md)。
+可显式选择包含专用管理 Key 的 CRS 配置与固定账号映射，让订阅采集只调用 CRS 服务、上游 OAuth 留在服务端。该模式需要配套原生 CRS API 和 ChatCRS 0.3.5 或更新的兼容客户端；缺配置/能力/权限时不会回退到本地 OAuth，旧模式不被自动切换。手动刷新仍不消费。配置与迁移边界见 [Codex 重置策略](docs/codex-reset-policy.md)。
 
 ## Repo 内容
 
@@ -90,7 +90,7 @@ chatglance refresh projects sites
 - `--no-restart` 只更新产物；`--json-output` 输出机器可读结果。已在线服务器变为不可达默认不覆盖旧快照，确认要展示新离线状态时使用 `--allow-offline-regression`。
 - 项目页默认复用**相同发行版本、包名和命令入口**的 CLI 树证据，避免每次手动刷新都安装所有包；`--actual-cli-tree` 才重新探测当前发行包。
 
-手动与定时刷新都直接调用安装包 CLI。迁移后停用机器本地和源码目录下的旧业务脚本入口；外部仅保留 ChatEnv/密钥、inventory、数据与薄 systemd 配置。手动刷新不改变既有自动重置策略，也不消费卡片；必要的 OAuth 续期由 ChatCRS 0.3.4 的标准 ChatEnv 流程处理。
+手动与定时刷新都直接调用安装包 CLI。迁移后停用机器本地和源码目录下的旧业务脚本入口；外部仅保留 ChatEnv/密钥、inventory、数据与薄 systemd 配置。手动刷新不改变既有自动重置策略，也不消费卡片；CRS 托管模式由服务端续期上游 OAuth；旧本地 Codex 模式仍由 ChatCRS 的标准 ChatEnv 流程处理。
 
 ```bash
 chatglance refresh --scheduled --runtime-home "$HOME/.chatarch/glance" --json-output

@@ -31,9 +31,9 @@ CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL=https://gpt-relay.example.com/backend-a
 
 Python接口：`chatglance.codex_collector.collect_account_limits`、`chatglance.codex_resets.scan_profile`、`ResetPolicy`。发布包拥有采集逻辑，定时器直接调用`chatglance refresh --scheduled`，不依赖外部业务脚本。
 
-## CRS 服务托管模式（未发布）
+## CRS 服务托管模式（0.1.13）
 
-该模式需要 CRS 服务提供原生 Codex 管理接口，以及包含 `CrsManagedCodexClient` 的配套 ChatCRS 客户端；公共 ChatCRS 0.3.4 本身不包含这个新接口。选择模式不会自动部署服务或升级客户端。
+该模式需要 CRS 服务提供原生 Codex 管理接口，以及 ChatCRS 0.3.5 或更新的兼容客户端（提供 `CrsManagedCodexClient`）；0.3.4 不包含此接口。选择模式不会自动部署服务或升级客户端。
 
 在 ChatGlance typed profile 或进程环境显式配置以下非敏感值：
 
@@ -43,7 +43,7 @@ CHATGLANCE_ACCOUNT_LIMITS_CRS_ACCOUNTS={"work":"00000000-0000-4000-8000-00000000
 CHATGLANCE_ACCOUNT_LIMITS_PROFILES="work personal"
 ```
 
-`glance-service` 选择 ChatCRS 所属的 CRS 配置，只配置服务地址和专用管理 Key；不是本地 Codex OAuth profile。Glance 强制要求该 Key，不读取 Admin 会话、不回退用户名/密码；缺失、失效或越权直接失败。`work`、`personal` 是现有显示/策略标签，映射到固定 CRS 账号 ID，而不是模型自动调度池。所有选中标签都必须有映射，重复键或无效映射在任何账号请求前失败。
+`glance-service` 选择 ChatCRS 所属的 CRS 配置，只配置服务地址和专用管理 Key；不是本地 Codex OAuth profile。Glance 强制要求该 Key，不读取 Admin 会话、不回退用户名/密码；缺失、失效或越权直接失败。`work`、`personal` 是现有显示/策略标签，映射到固定 CRS 账号 ID，而不是模型自动调度池。所有选中标签都必须有映射。账号 ID 须为1至128个 ASCII 字符，首字符为字母或数字，其余仅允许字母、数字、`_`、`.`、`:`、`-`；不自动修剪或规范化。整份映射的重复键、缺失标签和非法 ID 会在公共预测读取、任何账号请求或消费前统一拒绝，不能先执行前面的合法账号。
 
 此时额度、卡片和消费请求全部交给 CRS 原生管理 API；`CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL` 不参与该模式，不能把调用改回上游反代。页面行使用 `token_service=CRS`；缺少客户端、服务接口或有效管理鉴权时明确失败，绝不回退到页面机的 Codex ENV/token store。CRS profile 为空时仍使用原有本地 Codex 模式。
 

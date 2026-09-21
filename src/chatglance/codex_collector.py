@@ -493,7 +493,9 @@ def _managed_client_options(settings: dict, profiles: list[str]) -> dict:
         accounts = json.loads(settings.get('crs_accounts') or '{}', object_pairs_hook=unique)
         if not isinstance(accounts, dict) or any(
             not isinstance(label, str) or not label or label != label.strip()
-            or not isinstance(account, str) or not account or account != account.strip()
+            # Validate the complete wire-ID grammar before any batch I/O.
+            or not isinstance(account, str)
+            or re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}', account) is None
             for label, account in accounts.items()
         ) or any(label not in accounts for label in profiles):
             raise ValueError

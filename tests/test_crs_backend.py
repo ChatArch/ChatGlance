@@ -102,6 +102,31 @@ def test_invalid_mapping_fails_before_provider_or_public_network(monkeypatch, tm
     assert calls == local_calls == public_calls == []
 
 
+@pytest.mark.parametrize("invalid", ["bad/id", "bad?query", "bad#fragment", "bad%2Fid", ":bad", "账号", "a" * 129, "bad id", "bad\ninside"])
+@pytest.mark.parametrize("execute", [False, True])
+def test_later_invalid_account_aborts_entire_batch_before_any_io(monkeypatch, tmp_path, invalid, execute):
+    configure(monkeypatch, {"first": "account-01", "second": invalid})
+    client, calls, local = install_managed_fixture(monkeypatch)
+    public = []
+    def forecast(*args):
+        public.append(args)
+        return {"status": "ok", "events": [], "forecast": None}
+    monkeypatch.setattr(collector, "fetch_public_codex_reset", forecast)
+    with pytest.raises(ValueError, match="CRS"):
+        collect(tmp_path, profiles="first second", no_public_reset=False, execute_resets=execute,
+                reset_policies='{"first":{"enabled":true},"second":{"enabled":true}}')
+    assert calls == local == public == client.posts == []
+    assert not (tmp_path / "snapshot.json").exists()
+
+
+@pytest.mark.parametrize("account", ["A", "1", "a" * 128, "account:X_2.3-4"])
+def test_valid_account_id_grammar_is_preserved_without_normalizing(monkeypatch, tmp_path, account):
+    configure(monkeypatch, {"work": account})
+    _, calls, _ = install_managed_fixture(monkeypatch)
+    assert collect(tmp_path)["refresh_status"]["status"] == "ok"
+    assert calls[0]["account_id"] == account
+
+
 def test_manual_crs_collection_preserves_enabled_policy_without_consumption(monkeypatch, tmp_path):
     configure(monkeypatch)
     client, _, local = install_managed_fixture(monkeypatch)
