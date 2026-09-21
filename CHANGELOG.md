@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.15 - 2026-09-22
+
+- Remove the internal snapshot-freshness predicate from the human execution checklist. The planned refresh timestamp remains visible, while the independent business conditions retain their own pass/fail results.
+
 ## 0.1.14 - 2026-09-22
 
 - Bind automatic reset evaluation and its at-most-once consume call to the same fresh `--scheduled` account-limits refresh; opening or reloading the control popup never re-evaluates or redeems a card.

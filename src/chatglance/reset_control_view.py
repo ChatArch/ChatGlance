@@ -140,11 +140,15 @@ def render_control_page(report, token, revision, *, overridden=False):
         forms.append(f'<form class="gate-row" data-check="{scope}" data-state="{gate_state}" method="post" action="toggle">{hidden}'
                      f'<input type="hidden" name="scope" value="{scope}"><input type="hidden" name="enabled" value="{"false" if active else "true"}">{content}</form>')
     labels = {"pass": "通过", "fail": "未通过", "unknown": "未通过", "inactive": "不适用", "guarded": "已阻断"}
+    visible_checks = [
+        check for check in report.get("checks", [])
+        if check.get("key") != "snapshot_freshness"
+    ]
     rows = "".join(
         f'<details class="decision-row" data-check="{_e(check["key"])}" data-state="{_e("fail" if check["state"] == "unknown" else check["state"])}">'
         f'<summary><span class="check-label">{_e(check["label"])}</span><span class="check-value">{_e(_display_value(check, report))}</span>'
         f'<span class="state {_e("fail" if check["state"] == "unknown" else check["state"])}">{_e(labels.get(check["state"], "未通过"))}</span></summary>'
-        f'<p class="rule">{_e(check["rule"])}</p></details>' for check in report.get("checks", [])
+        f'<p class="rule">{_e(check["rule"])}</p></details>' for check in visible_checks
     )
     observed = source_time(report.get("observed_at")).replace("（北京时间）", "")
     return f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>自动用卡设置</title>
