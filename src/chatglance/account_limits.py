@@ -550,8 +550,8 @@ RESET_ACTION_LABELS = {
     "disabled": "未开启", "dry_run": "预演（未消费）", "conditions_not_met": "条件未达",
     "conditions_expired": "条件已变化（未消费）",
     "query_failed": "查询失败（不执行）", "reset_verified": "已重置（读回已验证）",
-    "uncertain": "待人工核对", "blocked_pending": "待人工核对（已阻止重试）",
-    "pending": "待人工核对 / 正在处理", "cooldown": "冷却中（不重复消费）",
+    "uncertain": "结果未确认（已阻止重复用卡）", "blocked_pending": "结果未确认（已阻止重复用卡）",
+    "pending": "正在处理（已阻止重复用卡）", "cooldown": "冷却中（不重复消费）",
     "already_processed": "本窗口已处理", "nothing_to_reset": "无可重置额度",
     "no_credit": "无可用重置卡", "state_error": "状态存储异常（不执行）",
 }
@@ -563,7 +563,7 @@ def _render_reset_policy(profile: dict[str, Any]) -> str:
     count = credits.get("available_count")
     count_label = f"{count} 张" if type(count) is int and count >= 0 else "未知"
     if credits.get("status") == "count_only":
-        count_label += "（详情待核对）"
+        count_label += "（详情不完整，不执行）"
     elif credits.get("status") == "stale":
         count_label += "（上次已知）"
     expiry = _fmt_reset(credits.get("next_expires_at")) if credits.get("next_expires_at") else "未知"

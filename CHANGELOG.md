@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.14 - 2026-09-22
+
+- Bind automatic reset evaluation and its at-most-once consume call to the same fresh `--scheduled` account-limits refresh; opening or reloading the control popup never re-evaluates or redeems a card.
+- Render each checklist item as the last planned refresh's independent pass/fail result, with a separate `上次计划检查` timestamp instead of turning every item into a generic pending state as data ages.
+- Replace user-facing `待核对` wording with explicit failed-data or protected-result messages; internal uncertain receipts remain fail-closed and block duplicate consumption.
+
 ## 0.1.13 - 2026-09-21
 
 - Add an opt-in CRS-managed subscription backend with typed CRS profile and account-ID mapping; upstream OAuth remains on the CRS service.

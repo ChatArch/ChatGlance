@@ -88,7 +88,7 @@ The command reuses reviewed inventories, existing ChatEnv/snapshot account profi
 
 Failed pages keep their old artifacts while successful pages continue. Partial/cached results exit nonzero. Use `--no-restart` for external lifecycle ownership, `--json-output` for automation, or `--allow-offline-regression` to intentionally publish newly offline servers. Project refresh reuses CLI evidence only for the same released version, package identity, and entrypoints; `--actual-cli-tree` explicitly re-probes published packages.
 
-Both manual and scheduled refreshes call the installed CLI directly. Retire host-local and checkout-based business-script entrypoints after migration; keep only ChatEnv/secrets, inventories, data and thin service-manager configuration outside the package. Manual refresh neither changes automatic-reset policies nor consumes cards. CRS-managed mode renews upstream OAuth on the service; legacy local Codex mode retains the standard ChatCRS/ChatEnv token lifecycle.
+Both manual and scheduled refreshes call the installed CLI directly. A scheduled `account-limits` run reads usage, credits, and forecast, then evaluates and may redeem at most one card in that same refresh; there is no separate dynamic redemption timer. The control popup reports that scheduled result and timestamp only—opening or reloading it never reevaluates or redeems. Manual refresh neither changes automatic-reset policies nor consumes cards. CRS-managed mode renews upstream OAuth on the service; legacy local Codex mode retains the standard ChatCRS/ChatEnv token lifecycle.
 
 ```bash
 chatglance refresh --scheduled --runtime-home "$HOME/.chatarch/glance" --json-output

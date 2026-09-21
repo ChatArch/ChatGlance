@@ -27,7 +27,7 @@ CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL=https://gpt-relay.example.com/backend-a
 
 某账号的`enabled=true`即允许该账号在全部条件满足时自动用卡，不影响其他账号。只读检查传`--no-execute-resets`；不带`--scheduled`的`chatglance refresh`也不消费。显式计划运行保留原每账号策略。旧全局字段须先迁移，见[重置控制](reset-controls.md)。reset base是可选的显式覆盖；不设置时继承Codex profile的backend base，usage始终保留该profile的base。ChatCRS禁用环境/系统Proxy，不启用本机代理或静默改走官方地址。
 
-定期采集通过GET获取数据，已开启账号满足全部条件时才POST兑换，不发quota模型探测。ChatGlance请求ChatCRS按标准ChatEnv流程保证access token有效，轮换值仅写入运行态token store；不在页面包内实现OAuth。续期被拒绝时显示凭据配置或续期失败，需要重新授权。缺字段、失败或陈旧数据不触发用卡，旧值仅作展示。相同账号及别名共享持久化去重记录，位于ChatArch home下的`chatglance/`；先落盘请求ID再POST，一轮至多一张，超时/结果不明停止自动重试并显示待核对。只有明确reset结果且GET读回卡数下降、用量恢复才报成功。用卡会改变自然重置日期，不会购买Credits。
+定期采集在同一次`--scheduled`调用中通过GET获取数据、评估条件，并且仅当全部条件满足时才POST兑换；没有独立的动态重置计时器。ChatGlance请求ChatCRS按标准ChatEnv流程保证access token有效，轮换值仅写入运行态token store；不在页面包内实现OAuth。续期被拒绝时显示凭据配置或续期失败，需要重新授权。缺字段、失败或陈旧数据不触发用卡；小窗只展示上一次计划刷新时各条件的通过/未通过及时间，不会在打开时重判。相同账号及别名共享持久化去重记录，位于ChatArch home下的`chatglance/`；先落盘请求ID再POST，一轮至多一张，超时/结果不明停止自动重试并显示“结果未确认，已阻止重复用卡”。只有明确reset结果且GET读回卡数下降、用量恢复才报成功。用卡会改变自然重置日期，不会购买Credits。
 
 Python接口：`chatglance.codex_collector.collect_account_limits`、`chatglance.codex_resets.scan_profile`、`ResetPolicy`。发布包拥有采集逻辑，定时器直接调用`chatglance refresh --scheduled`，不依赖外部业务脚本。
 

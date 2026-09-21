@@ -23,7 +23,7 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 import yaml
 from chatenv import EnvStore, get_paths
 from .config import ChatGlanceConfig, collection_settings
-from .codex_resets import parse_policies
+from .codex_resets import _epoch, parse_policies
 from .codex_forecast import forecast_snapshot
 from .reset_control_view import CONTROL_CSP, render_control_page
 
@@ -184,7 +184,10 @@ class ControlApp:
 
             diagnose = diagnose_account
         account = self.account(profile)
-        now = time.time()
+        # The checklist is a record of the scheduled refresh that collected this
+        # snapshot. Opening the page must never create a later, display-only
+        # decision that disagrees with that refresh or implies a new redemption.
+        now = _epoch(account.get("observed_at")) or time.time()
         report = diagnose(account, policies[profile], execute_enabled=True, now=now)
         auto = (
             account.get("auto_reset")

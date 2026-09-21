@@ -117,7 +117,8 @@ def test_veto_reason_is_visible_and_does_not_hide_unresolved_receipts(reason, la
     assert label not in render(row)
     assert "预测不可用" in popup(row)
     row["auto_reset"]["status"] = "blocked_pending"
-    assert "待人工核对（已阻止重试）" in render(row)
+    assert "结果未确认（已阻止重复用卡）" in render(row)
+    assert "待人工核对" not in render(row)
 
 
 def test_ambiguous_weekly_card_does_not_choose_a_different_window_from_policy():
