@@ -39,7 +39,9 @@ def test_overall_readiness_includes_the_account_switch(account, business, guarde
     assert 'data-check="used_percent"' in text
     assert '本账号策略' not in text and '仅预演' not in text
     assert '自动用卡' in text and '总开关' not in text
-    assert '下一次定时检查' in text and '不会立即兑换' in text
+    assert '一次计划刷新内' in text and '同一次刷新中判断并最多消费一次' in text
+    assert '查看或刷新本小窗不会兑换' in text
+    assert '下一次定时检查' not in text
 
 
 def test_manual_pause_does_not_falsify_business_facts():
@@ -47,6 +49,15 @@ def test_manual_pause_does_not_falsify_business_facts():
     assert 'data-automation="paused"' in text
     assert 'data-check="used_percent" data-state="pass"' in text
     assert '业务条件已满足' in text
+
+
+def test_unknown_evidence_is_rendered_as_a_failed_condition_not_a_human_check():
+    value = report()
+    value['checks'][0].update(state='unknown', value=None)
+    text = render_control_page(value, 'nonce', 'revision')
+    assert '待核对' not in text
+    assert '未通过' in text
+    assert '上次计划检查' in text
 
 
 def test_card_contains_no_prediction_or_stale_execution_switch_claim():

@@ -5,6 +5,7 @@ import importlib.util
 import json
 import re
 import threading
+from datetime import datetime, timezone
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -152,6 +153,31 @@ def test_authenticated_dialog_distinguishes_business_and_manual_state(control):
     assert "synthetic-do-not-display" not in body and COOKIE not in body
     assert headers.get("Cache-Control") == "no-store"
     assert "frame-ancestors 'self'" in headers.get("Content-Security-Policy", "")
+
+
+def test_control_page_uses_saved_refresh_time_not_the_render_clock(control):
+    server, _, base = control
+    observed = "2027-01-15T08:00:00+00:00"
+    (server.control_app.runtime_home / "data/account-limits.json").write_text(
+        json.dumps({"codex": [{"profile": "demo", "status": "ok", "observed_at": observed}]})
+    )
+    captured = {}
+
+    def diagnose(row, policy, **kwargs):
+        captured["now"] = kwargs["now"]
+        return {
+            "profile": row["profile"], "business_eligible": False,
+            "automatic_allowed": False, "business_reason": "conditions_not_met",
+            "observed_at": observed,
+            "controls": {"account_enabled": policy.enabled, "execute_enabled": kwargs["execute_enabled"]},
+            "checks": [{"key": "used_percent", "label": "周额度", "state": "fail", "value": 71, "rule": "至少95%"}],
+        }
+
+    server.control_app.diagnose = diagnose
+    code, body, _ = request(base)
+    assert code == 200
+    assert captured["now"] == datetime.fromisoformat(observed).replace(tzinfo=timezone.utc).timestamp()
+    assert "上次计划检查" in body
 
 
 @pytest.mark.parametrize("origin", [None, "https://evil.example.invalid"])

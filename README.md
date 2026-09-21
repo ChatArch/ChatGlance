@@ -247,7 +247,7 @@ chatglance runtime status
 
 ## Codex 重置卡与自动扫描
 
-订阅详情按账号显示可用卡数、最近到期和最近动作。卡片中的“自动用卡设置”打开独立账号小窗，只有一个自动用卡开关；未知卡数不显示成0，没有立即兑换按钮。
+订阅详情按账号显示可用卡数、最近到期和最近动作。卡片中的“自动用卡设置”打开独立账号小窗，只有一个自动用卡开关；小窗展示上一次计划刷新的独立条件结果和时间，打开或刷新小窗不会重新判断、更不会立即兑换。
 
 默认规则是：主额度窗口已用量 **至少95%**、距下一次自然重置 **超过24小时**、可用卡数 **大于0**，三项同时满足才可用卡。primary/secondary按实际时间判断，不假设哪个是周窗口；额外模型限额不触发。每个profile独立配置，缺省关闭；没有额外的全局开关。
 
@@ -265,6 +265,6 @@ CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL=https://chatgpt.com/backend-api
 
 某账号的`enabled=true`即允许该账号在全部条件满足时自动用卡，不影响其他账号。只读检查传`--no-execute-resets`；`chatglance refresh`也始终不消费。旧全局字段须先迁移，见[重置控制](docs/reset-controls.md)。reset base是可选的显式覆盖，只用于重置卡接口，usage保留Codex profile的base；网络/代理由部署环境提供。
 
-定期采集通过GET获取数据，已开启账号满足全部条件时才POST兑换；不发quota模型探测，不隐式刷新OAuth；过期凭据显示失败，由原有凭据维护流程处理。缺字段、失败或陈旧数据不触发用卡，旧值仅作展示。相同账号及别名共享持久化去重记录，位于ChatArch home下的`chatglance/`；先落盘请求ID再POST，一轮至多一张，超时/结果不明停止自动重试并显示待核对。只有明确reset结果且GET读回卡数下降、用量恢复才报成功。用卡会改变自然重置日期，不会购买Credits。
+每次计划刷新在同一轮内先GET读取额度、卡片和预测，再按该次新鲜数据判断；只有全部条件满足时才在该次刷新中POST兑换，绝不另起动态重置计时器。手动刷新和查看小窗都不消费。缺字段、失败或陈旧数据不触发用卡；页面保留上次计划检查的通过/未通过结果和时间。相同账号及别名共享持久化去重记录，位于ChatArch home下的`chatglance/`；先落盘请求ID再POST，一轮至多一张，结果不明停止自动重试并明确显示“结果未确认，已阻止重复用卡”。只有明确reset结果且GET读回卡数下降、用量恢复才报成功。用卡会改变自然重置日期，不会购买Credits。
 
 Python接口：`chatglance.codex_collector.collect_account_limits`、`chatglance.codex_resets.scan_profile`、`ResetPolicy`。发布包拥有采集逻辑，旧脚本仅为薄入口。

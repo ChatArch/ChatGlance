@@ -101,8 +101,8 @@ def _display_value(check, report):
     if key == "target_window" and value in ("primary_window", "secondary_window"):
         return "7天总额度" if report.get("policy", {}).get("target_window_seconds") == 604800 else value.replace("_window", "")
     if key == "ledger":
-        return {"no_known_block": "无已知阻断", "ledger_unknown": "需重新核对", "cooldown": "冷却中",
-                "blocked_pending": "有未决请求", "pending": "处理中", "uncertain": "结果待核对",
+        return {"no_known_block": "无已知阻断", "ledger_unknown": "状态未确认（已阻断自动用卡）", "cooldown": "冷却中",
+                "blocked_pending": "有未决请求（已阻断自动用卡）", "pending": "处理中（已阻断自动用卡）", "uncertain": "结果未确认（已阻断自动用卡）",
                 "already_processed": "本窗口已处理"}.get(value, value)
     return value
 
@@ -139,20 +139,20 @@ def render_control_page(report, token, revision, *, overridden=False):
                        f'<button type="submit" aria-label="确认开启{name}">确认开启</button></div></details>')
         forms.append(f'<form class="gate-row" data-check="{scope}" data-state="{gate_state}" method="post" action="toggle">{hidden}'
                      f'<input type="hidden" name="scope" value="{scope}"><input type="hidden" name="enabled" value="{"false" if active else "true"}">{content}</form>')
-    labels = {"pass": "通过", "fail": "未通过", "unknown": "待核对", "inactive": "不适用", "guarded": "已阻断"}
+    labels = {"pass": "通过", "fail": "未通过", "unknown": "未通过", "inactive": "不适用", "guarded": "已阻断"}
     rows = "".join(
-        f'<details class="decision-row" data-check="{_e(check["key"])}" data-state="{_e(check["state"])}">'
+        f'<details class="decision-row" data-check="{_e(check["key"])}" data-state="{_e("fail" if check["state"] == "unknown" else check["state"])}">'
         f'<summary><span class="check-label">{_e(check["label"])}</span><span class="check-value">{_e(_display_value(check, report))}</span>'
-        f'<span class="state {_e(check["state"])}">{_e(labels.get(check["state"], "待核对"))}</span></summary>'
+        f'<span class="state {_e("fail" if check["state"] == "unknown" else check["state"])}">{_e(labels.get(check["state"], "未通过"))}</span></summary>'
         f'<p class="rule">{_e(check["rule"])}</p></details>' for check in report.get("checks", [])
     )
     observed = source_time(report.get("observed_at")).replace("（北京时间）", "")
     return f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>自动用卡设置</title>
 <style>{FORECAST_CSS}{CONTROL_CSS}</style></head><body>
-<header class="heading"><h1>{_e(profile)}</h1><span class="meta">数据更新 {_e(observed)}</span></header>
+<header class="heading"><h1>{_e(profile)}</h1><span class="meta">上次计划检查 {_e(observed)}</span></header>
 <section class="automation-status {state}" data-automation="{state}" role="status"><strong>{title}</strong><p class="meta">{_e(detail)}</p></section>
 {render_forecast(report.get("forecast"), report.get("forecast_threshold"))}
 <p class="checklist-title">执行清单 <span class="meta">· 点击条件查看要求</span></p>
 <section class="execution-checks" aria-label="自动用卡执行清单">{"".join(forms)}{rows}</section>
-<footer class="footer">本账号开关开启且条件全部通过后，下一次定时检查会重新核验，仍满足才自动用卡。这里不会立即兑换。<br><a href="?{_e(urlencode({"profile":profile}))}">刷新状态</a></footer>
+<footer class="footer">自动用卡只会在一次计划刷新内：先读取额度和卡片，再在同一次刷新中判断并最多消费一次。查看或刷新本小窗不会兑换。<br><a href="?{_e(urlencode({"profile":profile}))}">刷新状态</a></footer>
 <script>{THEME_SCRIPT}</script></body></html>'''
