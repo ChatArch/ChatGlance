@@ -1,4 +1,4 @@
-"""Consumer contracts for ChatCRS 0.3.4; no real OAuth requests."""
+"""Consumer contracts for ChatCRS 0.3.5; no real OAuth requests."""
 import json
 
 import pytest
@@ -51,4 +51,4 @@ def test_consumer_declares_refresh_capable_chatcrs_floor():
         import tomli as tomllib
     deps = tomllib.loads((Path(__file__).parents[1]/"pyproject.toml").read_text())["project"]["dependencies"]
     spec = next(Requirement(dep).specifier for dep in deps if dep.lower().startswith("chatcrs"))
-    assert "0.3.3" not in spec and "0.3.4" in spec and "0.4.0" not in spec
+    assert "0.3.4" not in spec and "0.3.5" in spec and "0.4.0" not in spec

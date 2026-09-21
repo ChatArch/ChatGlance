@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.13 - 2026-09-21
+
+- Add an opt-in CRS-managed subscription backend with typed CRS profile and account-ID mapping; upstream OAuth remains on the CRS service.
+- Keep local Codex mode unchanged when no CRS profile is selected. CRS-mode mapping, dependency or authorization failures never fall back to local OAuth.
+- Preserve per-account policies, non-consuming manual refresh, cached-display warnings and uncertain-consumption guards across the remote client path.
+- Validate every account mapping before any forecast/account I/O or scheduled action; require ChatCRS 0.3.5 for the managed client.
+
 ## 0.1.12 - 2026-09-20
 
 - Extend the package-owned `chatglance refresh` pipeline with explicit scheduled mode and non-secret collector inputs, so installed-package refreshes do not need a source checkout or host-local business scripts.

@@ -22,6 +22,10 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 
 Subscription cards collapse reset information by default. Forecast details live only in the centered, host-themed popup. Each account has one independent automatic-reset switch, included in the execution checklist and paused/waiting/ready summary. Enabling requires explicit confirmation; there is no immediate-redemption button. See [reset controls](docs/reset-controls.md) for deployment and security boundaries.
 
+## CRS-managed subscriptions (0.1.13)
+
+An explicit CRS profile containing a dedicated management Key and fixed account-ID mapping can route subscription collection entirely through the CRS service, keeping upstream OAuth server-owned. This mode requires the corresponding native CRS API and ChatCRS 0.3.5 or a newer compatible client; missing configuration, capabilities or authorization never fall back to local OAuth. Existing mode is not switched automatically, and manual refresh remains non-consuming. See [Codex reset policy](docs/codex-reset-policy.md) for configuration and migration boundaries.
+
 ## Repository contents
 
 - `src/chatglance/`: helper code for project, server, and website-service card page generation, Glance YAML patching, runtime maintenance, and user-level systemd unit rendering/installation.
@@ -84,7 +88,7 @@ The command reuses reviewed inventories, existing ChatEnv/snapshot account profi
 
 Failed pages keep their old artifacts while successful pages continue. Partial/cached results exit nonzero. Use `--no-restart` for external lifecycle ownership, `--json-output` for automation, or `--allow-offline-regression` to intentionally publish newly offline servers. Project refresh reuses CLI evidence only for the same released version, package identity, and entrypoints; `--actual-cli-tree` explicitly re-probes published packages.
 
-Both manual and scheduled refreshes call the installed CLI directly. Retire host-local and checkout-based business-script entrypoints after migration; keep only ChatEnv/secrets, inventories, data and thin service-manager configuration outside the package. Manual refresh neither changes automatic-reset policies nor consumes cards. Required OAuth renewal belongs to ChatCRS 0.3.4 and the standard ChatEnv token lifecycle.
+Both manual and scheduled refreshes call the installed CLI directly. Retire host-local and checkout-based business-script entrypoints after migration; keep only ChatEnv/secrets, inventories, data and thin service-manager configuration outside the package. Manual refresh neither changes automatic-reset policies nor consumes cards. CRS-managed mode renews upstream OAuth on the service; legacy local Codex mode retains the standard ChatCRS/ChatEnv token lifecycle.
 
 ```bash
 chatglance refresh --scheduled --runtime-home "$HOME/.chatarch/glance" --json-output

@@ -21,6 +21,15 @@ class ChatGlanceConfig(BaseEnvConfig):
         desc="Space- or comma-separated Codex profiles for manual refresh; empty uses the current snapshot.",
     )
 
+    CHATGLANCE_ACCOUNT_LIMITS_CRS_PROFILE = EnvField(
+        "CHATGLANCE_ACCOUNT_LIMITS_CRS_PROFILE", default="",
+        desc="Named CRS profile with a dedicated management Key; empty keeps local Codex mode.",
+    )
+    CHATGLANCE_ACCOUNT_LIMITS_CRS_ACCOUNTS = EnvField(
+        "CHATGLANCE_ACCOUNT_LIMITS_CRS_ACCOUNTS", default="{}",
+        desc="JSON mapping selected display/policy labels to exact CRS account IDs; no OAuth values.",
+    )
+
     CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES = EnvField(
         "CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES", default="{}",
         desc="Per-profile reset policy JSON: enabled, threshold_percent, min_remaining_seconds, optional target_window_seconds and skip_if_forecast_24h_above.",
@@ -57,6 +66,8 @@ def collection_settings(*, home=None) -> dict:
     if legacy in values or legacy in os.environ:
         raise ValueError("Legacy global execution setting requires per-account migration before scanning")
     return {"profiles": resolve("CHATGLANCE_ACCOUNT_LIMITS_PROFILES", ""),
+            "crs_profile": resolve("CHATGLANCE_ACCOUNT_LIMITS_CRS_PROFILE", ""),
+            "crs_accounts": resolve("CHATGLANCE_ACCOUNT_LIMITS_CRS_ACCOUNTS", "{}"),
             "reset_policies": resolve("CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES", "{}"),
             "reset_base_url": resolve("CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL", "") or None,
 
