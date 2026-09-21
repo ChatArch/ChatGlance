@@ -60,6 +60,18 @@ def test_unknown_evidence_is_rendered_as_a_failed_condition_not_a_human_check():
     assert '上次计划检查' in text
 
 
+def test_planned_check_time_replaces_the_internal_snapshot_freshness_row():
+    value = report()
+    value['checks'].insert(0, {
+        'key': 'snapshot_freshness', 'label': '数据新鲜度',
+        'state': 'pass', 'value': 0, 'rule': '仅限计划刷新内部判定',
+    })
+    text = render_control_page(value, 'nonce', 'revision')
+    assert '上次计划检查' in text
+    assert 'data-check="snapshot_freshness"' not in text
+    assert 'data-check="used_percent"' in text
+
+
 def test_card_contains_no_prediction_or_stale_execution_switch_claim():
     text = render_account_limits_html({'codex': [profile()], 'reset_control_path': '/_controls/'})
     assert '<aside class="reset-forecast' not in text
