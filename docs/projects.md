@@ -30,10 +30,11 @@ The page contains:
    - package CLI entrypoint;
    - actual CLI tree business-command evidence in the generated JSON/TSV review artifact;
    - docs link candidate;
+   - an explicit reviewed Web link immediately after docs, or `—` when no valid Web metadata is configured;
    - latest commit date;
    - table category order is `Python 包` first, `Node / npm 包` next, then service/docs/other projects, with `Python (early)` projects last.
 6. **仓库详情卡片**
-   - GitHub/docs links, description, version/category/PR/Issue/commit metrics;
+   - GitHub/docs/Web links, description, version/category/PR/Issue/commit metrics;
    - package CLI entrypoints plus a scrollable brief CLI tree code block when actual tree evidence is available; inline `# ...` comments from `--tree-brief` are preserved;
    - projects with ChatEnv/ENV metadata expose CLI and ENV modules behind a lightweight click switch so the CLI tree does not push ENV details out of view;
    - ChatEnv schema table when a provider/schema is registered: schema, ENV key, description, sensitivity flag, and default-presence flag only;
@@ -47,6 +48,7 @@ The page contains:
 - Python package classification uses actual CLI tree evidence when available: the refresh installs the latest PyPI package with `uvx --from <package>@latest <entrypoint> --tree-brief` first, falls back to `--tree`/`--help`, and counts non-option business command nodes. `--help`, `--version`, `--tree`, and `--tree-brief` are global options, not business commands.
 - `Python (early)` is for placeholder/scaffold/trivial packages: no business subcommands in the actual CLI tree, or explicit placeholder/scaffold/PyPI-name-registration evidence. A package with real business subcommands is `Python 包` even if an older baseline/override marked it as early.
 - `--baseline-data` may preserve reviewed categories for projects without stronger current tree evidence, but stale early overrides must not demote complex CLI packages such as ChatCRS.
+- `--baseline-data` is also the only source of reviewed project Web links. A repository override must contain `web: {"url": "https://...", "kind": "..."}`. Only public HTTPS URLs without credentials and one of the reviewed kinds (`workbench`, `observatory`, `board`, `file-gateway`, `hub`, `dashboard`, `static-site`, `app`) are preserved; all other fields are discarded. Web URLs are never inferred from repository names, docs, CLI commands, ChatSite, or Hub relationships.
 - ChatEnv metadata is extracted from `[project.entry-points."chatenv.configs"]` target modules and `EnvField` declarations. The generated inventory stores only schema names, ENV keys, descriptions, sensitivity flags, and whether a default exists; it must not store `.env` values or default literal values.
 - GitHub API file/content reads must stay authenticated when possible. Token resolution order is explicit `CHATGLANCE_GITHUB_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN`, then repo-local git `extraHeader`, then the typed active ChatGlance profile at ChatEnv's storage path, then ChatGH's ChatEnv `GitHubConfig.GITHUB_ACCESS_TOKEN`.
 - Tokens, cookies, auth headers, password hashes, and credentials must stay out of generated JSON/YAML and repository docs.
@@ -67,7 +69,7 @@ CHATGLANCE_RUNTIME_HOME=$HOME/.chatarch/glance \
 bash /home/zhihong/Playground/core/ChatGlance/scripts/refresh-projects-page.sh
 ```
 
-By default the script uses the current runtime inventory JSON as `--baseline-data` before writing the next snapshot. This preserves reviewed categories only where current tree evidence does not contradict them, while updating repo counts, PR/Issue counts, PyPI versions, entrypoints, actual CLI tree counts, and `generated_at`.
+By default the script uses the current runtime inventory JSON as `--baseline-data` before writing the next snapshot. This preserves reviewed categories only where current tree evidence does not contradict them and preserves valid reviewed Web metadata, while updating repo counts, PR/Issue counts, PyPI versions, entrypoints, actual CLI tree counts, and `generated_at`.
 
 The script stages generated artifacts before touching the live files: it writes `chatarch-projects.json.next`, `projects-page.yml.next`, and `project-cli-tree-report.tsv.next`, builds `glance.yml.projects-candidate`, validates the candidate with the Glance binary, then backs up and replaces the live JSON, page YAML, CLI-tree report, and config together. A failed validation must not leave a new page YAML paired with old data/config.
 

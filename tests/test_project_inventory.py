@@ -332,6 +332,37 @@ def test_build_project_inventory_uses_fresh_cli_surface_for_categories():
     assert inventory["counts"]["with_detected_cli_entries"] == 2
 
 
+def test_build_project_inventory_preserves_only_valid_reviewed_web_metadata():
+    names = ["ChatGame", "ChatDocs", "ChatAuth", "ChatCred", "ChatBroken", "ChatScalar", "ChatLocal", "ChatSource"]
+    rows = [{"name": name, "full_name": f"ChatArch/{name}", "open_prs": 0, "open_issues": 0} for name in names]
+    rows[-1]["web"] = {"url": "https://unreviewed.example.invalid/", "kind": "app"}
+    baseline = {
+        "repositories": [
+            {"name": "ChatGame", "web": {"url": "https://game.example.invalid/", "kind": "app", "label": "drop me"}},
+            {"name": "ChatDocs", "web": {"url": "https://docs.example.invalid/", "label": "drop me"}},
+            {"name": "ChatAuth", "web": {"url": "http://auth.example.invalid/", "kind": "app"}},
+            {"name": "ChatCred", "web": {"url": "https://user:secret@cred.example.invalid/", "kind": "app"}},
+            {"name": "ChatBroken", "web": {"url": "not a URL", "kind": "app"}},
+            {"name": "ChatScalar", "web": "https://scalar.example.invalid/"},
+            {"name": "ChatLocal", "web": {"url": "https://127.0.0.1/", "kind": "app"}},
+        ]
+    }
+
+    inventory = build_project_inventory(
+        rows,
+        owner="ChatArch",
+        fetcher=lambda _full, rel: '[project]\nname = "example"\n' if rel == "pyproject.toml" else None,
+        pypi_fetcher=lambda _name: None,
+        baseline_inventory=baseline,
+        workers=1,
+    )
+    by_name = {item["name"]: item for item in inventory["repositories"]}
+
+    assert by_name["ChatGame"]["web"] == {"url": "https://game.example.invalid/", "kind": "app"}
+    for name in ["ChatDocs", "ChatAuth", "ChatCred", "ChatBroken", "ChatScalar", "ChatLocal", "ChatSource"]:
+        assert "web" not in by_name[name]
+
+
 def test_build_project_inventory_classifies_from_actual_cli_tree_over_stale_override():
     rows = [
         {"name": "ChatCI", "full_name": "ChatArch/ChatCI", "open_prs": 0, "open_issues": 0},

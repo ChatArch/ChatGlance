@@ -323,6 +323,44 @@ def test_projects_table_uses_click_buttons_with_symbolic_detail_popovers() -> No
     assert "未发现 ChatEnv 依赖或注册 schema" not in source
 
 
+def test_projects_table_shows_explicit_web_link_next_to_docs_only_when_present() -> None:
+    data = sample_inventory()
+    data["repositories"][0]["web"] = {
+        "url": "https://alpha.example.invalid/",
+        "kind": "app",
+    }
+    without_web = data["repositories"][1]
+    without_web["name"] = "ChatSite"
+    without_web["docs"] = [{"url": "https://docs-only.example.invalid/"}]
+    without_web["homepage"] = "https://homepage.example.invalid/"
+    without_web["cli"] = {"commands": ["serve"]}
+    without_web["hub"] = {"url": "https://hub.example.invalid/"}
+    page = build_projects_page(data)
+    source = page["columns"][1]["widgets"][0]["widgets"][3]["source"]
+
+    assert "<th>文档</th><th>网页</th><th>最近提交</th>" in source
+    assert source.count('href="https://alpha.example.invalid/"') == 2
+    assert '>网页</a>' in source
+    assert '>Web</a>' in source
+    chatsite_row = next(fragment for fragment in source.split("<tr>") if ">ChatSite</a>" in fragment)
+    assert 'href="https://docs-only.example.invalid/"' in chatsite_row
+    assert "<td>—</td><td>2026-08-03</td>" in chatsite_row
+    assert "https://homepage.example.invalid/" not in source
+    assert "https://hub.example.invalid/" not in source
+
+
+def test_projects_table_rejects_invalid_web_metadata() -> None:
+    data = sample_inventory()
+    data["repositories"][0]["web"] = {"url": "https://user:secret@alpha.example.invalid/"}
+
+    page = build_projects_page(data)
+    source = page["columns"][1]["widgets"][0]["widgets"][3]["source"]
+    alpha_row = next(fragment for fragment in source.split("<tr>") if ">alpha</a>" in fragment)
+
+    assert "user:secret" not in source
+    assert "<td>—</td><td>2026-08-01</td>" in alpha_row
+
+
 def test_projects_detail_cli_section_renders_brief_tree_code_block() -> None:
     page = build_projects_page(sample_inventory())
     source = page["columns"][1]["widgets"][0]["widgets"][3]["source"]

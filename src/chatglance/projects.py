@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import html
+import ipaddress
 import json
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +33,7 @@ CATEGORY_ALIASES = {
     "other": "other",
 }
 EARLY_PYTHON_CATEGORY_ALIASES = {"python-package-template/early", "template/early", "python-early"}
+WEB_KINDS = {"workbench", "observatory", "board", "file-gateway", "hub", "dashboard", "static-site", "app"}
 
 
 def load_inventory(path: str | Path) -> dict[str, Any]:
@@ -67,6 +70,59 @@ def _raw_category(value: Any) -> str:
 
 def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def normalize_web_metadata(value: Any) -> dict[str, str] | None:
+    """Return allowlisted metadata for an explicit public HTTPS project link."""
+
+    if not isinstance(value, dict):
+        return None
+    url = value.get("url")
+    if not isinstance(url, str) or not url or url != url.strip():
+        return None
+    if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in url):
+        return None
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        hostname = parsed.hostname
+        _ = parsed.port  # Validate malformed and out-of-range ports.
+    except ValueError:
+        return None
+    if parsed.scheme.lower() != "https" or not parsed.netloc or not hostname:
+        return None
+    if parsed.username is not None or parsed.password is not None:
+        return None
+
+    normalized_hostname = hostname.rstrip(".").lower()
+    if not normalized_hostname or normalized_hostname == "localhost" or normalized_hostname.endswith(".localhost"):
+        return None
+    try:
+        address = ipaddress.ip_address(normalized_hostname)
+    except ValueError:
+        try:
+            ascii_hostname = normalized_hostname.encode("idna").decode("ascii")
+        except UnicodeError:
+            return None
+        labels = ascii_hostname.split(".")
+        if len(labels) < 2 or len(ascii_hostname) > 253:
+            return None
+        if any(
+            not label
+            or len(label) > 63
+            or label.startswith("-")
+            or label.endswith("-")
+            or any(not (character.isalnum() or character == "-") for character in label)
+            for label in labels
+        ):
+            return None
+    else:
+        if not address.is_global:
+            return None
+
+    kind = value.get("kind")
+    if not isinstance(kind, str) or kind != kind.strip() or kind not in WEB_KINDS:
+        return None
+    return {"url": url, "kind": kind}
 
 
 def _cli_commands(item: dict[str, Any]) -> list[str]:
@@ -499,6 +555,8 @@ def _repo_detail_panel(item: dict[str, Any], detail_id: str) -> str:
     name = text_value(item.get("name"), "unknown")
     docs = item.get("docs") if isinstance(item.get("docs"), list) else []
     docs_url = docs[0].get("url") if docs and isinstance(docs[0], dict) else ""
+    web = normalize_web_metadata(item.get("web"))
+    web_url = web["url"] if web else ""
     version = version_display(item.get("version") if isinstance(item.get("version"), dict) else None)
     metrics = "".join(
         [
@@ -513,6 +571,8 @@ def _repo_detail_panel(item: dict[str, Any], detail_id: str) -> str:
     links = [f'<a href="{html_text(item.get("html_url"))}" target="_blank" rel="noreferrer">GitHub</a>']
     if docs_url:
         links.append(f'<a href="{html_text(docs_url)}" target="_blank" rel="noreferrer">Docs</a>')
+    if web_url:
+        links.append(f'<a href="{html_text(web_url)}" target="_blank" rel="noreferrer">Web</a>')
     description = text_value(item.get("description"), "—")
     chatenv_html = _chatenv_detail_html(item)
     return f"""
@@ -569,6 +629,9 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
         docs = item.get("docs") if isinstance(item.get("docs"), list) else []
         docs_url = docs[0].get("url") if docs and isinstance(docs[0], dict) else ""
         docs_cell = f'<a href="{html_text(docs_url)}" target="_blank" rel="noreferrer">文档</a>' if docs_url else "—"
+        web = normalize_web_metadata(item.get("web"))
+        web_url = web["url"] if web else ""
+        web_cell = f'<a href="{html_text(web_url)}" target="_blank" rel="noreferrer">网页</a>' if web_url else "—"
         rows.append(
             "<tr>"
             f'<td><a href="{html_text(item.get("html_url"))}" target="_blank" rel="noreferrer">{html_text(item.get("name"))}</a></td>'
@@ -580,6 +643,7 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
             f'<td>{chatenv_cell(item)}</td>'
             f'<td class="projects-cli-cell">{cli}</td>'
             f'<td>{docs_cell}</td>'
+            f'<td>{web_cell}</td>'
             f'<td>{html_text(safe_date(item.get("pushed_at") or item.get("updated_at")))}</td>'
             "</tr>"
         )
@@ -642,7 +706,7 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
 </style>
 <div id="projects-table-root" class="projects-table-wrap">
 <table class="projects-table">
-<thead><tr><th>仓库</th><th>详情</th><th>PR</th><th>Issue</th><th>版本</th><th>类型</th><th>Env</th><th>CLI</th><th>文档</th><th>最近提交</th></tr></thead>
+<thead><tr><th>仓库</th><th>详情</th><th>PR</th><th>Issue</th><th>版本</th><th>类型</th><th>Env</th><th>CLI</th><th>文档</th><th>网页</th><th>最近提交</th></tr></thead>
 <tbody>
 """ + "\n".join(rows) + """
 </tbody>
