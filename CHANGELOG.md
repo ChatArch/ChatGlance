@@ -1,8 +1,13 @@
 # Changelog
 
+## 0.1.16 - 2026-09-22
+
+- Add a reviewed, explicit `网页` link column after `文档` on the `项目` page. Links come only from validated runtime project metadata with a declared page kind; they are never inferred from a repository name, documentation URL, CLI, Hub, or service relationship.
+
 ## 0.1.15 - 2026-09-22
 
 - Remove the internal snapshot-freshness predicate from the human execution checklist. The planned refresh timestamp remains visible, while the independent business conditions retain their own pass/fail results.
+- Add explicit reviewed project Web links to the `项目` table and detail popovers, preserving only allowlisted public HTTPS metadata from runtime inventory overrides without inferring links from other project relationships.
 
 ## 0.1.14 - 2026-09-22
 
