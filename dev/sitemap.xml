@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+    <url>
+        <loc>https://arch.gh.wzhecnu.cn/ChatGlance/dev/</loc>
+        <lastmod>2026-09-23</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/"/>
+    </url>
+    <url>
+        <loc>https://arch.gh.wzhecnu.cn/ChatGlance/dev/architecture/</loc>
+        <lastmod>2026-09-23</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/architecture/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/architecture/"/>
+    </url>
+    <url>
+        <loc>https://arch.gh.wzhecnu.cn/ChatGlance/dev/cli/</loc>
+        <lastmod>2026-09-23</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/cli/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/cli/"/>
+    </url>
+    <url>
+        <loc>https://arch.gh.wzhecnu.cn/ChatGlance/dev/operations/</loc>
+        <lastmod>2026-09-23</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/operations/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/operations/"/>
+    </url>
+    <url>
+        <loc>https://arch.gh.wzhecnu.cn/ChatGlance/dev/projects/</loc>
+        <lastmod>2026-09-23</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/projects/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/projects/"/>
+    </url>
+    <url>
+        <loc>https://arch.gh.wzhecnu.cn/ChatGlance/dev/quickstart/</loc>
+        <lastmod>2026-09-23</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/quickstart/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/quickstart/"/>
+    </url>
+    <url>
+        <loc>https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/architecture/</loc>
+        <lastmod>2026-09-23</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/architecture/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/architecture/"/>
+    </url>
+    <url>
+        <loc>https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/cli/</loc>
+        <lastmod>2026-09-23</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/cli/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/cli/"/>
+    </url>
+    <url>
+        <loc>https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/</loc>
+        <lastmod>2026-09-23</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/"/>
+    </url>
+    <url>
+        <loc>https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/operations/</loc>
+        <lastmod>2026-09-23</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/operations/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/operations/"/>
+    </url>
+    <url>
+        <loc>https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/projects/</loc>
+        <lastmod>2026-09-23</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/projects/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/projects/"/>
+    </url>
+    <url>
+        <loc>https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/quickstart/</loc>
+        <lastmod>2026-09-23</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/en/quickstart/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://arch.gh.wzhecnu.cn/ChatGlance/dev/quickstart/"/>
+    </url>
+</urlset>
