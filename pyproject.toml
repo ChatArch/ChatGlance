@@ -28,6 +28,7 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/ChatArch/ChatGlance"
 Repository = "https://github.com/ChatArch/ChatGlance"
+Documentation = "https://arch.gh.wzhecnu.cn/ChatGlance/"
 
 [project.scripts]
 chatglance = "chatglance.cli:main"
@@ -37,6 +38,7 @@ chatglance = "chatglance.config"
 
 [project.optional-dependencies]
 dev = ["build", "pytest", "twine"]
+docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5,<10", "mkdocs-static-i18n>=1.2,<2", "mike>=2,<3"]
 
 [tool.setuptools.dynamic]
 version = {attr = "chatglance.__version__"}

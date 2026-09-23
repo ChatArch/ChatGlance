@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 from typing import Any
 
 from .glance_config import load_yaml, patch_server_stats_mountpoints, replace_projects_page, write_yaml
@@ -111,11 +113,27 @@ def maintain_config(
     updated = build_maintained_config(config, inventory, page_name=page_name, mountpoints=mountpoints)
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    tmp = output.with_name(f".{output.name}.chatglance.tmp")
-    write_yaml(tmp, updated)
+    from .optional_login import optional_login_enabled
 
-    if validate_bin is not None:
-        validate_glance_config(validate_bin, tmp)
+    private_candidate = optional_login_enabled(config)
+    if private_candidate and output.is_symlink():
+        raise ValueError("optional-login runtime output must not be a symlink")
+    if private_candidate:
+        descriptor, temporary_name = tempfile.mkstemp(prefix=f".{output.name}.chatglance-", dir=output.parent)
+        os.close(descriptor)
+        tmp = Path(temporary_name)
+    else:
+        tmp = output.with_name(f".{output.name}.chatglance.tmp")
+    try:
+        write_yaml(tmp, updated)
+        if private_candidate:
+            tmp.chmod(0o600)
+        if validate_bin is not None:
+            validate_glance_config(validate_bin, tmp)
+    except Exception:
+        if private_candidate:
+            tmp.unlink(missing_ok=True)
+        raise
     validated = validate_bin is not None
 
     old_text = _read_text_if_exists(output)
@@ -130,6 +148,8 @@ def maintain_config(
             backup_root.mkdir(parents=True, exist_ok=True)
             backup_path = backup_root / f"{output.name}.{_timestamp()}.bak"
             shutil.copy2(output, backup_path)
+            if private_candidate:
+                backup_path.chmod(0o600)
         tmp.replace(output)
         if restart_service:
             subprocess.run(["systemctl", "--user", "restart", restart_service], check=True)

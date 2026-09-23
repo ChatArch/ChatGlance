@@ -31,6 +31,7 @@
 - 每页独立采集；失败页不覆盖原文件，其他成功页继续。官方日历的缓存规则见[重置策略](codex-reset-policy.md)。
 - 先生成候选配置并执行真实 `glance config:validate`，通过后才备份和替换相关产物。校验失败不改线上文件；发布阶段失败会恢复已替换文件。
 - 保留原页面顺序、账号配置和非生成内容；检测到校验期间有人改动配置则中止，避免覆盖。
+- 同址可选登录配置的项目刷新由 config 中的 `public: true` 与 `authenticated-columns` 配对识别；重新生成匿名 allowlist 与已登录完整列，不把 full inventory 覆写到访客列。缺失配对时拒绝部分模式；`runtime maintain`、`projects update-config` 采用同一生成边界。
 - 只有文件变化时才最多重启一次既有 Glance 用户服务；默认名称 `chatarch-glance.service`，可用 `--service-name` 指定。`--no-restart` 交给外层管理生命周期。
 - 所有页面新鲜成功时返回 0；部分失败或缓存降级返回 1，同时输出实际结果。`--json-output` 的 `ok`、`pages`、`changed`、`restarted` 和 `backup_dir` 可供自动化读取。
 - 服务器出现在线→不可达变化时，手动刷新默认保留旧快照并报告失败；确认要发布当前离线状态时使用 `--allow-offline-regression`。

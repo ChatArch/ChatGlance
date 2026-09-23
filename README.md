@@ -12,6 +12,8 @@
 [English](README.en.md) | [简体中文](README.md)
 </div>
 
+文档站点（首次部署后可访问）：[ChatGlance 文档](https://arch.gh.wzhecnu.cn/ChatGlance/)。源码阶段请阅读 [站点首页](docs/site/index.md)；此链接尚不代表 Pages 已发布。
+
 # ChatGlance
 
 `ChatGlance` 是 ChatArch/WZHECNU Glance 网站部署相关源码与运维工具仓库。它沉淀当前站点的页面生成逻辑、配置转换规则、user-level service 模板、验收记录和安全边界；`chatglance` CLI 只是辅助执行这些记录和规则的管理入口。
@@ -47,6 +49,8 @@
 - `项目` 页一览表为每个仓库生成原生点击 `详情` 按钮；详情卡片展示项目 description、基础信息、CLI entrypoint、保留 `# comment` 的 brief CLI tree 代码块，以及真实注册的 ChatEnv Env key、说明、敏感标记和默认存在标记；有 ENV 元数据时 CLI/ENV 可点击切换，但不展示任何值。
 - 当前 page tabs 固定为：`最近提交`、`PR-issue`、`分类`、`一览表`。
 - 支持显式 public/private 项目视图：authenticated 默认视图保留全量清单，只把字面 boolean 标记显示为 `Public`/`Private`，缺失或畸形值显示 `Unknown`；anonymous 渲染边界自行从 full inventory 投影，发布的 allowlist artifact 不包含 private 行、source/CLI/Env/evidence 元数据、private 派生计数或可见性标记。
+- 同址可选登录候选：`chatglance access render-single-origin-optional-login --config PRIVATE.yml --inventory FULL.json --output CANDIDATE.yml`，单 Glance 实例同一 `/项目` slug 按会话选择公开/完整列；私有候选文件不可作为 guest asset 发布。详见 [项目与访问](docs/site/projects.md)。
+- 同址可选登录需要 [ChatArch/glance chatarch-v0.1.0](https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0) 的 `public` 与 `authenticated-columns` 能力；该发布提供 Linux amd64 二进制和 `SHA256SUMS`。原版 Glance v0.8.5 不支持这些字段。安装 ChatGlance 不会自动替换 Glance 二进制，升级前需校验 checksum、配置和双身份访问。
 - `chatglance access render-public` 从显式 full config/inventory 生成 public YAML/JSON 候选；public config 只含静态公开首页和项目页，不继承 `auth`、private server、网站服务、订阅详情、服务器页或原首页 runtime widgets。repository/docs/Web 链接必须是外部 HTTPS URL；两个 mode-`0600` 候选在同一个预先存在的非 symlink 目录内 stage、fsync 并成对原子替换，第二个发布失败时回滚第一个。
 - `PR-issue` 只显示 PR/Issue 非 0 的仓库，并按 `(PR, Issue, 最近提交)` 降序。
 - 生成 config 副本时清理 legacy generated pages：`Projects`、`ChatArch Projects`、`ChatArch Projects List`。
@@ -60,7 +64,7 @@
 
 ## 快速开始
 
-新机器配置类似当前站点时，先看 [`docs/quickstart.md`](docs/quickstart.md)：它把 `glance.yml` / widgets / HTML/CSS 作为主要前端配置入口，`chatglance` 只负责采集、渲染、校验、备份和替换这些管理动作。
+新机器配置类似当前站点时，先看 [快速开始](docs/site/quickstart.md)：它把 `glance.yml` / widgets / HTML/CSS 作为主要前端配置入口，`chatglance` 只负责采集、渲染、校验、备份和替换这些管理动作。
 
 ```bash
 pip install -e ".[dev]"
@@ -78,7 +82,7 @@ python -m twine check dist/*
 安装包即可刷新已有 runtime，不再要求进入源码目录运行脚本：
 
 ```bash
-python -m pip install ChatGlance==0.1.10
+python -m pip install ChatGlance
 chatglance refresh
 chatglance refresh account-limits
 chatglance refresh projects sites
@@ -100,7 +104,7 @@ chatglance refresh --scheduled --runtime-home "$HOME/.chatarch/glance" --json-ou
 
 账号请求使用 profile 中的反向代理 Base URL，ChatCRS 忽略所有本地 Proxy；不在刷新命令前调用 `proxy_on`。可用 `--server-inventory`、`--sites-inventory`、`--gatus-db` 和其他采集参数显式选择非敏感配置。只读诊断不要传 `--scheduled`。
 
-完整命令面见 [CLI 树](docs/cli-tree.md)，运行 `chatglance --tree` / `chatglance --tree-brief` 读取真实注册命令。配置清单和低层步骤见 [手动刷新](docs/refresh.md)、[项目页](docs/projects.md) 和 [服务器页](docs/infra.md)。
+站点 [分段 CLI 索引](docs/site/cli.md) 按操作边界组织；需要完整注册树可见 [CLI 树](docs/cli-tree.md)，或运行 `chatglance --tree` / `chatglance --tree-brief`。
 
 ## CLI 示例
 

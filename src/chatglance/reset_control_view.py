@@ -9,8 +9,7 @@ from urllib.parse import urlencode
 
 from .forecast_view import FORECAST_CSS, render_forecast, source_time
 
-# Only this fixed script is authorized by its CSP hash. It copies visual state,
-# never credentials, storage, form fields, or execution settings.
+# Only these fixed scripts are authorized by CSP hashes.
 THEME_SCRIPT = """(() => {
   try {
     if (window.parent === window) return;
@@ -42,9 +41,53 @@ THEME_SCRIPT = """(() => {
   } catch (_) { /* Standalone access uses the same restrained fallback theme. */ }
 })();"""
 _SCRIPT_HASH = base64.b64encode(hashlib.sha256(THEME_SCRIPT.encode()).digest()).decode()
+MANUAL_SCRIPT = """(() => {
+  const form = document.querySelector('#manual-credit');
+  if (!form) return;
+  const button = form.querySelector('button');
+  const status = document.querySelector('#manual-status');
+  const labels = {
+    reset_verified: '成功：已确认用卡并重置额度', disabled: '未满足：账号未开启',
+    no_credit: '未满足：没有可用重置卡', no_exact_credit: '未满足：卡片详情不可用',
+    conditions_not_met: '未满足：额度或剩余时间不足',
+    forecast_above_threshold: '未满足：预测超过上限',
+    forecast_unavailable: '未满足：预测不可用',
+    cooldown: '未满足：冷却中', already_processed: '未满足：本窗口已处理',
+    blocked_pending: '结果待确认：已阻断再次用卡', uncertain: '结果待确认：请勿重试',
+    invalid_request: '操作未获授权，请刷新页面',
+  };
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (button.disabled || !window.confirm('重新检查当前账号，条件全部满足时最多使用一张重置卡。确定继续？')) return;
+    button.disabled = true;
+    status.textContent = '检查中…';
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 90000);
+    try {
+      const body = new URLSearchParams(new FormData(form));
+      body.set('confirm', 'use-one-credit');
+      const response = await fetch(form.action, {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body, signal: abort.signal,
+      });
+      const result = await response.json();
+      if (!response.ok && result.reason !== 'invalid_request') throw new Error('unavailable');
+      const message = labels[result.reason] || (result.state === 'uncertain'
+        ? '结果待确认：请勿重试' : '未满足：' + result.reason);
+      status.textContent = message + (result.checked_at ? ' · 本次检查 ' + result.checked_at : '');
+    } catch (_) {
+      status.textContent = '结果待确认：网络超时或连接中断，请勿重试，刷新页面核对状态。';
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+  button.disabled = false;
+})();"""
+_MANUAL_HASH = base64.b64encode(hashlib.sha256(MANUAL_SCRIPT.encode()).digest()).decode()
 CONTROL_CSP = (
     "default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
-    f"script-src 'sha256-{_SCRIPT_HASH}'; "
+    f"script-src 'sha256-{_SCRIPT_HASH}' 'sha256-{_MANUAL_HASH}'; connect-src 'self'; "
     "form-action 'self'; frame-ancestors 'self'; base-uri 'none'"
 )
 
@@ -77,6 +120,8 @@ button,.action{border:1px solid var(--color-separator);border-radius:4px;backgro
 .decision-row .state{min-width:3em;text-align:right}.rule{padding:7px 0 0 12px}
 .footer{margin-top:14px}.footer a{display:inline-block;margin-top:5px;color:var(--color-primary);text-decoration:none}
 .warning{color:var(--color-negative)}
+.manual-credit{margin-top:14px;padding:10px;border:1px solid var(--color-separator)}
+.manual-credit p{margin:6px 0}.manual-credit button:disabled{opacity:.5;cursor:default}
 @media(max-width:460px){body{padding:12px}.heading{flex-wrap:wrap;gap:2px}.decision-row>summary{gap:8px}.gate-main{gap:8px}.check-value{max-width:115px}}
 """
 
@@ -158,5 +203,10 @@ def render_control_page(report, token, revision, *, overridden=False):
 {render_forecast(report.get("forecast"), report.get("forecast_threshold"))}
 <p class="checklist-title">执行清单 <span class="meta">· 点击条件查看要求</span></p>
 <section class="execution-checks" aria-label="自动用卡执行清单">{"".join(forms)}{rows}</section>
+<section class="manual-credit" aria-label="手动检查并用卡"><form id="manual-credit" method="post" action="use-credit">
+<input type="hidden" name="profile" value="{_e(profile)}"><input type="hidden" name="csrf" value="{_e(token)}">
+<button type="submit" disabled>检查并用卡</button></form>
+<p class="meta">仅确认后重新查询本账号；条件满足才最多使用一张。结果不明时不会自动重试。</p>
+<p id="manual-status" role="status" aria-live="polite">尚未手动检查</p></section>
 <footer class="footer">自动用卡只会在一次计划刷新内：先读取额度和卡片，再在同一次刷新中判断并最多消费一次。查看或刷新本小窗不会兑换。<br><a href="?{_e(urlencode({"profile":profile}))}">刷新状态</a></footer>
-<script>{THEME_SCRIPT}</script></body></html>'''
+<script>{THEME_SCRIPT}</script><script>{MANUAL_SCRIPT}</script></body></html>'''

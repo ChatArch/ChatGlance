@@ -17,6 +17,7 @@ from typing import Any, Sequence
 
 import yaml
 from chatenv import get_paths
+from .glance_config import replace_projects_page
 from .runtime import validate_glance_config
 
 PAGE_SPECS = {
@@ -105,7 +106,14 @@ def _configured_pages(config: dict[str, Any], root: Path, collection: Collection
     return selected
 
 
-def _replace_page(config: dict[str, Any], page: dict[str, Any]) -> None:
+def _replace_page(config: dict[str, Any], page: dict[str, Any], *, inventory: dict[str, Any] | None = None) -> None:
+    if page.get("name") == "项目":
+        from .optional_login import optional_login_enabled
+        if optional_login_enabled(config):
+            if inventory is None:
+                raise RefreshError("optional-login project refresh requires full inventory")
+            config["pages"] = replace_projects_page(config, inventory)["pages"]
+            return
     matches = [i for i, old in enumerate(config["pages"]) if old.get("name") == page.get("name") or (page.get("slug") and old.get("slug") == page["slug"])]
     if len(matches) > 1:
         raise RefreshError("duplicate page identity in runtime config")
@@ -213,9 +221,11 @@ def _publish(root: Path, stage: Path, payloads: dict[Path, str]) -> str | None:
         if path.exists():
             saved[path] = backup / str(index)
             shutil.copy2(path, saved[path])
+            if path == root / "config/glance.yml":
+                saved[path].chmod(0o600)
         temporary = stage / f"publish-{index}"
         temporary.write_text(text, encoding="utf-8")
-        temporary.chmod(path.stat().st_mode & 0o777 if path.exists() else 0o600)
+        temporary.chmod(0o600 if path == root / "config/glance.yml" else path.stat().st_mode & 0o777 if path.exists() else 0o600)
         prepared[path] = temporary
     (backup / "manifest.json").write_text(json.dumps({str(path.relative_to(root)): saved[path].name if path in saved else None for path in changed}, indent=2), encoding="utf-8")
     try:
@@ -293,7 +303,7 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
             config = yaml.safe_load(before)
             payloads = {}
             for update in updates:
-                _replace_page(config, update.page)
+                _replace_page(config, update.page, inventory=update.data if update.key == "projects" else None)
                 _, data_name, page_name = PAGE_SPECS[update.key]
                 payloads[root / "data" / data_name] = json.dumps(update.data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
                 payloads[root / "data" / page_name] = yaml.safe_dump(update.page, allow_unicode=True, sort_keys=False)

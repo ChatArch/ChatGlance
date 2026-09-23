@@ -1,7 +1,4 @@
-"""Small same-origin configuration UI, authenticated by the existing Glance.
-
-No reset-card client is used here. Writes change only explicit ChatEnv switches.
-"""
+"""Authenticated same-origin configuration and explicit manual reset control."""
 
 from __future__ import annotations
 
@@ -255,6 +252,52 @@ class ControlApp:
                 flush=True,
             )
 
+    def use_credit(self, values, cookie, origin):
+        if origin != self.public_origin:
+            raise ControlError("拒绝跨站操作", 403)
+        if set(values) != {"profile", "csrf", "confirm"} or values["confirm"] != "use-one-credit":
+            raise ControlError("操作参数不完整")
+        with self.lock:
+            self.consume_token(cookie, values["csrf"])
+        _, policies, _ = self.flags(values["profile"])
+        policy = policies[values["profile"]]
+        from .codex_collector import _managed_client_options, fetch_public_codex_reset
+        from .codex_resets import scan_profile
+        settings = collection_settings(home=self.home)
+        try:
+            options = _managed_client_options(settings, [values["profile"]])
+            if options.get("token_service") != "CRS":
+                raise ValueError
+        except (ValueError, TypeError, KeyError):
+            raise ControlError("账号映射不可用") from None
+        if not policy.enabled:
+            return {"state": "unmet", "reason": "disabled", "checked_at": _iso_time()}
+        forecast = (fetch_public_codex_reset(3).get("forecast")
+                    if policy.skip_if_forecast_24h_above is not None else None)
+        row = scan_profile(values["profile"], policy=policy, execute=True,
+                           home=self.home, timeout=8, forecast=forecast,
+                           require_exact_credit=True, **options)
+        auto = row["auto_reset"]
+        status = auto["status"]
+        reason = auto["reason"] if status == "conditions_not_met" else status
+        allowed = {"reset_verified", "disabled", "query_failed", "no_credit",
+                   "no_exact_credit", "conditions_not_met", "query_failed_or_stale",
+                   "credits_unknown", "forecast_unavailable", "forecast_above_threshold",
+                   "target_window_missing", "target_window_ambiguous", "cooldown",
+                   "already_processed", "blocked_pending", "uncertain", "state_error",
+                   "conditions_expired", "nothing_to_reset", "pending"}
+        if reason not in allowed:
+            reason = "unavailable"
+        state = ("success" if reason == "reset_verified" else
+                 "uncertain" if reason in {"uncertain", "blocked_pending", "state_error", "pending"}
+                 else "unmet")
+        return {"state": state, "reason": reason, "checked_at": row["observed_at"]}
+
+
+def _iso_time():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
 
 def make_control_server(
     *,
@@ -343,7 +386,8 @@ def make_control_server(
 
         def do_POST(self):
             try:
-                if urlsplit(self.path).path != "/toggle":
+                target = urlsplit(self.path)
+                if target.query or target.path not in ("/toggle", "/use-credit"):
                     raise ControlError("操作不存在", 404)
                 cookie = self.check_auth()
                 if (
@@ -362,16 +406,30 @@ def make_control_server(
                 if any(len(value) != 1 for value in raw.values()):
                     raise ControlError("不接受重复参数")
                 values = {key: value[0] for key, value in raw.items()}
-                app.change(values, cookie, self.headers.get("Origin"))
-                self.respond(
-                    303, location="./?" + urlencode({"profile": values["profile"]})
-                )
+                if target.path == "/use-credit":
+                    result = app.use_credit(values, cookie, self.headers.get("Origin"))
+                    self.respond(200, json.dumps(result), content_type="application/json")
+                else:
+                    app.change(values, cookie, self.headers.get("Origin"))
+                    self.respond(303, location="./?" + urlencode({"profile": values["profile"]}))
             except ControlError as error:
-                self.handle_error(error)
+                if urlsplit(self.path).path == "/use-credit":
+                    self.respond(error.status, '{"state":"unmet","reason":"invalid_request"}',
+                                 content_type="application/json")
+                else:
+                    self.handle_error(error)
             except (ValueError, UnicodeError):
-                self.handle_error(ControlError("请求格式无效"))
+                if urlsplit(self.path).path == "/use-credit":
+                    self.respond(400, '{"state":"unmet","reason":"invalid_request"}',
+                                 content_type="application/json")
+                else:
+                    self.handle_error(ControlError("请求格式无效"))
             except Exception:
-                self.handle_error(ControlError("操作未完成，请刷新核对", 503))
+                if urlsplit(self.path).path == "/use-credit":
+                    self.respond(503, '{"state":"uncertain","reason":"unavailable"}',
+                                 content_type="application/json")
+                else:
+                    self.handle_error(ControlError("操作未完成，请刷新核对", 503))
 
     class Server(HTTPServer):
         allow_reuse_address = True
