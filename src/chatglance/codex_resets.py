@@ -109,6 +109,18 @@ def _count(raw: Any) -> int | None:
     return value if type(value) is int and value >= 0 else None
 
 
+def _exact_credit_id(raw: Any, now: float) -> str | None:
+    rows = raw.get("credits") if isinstance(raw, dict) else None
+    if _count(raw) is None or _count(raw) == 0 or not isinstance(rows, list):
+        return None
+    for card in rows:
+        if (isinstance(card, dict) and isinstance(card.get("id"), str)
+                and bool(card["id"]) and card.get("status") == "available"
+                and (_epoch(card.get("expires_at")) or 0) > now):
+            return card["id"]
+    return None
+
+
 def _windows(raw: Any, now: float) -> list[dict[str, Any]]:
     limit = raw.get("rate_limit") if isinstance(raw, dict) else None
     if not isinstance(limit, dict):
@@ -275,7 +287,7 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
                  state_dir: str | Path | None = None, now: float | None = None,
                  reset_base_url: str | None = None, timeout: float = 20,
                  forecast: dict | None = None, client_factory: Callable | None = None,
-                 token_service: str = 'Codex') -> dict:
+                 token_service: str = 'Codex', require_exact_credit: bool = False) -> dict:
     """Return a redacted Glance row; execute requires both opt-in gates.
 
     Dry runs do not create state. Uncertain POSTs/readbacks stay blocked without
@@ -343,6 +355,8 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
     if row["status"] != "ok":
         row.update(error_type="CodexProbeError", error="额度或重置卡详情查询失败 / 数据不完整")
     decision = evaluate_policy(rawusage, rawcredits, policy, now=now, forecast=forecast)
+    if require_exact_credit and decision["eligible"] and not _exact_credit_id(rawcredits, now):
+        decision.update(eligible=False, reason="no_exact_credit", target=None)
     auto.update(decision)
     auto["status"] = "disabled" if not policy.enabled else "conditions_not_met"
     if policy.enabled and row["status"] != "ok":
@@ -366,13 +380,16 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
                 # wall-clock time immediately before the only consuming call.
                 post_now = clock()
                 post_decision = evaluate_policy(rawusage, rawcredits, policy, now=post_now, forecast=forecast)
+                credit_id = _exact_credit_id(rawcredits, post_now) if require_exact_credit else None
+                if require_exact_credit and post_decision["eligible"] and not credit_id:
+                    post_decision.update(eligible=False, reason="no_exact_credit", target=None)
                 auto.update(post_decision)
                 if not post_decision["eligible"]:
                     _finish(path, identity, request_id, "conditions_expired", post_now)
                     auto.update(status="conditions_expired", last_action={"status": "conditions_expired", "at": _iso(post_now)})
                     row["windows"] = _windows(rawusage, post_now)
                 else:
-                    _consume_and_verify(client, rawusage, rawcredits, post_decision["target"], row, path, identity, request_id, post_now)
+                    _consume_and_verify(client, rawusage, rawcredits, post_decision["target"], row, path, identity, request_id, post_now, credit_id=credit_id)
     except (OSError, sqlite3.Error, RuntimeError):
         # Never proceed when durable state is unavailable. If a POST happened,
         # its persisted pending row remains a fail-closed barrier.
@@ -383,10 +400,11 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
     return row
 
 
-def _consume_and_verify(client, before_usage, before_credits, target, row, path, identity, request_id, now):
+def _consume_and_verify(client, before_usage, before_credits, target, row, path, identity, request_id, now, *, credit_id=None):
     status = "uncertain"
     try:
-        result = client.consume(request_id, execute=True)
+        result = (client.consume(request_id, execute=True, credit_id=credit_id)
+                  if credit_id is not None else client.consume(request_id, execute=True))
         # GET both after POST, even for non-reset outcomes. HTTP 200 alone
         # never proves consumption; arbitrary result text is never serialized.
         after_usage = client.usage()
