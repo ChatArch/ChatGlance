@@ -435,6 +435,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#manual-check-and-use" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Manual check and use
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#service-boundary" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -529,6 +540,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#manual-check-and-use" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Manual check and use
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#service-boundary" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -579,6 +601,9 @@ chatglance<span class="w"> </span>refresh<span class="w"> </span>--json-output<s
 </code></pre></div>
 <p><code>refresh</code> collects and publishes only managed pages already present in the Glance config and reports success/partial failure per page. It validates a candidate with the selected Glance binary's <code>config:validate</code> before backup and replacement; failed pages keep old files, with a shared nonblocking lock. <code>--no-restart</code> leaves the service running as-is. These commands are <strong>illustrative</strong>: missing runtime, credentials, or validator cause failure; they do not set up an environment for you.</p>
 <p>Manual calls without <code>--scheduled</code> never redeem reset cards; account pages only display snapshots. Existing scheduling must use explicit <code>--scheduled</code> with per-account policy, not infer authority from a rendered toggle. When refreshing projects in optional-login mode, guest columns are rebuilt from the Public allowlist and authenticated columns retain full rows. A broken layout is rejected rather than overwritten with private guest content.</p>
+<h2 id="manual-check-and-use">Manual check and use</h2>
+<p>After signing in, open the account control popup on the subscription page and choose <strong>检查并用卡</strong> (check and use a credit). Only after explicit confirmation does the server reload that account's current policy, live quota and available cards. It attempts at most one exact card only when the configured threshold and all existing time-window, forecast, identity and idempotency conditions pass. It does not wait for the next scheduled scan or weaken existing safeguards.</p>
+<p>Cancelling, viewing, ordinary refreshes and native form submissions without JavaScript never redeem. The action reports success, unmet conditions or an uncertain result with its check time; the checklist above remains explicitly the last scheduled snapshot. Do not repeat an uncertain action before reconciling the ledger and quota. Production acceptance only views or cancels the confirmation; synthetic accounts and cards validate consumption.</p>
 <h2 id="service-boundary">Service boundary</h2>
 <ul>
 <li><code>projects update-config</code> writes an <strong>explicit output path</strong>, not a deployment; a single-origin candidate cannot alias its inputs.</li>
