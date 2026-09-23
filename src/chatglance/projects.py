@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import html
-import ipaddress
 import json
-import urllib.parse
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+from .urls import safe_external_url
 
 PAGE_NAME = "项目"
 LEGACY_PAGE_NAMES = {"Projects", "ChatArch Projects", "ChatArch Projects List"}
@@ -34,6 +35,7 @@ CATEGORY_ALIASES = {
 }
 EARLY_PYTHON_CATEGORY_ALIASES = {"python-package-template/early", "template/early", "python-early"}
 WEB_KINDS = {"workbench", "observatory", "board", "file-gateway", "hub", "dashboard", "static-site", "app"}
+Audience = Literal["private", "public"]
 
 
 def load_inventory(path: str | Path) -> dict[str, Any]:
@@ -77,47 +79,9 @@ def normalize_web_metadata(value: Any) -> dict[str, str] | None:
 
     if not isinstance(value, dict):
         return None
-    url = value.get("url")
-    if not isinstance(url, str) or not url or url != url.strip():
+    url = safe_external_url(value.get("url"))
+    if url is None:
         return None
-    if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in url):
-        return None
-    try:
-        parsed = urllib.parse.urlsplit(url)
-        hostname = parsed.hostname
-        _ = parsed.port  # Validate malformed and out-of-range ports.
-    except ValueError:
-        return None
-    if parsed.scheme.lower() != "https" or not parsed.netloc or not hostname:
-        return None
-    if parsed.username is not None or parsed.password is not None:
-        return None
-
-    normalized_hostname = hostname.rstrip(".").lower()
-    if not normalized_hostname or normalized_hostname == "localhost" or normalized_hostname.endswith(".localhost"):
-        return None
-    try:
-        address = ipaddress.ip_address(normalized_hostname)
-    except ValueError:
-        try:
-            ascii_hostname = normalized_hostname.encode("idna").decode("ascii")
-        except UnicodeError:
-            return None
-        labels = ascii_hostname.split(".")
-        if len(labels) < 2 or len(ascii_hostname) > 253:
-            return None
-        if any(
-            not label
-            or len(label) > 63
-            or label.startswith("-")
-            or label.endswith("-")
-            or any(not (character.isalnum() or character == "-") for character in label)
-            for label in labels
-        ):
-            return None
-    else:
-        if not address.is_global:
-            return None
 
     kind = value.get("kind")
     if not isinstance(kind, str) or kind != kind.strip() or kind not in WEB_KINDS:
@@ -219,6 +183,130 @@ def category_key(item: dict[str, Any]) -> str:
     return "other"
 
 
+def _public_integer(item: Mapping[str, Any], key: str) -> int:
+    value = item.get(key, 0)
+    if value in (None, ""):
+        return 0
+    if isinstance(value, bool):
+        raise ValueError(f"repository `{key}` must be an integer")
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"repository `{key}` must be an integer") from exc
+    if number < 0:
+        raise ValueError(f"repository `{key}` must not be negative")
+    return number
+
+
+def _public_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
+def _project_public_row(raw_item: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Project one explicitly public row into the complete public row schema."""
+
+    if raw_item.get("private") is not False:
+        return None
+    name = _public_text(raw_item.get("name"))
+    if name is None:
+        return None
+
+    item = dict(raw_item)
+    projected: dict[str, Any] = {
+        "name": name,
+        "open_prs": _public_integer(raw_item, "open_prs"),
+        "open_issues": _public_integer(raw_item, "open_issues"),
+        "category": category_key(item),
+        "docs": [],
+    }
+    repository_url = safe_external_url(raw_item.get("html_url"))
+    if repository_url is not None:
+        projected["html_url"] = repository_url
+    for key in ("description", "pushed_at", "updated_at"):
+        value = _public_text(raw_item.get(key))
+        if value is not None:
+            projected[key] = value
+
+    raw_version = raw_item.get("version")
+    if isinstance(raw_version, Mapping):
+        version = {
+            key: value
+            for key in ("value", "source")
+            if (value := _public_text(raw_version.get(key))) is not None
+        }
+        if version:
+            projected["version"] = version
+
+    raw_docs = raw_item.get("docs")
+    if isinstance(raw_docs, list):
+        for candidate in raw_docs:
+            if not isinstance(candidate, Mapping):
+                continue
+            docs_url = safe_external_url(candidate.get("url"))
+            if docs_url is not None:
+                projected["docs"] = [{"url": docs_url}]
+                break
+
+    web = normalize_web_metadata(raw_item.get("web"))
+    if web is not None:
+        projected["web"] = web
+    return projected
+
+
+def _public_project_counts(repositories_value: list[dict[str, Any]]) -> dict[str, int]:
+    """Recompute every exported aggregate solely from projected rows."""
+
+    return {
+        "visible_repos": len(repositories_value),
+        "public": len(repositories_value),
+        "with_open_prs": sum(1 for item in repositories_value if _public_integer(item, "open_prs") > 0),
+        "with_open_issues": sum(1 for item in repositories_value if _public_integer(item, "open_issues") > 0),
+        "total_open_prs": sum(_public_integer(item, "open_prs") for item in repositories_value),
+        "total_open_issues": sum(_public_integer(item, "open_issues") for item in repositories_value),
+        "with_detected_version": sum(
+            1
+            for item in repositories_value
+            if isinstance(item.get("version"), dict) and bool(item["version"].get("value"))
+        ),
+        "with_docs_candidates": sum(1 for item in repositories_value if bool(item.get("docs"))),
+    }
+
+
+def project_public_inventory(inventory: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a detached public artifact containing only an explicit schema."""
+
+    if not isinstance(inventory, Mapping):
+        raise ValueError("inventory must be a mapping")
+    raw_repositories = inventory.get("repositories")
+    if not isinstance(raw_repositories, list):
+        raise ValueError("inventory must contain a repositories list")
+    if any(not isinstance(item, Mapping) for item in raw_repositories):
+        raise ValueError("inventory repositories must contain mappings")
+
+    repositories_value = [
+        projected
+        for raw_item in raw_repositories
+        if (projected := _project_public_row(raw_item)) is not None
+    ]
+    categories: dict[str, int] = {}
+    for item in repositories_value:
+        key = category_key(item)
+        categories[key] = categories.get(key, 0) + 1
+
+    projected_inventory: dict[str, Any] = {
+        "counts": _public_project_counts(repositories_value),
+        "categories": categories,
+        "repositories": repositories_value,
+    }
+    generated_at = _public_text(inventory.get("generated_at"))
+    if generated_at is not None:
+        projected_inventory = {"generated_at": generated_at, **projected_inventory}
+    return projected_inventory
+
+
 def display_category(item: dict[str, Any]) -> str:
     return CATEGORY_LABELS.get(category_key(item), "其他项目")
 
@@ -260,12 +348,14 @@ def sorted_repos(data: dict[str, Any], sort_key: str, limit: int | None = None) 
     return rows[:limit] if limit else rows
 
 
-def bookmark_link(item: dict[str, Any], *, url_kind: str = "repo") -> dict[str, str]:
-    url = text_value(item.get("html_url"), "https://github.com/ChatArch")
+def bookmark_link(item: dict[str, Any], *, url_kind: str = "repo") -> dict[str, str] | None:
+    url = safe_external_url(item.get("html_url"))
     if url_kind == "docs":
         docs = item.get("docs") if isinstance(item.get("docs"), list) else []
         if docs and isinstance(docs[0], dict):
-            url = text_value(docs[0].get("url"), url)
+            url = safe_external_url(docs[0].get("url"))
+    if url is None:
+        return None
     desc_parts = [
         f"PR {int(item.get('open_prs') or 0)}",
         f"Issue {int(item.get('open_issues') or 0)}",
@@ -301,10 +391,11 @@ def make_overview_groups(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 def make_sort_widget(data: dict[str, Any], title: str, sort_key: str) -> dict[str, Any]:
     rows = sorted_repos(data, sort_key)
+    links = [link for item in rows if (link := bookmark_link(item)) is not None]
     return {
         "type": "bookmarks",
         "title": title,
-        "groups": [{"title": f"{title} ({len(rows)})", "links": [bookmark_link(item) for item in rows]}],
+        "groups": [{"title": f"{title} ({len(rows)})", "links": links}],
     }
 
 
@@ -314,10 +405,12 @@ def make_category_groups(data: dict[str, Any]) -> list[dict[str, Any]]:
         rows = [item for item in sorted_repos(data, "category") if category_key(item) == category]
         if rows:
             label = CATEGORY_LABELS.get(category, category)
-            groups.append({"title": f"{label} ({len(rows)})", "links": [bookmark_link(item) for item in rows]})
+            links = [link for item in rows if (link := bookmark_link(item)) is not None]
+            groups.append({"title": f"{label} ({len(rows)})", "links": links})
     remainder = [item for item in sorted_repos(data, "category") if category_key(item) not in CATEGORY_ORDER]
     if remainder:
-        groups.append({"title": f"其他项目 ({len(remainder)})", "links": [bookmark_link(item) for item in remainder]})
+        links = [link for item in remainder if (link := bookmark_link(item)) is not None]
+        groups.append({"title": f"其他项目 ({len(remainder)})", "links": links})
     return groups
 
 
@@ -461,6 +554,21 @@ def _detail_metric(label: str, value: Any) -> str:
     return f'<div><span>{html_text(label)}</span><strong>{html_text(value)}</strong></div>'
 
 
+def _visibility_badge(item: dict[str, Any]) -> str:
+    if item.get("private") is True:
+        visibility = "Private"
+    elif item.get("private") is False:
+        visibility = "Public"
+    else:
+        visibility = "Unknown"
+    css_class = visibility.lower()
+    return f'<span class="projects-visibility-badge {css_class}">{visibility}</span>'
+
+
+def _visibility_metric(item: dict[str, Any]) -> str:
+    return f'<div><span>可见性</span><strong>{_visibility_badge(item)}</strong></div>'
+
+
 def _entry_points_text(meta: dict[str, Any]) -> str:
     entry_points = meta.get("entry_points") if isinstance(meta.get("entry_points"), dict) else {}
     parts = [f"{key} -> {value}" for key, value in sorted(entry_points.items())]
@@ -551,30 +659,34 @@ def _detail_tabbed_sections(cli_html: str, chatenv_html: str, detail_id: str) ->
     )
 
 
-def _repo_detail_panel(item: dict[str, Any], detail_id: str) -> str:
+def _repo_detail_panel(item: dict[str, Any], detail_id: str, *, audience: Audience) -> str:
     name = text_value(item.get("name"), "unknown")
     docs = item.get("docs") if isinstance(item.get("docs"), list) else []
-    docs_url = docs[0].get("url") if docs and isinstance(docs[0], dict) else ""
+    docs_url = safe_external_url(docs[0].get("url")) if docs and isinstance(docs[0], dict) else None
+    repository_url = safe_external_url(item.get("html_url"))
     web = normalize_web_metadata(item.get("web"))
     web_url = web["url"] if web else ""
     version = version_display(item.get("version") if isinstance(item.get("version"), dict) else None)
-    metrics = "".join(
-        [
-            _detail_metric("PR", int(item.get("open_prs") or 0)),
-            _detail_metric("Issue", int(item.get("open_issues") or 0)),
-            _detail_metric("版本", version),
-            _detail_metric("类型", display_category(item)),
-            _detail_metric("最近提交", safe_date(item.get("pushed_at") or item.get("updated_at"))),
-        ]
-    )
+    metric_items = [
+        _detail_metric("PR", int(item.get("open_prs") or 0)),
+        _detail_metric("Issue", int(item.get("open_issues") or 0)),
+        _detail_metric("版本", version),
+        _detail_metric("类型", display_category(item)),
+    ]
+    if audience == "private":
+        metric_items.append(_visibility_metric(item))
+    metric_items.append(_detail_metric("最近提交", safe_date(item.get("pushed_at") or item.get("updated_at"))))
+    metrics = "".join(metric_items)
     detail_sections = _detail_tabbed_sections(_cli_detail_html(item), _chatenv_detail_html(item), detail_id)
-    links = [f'<a href="{html_text(item.get("html_url"))}" target="_blank" rel="noreferrer">GitHub</a>']
+    links = []
+    if repository_url:
+        links.append(f'<a href="{html_text(repository_url)}" target="_blank" rel="noreferrer">GitHub</a>')
     if docs_url:
         links.append(f'<a href="{html_text(docs_url)}" target="_blank" rel="noreferrer">Docs</a>')
     if web_url:
         links.append(f'<a href="{html_text(web_url)}" target="_blank" rel="noreferrer">Web</a>')
+    links_html = f'<div class="projects-detail-links">{" · ".join(links)}</div>' if links else ""
     description = text_value(item.get("description"), "—")
-    chatenv_html = _chatenv_detail_html(item)
     return f"""
 <article class="projects-detail-panel" aria-label="{html_text(name)} 详情">
   <header class="projects-detail-head">
@@ -583,7 +695,7 @@ def _repo_detail_panel(item: dict[str, Any], detail_id: str) -> str:
       <h3>{html_text(name)}</h3>
     </div>
   </header>
-  <div class="projects-detail-links">{" · ".join(links)}</div>
+  {links_html}
   <p class="projects-detail-description">{html_text(description)}</p>
   <div class="projects-detail-metrics">{metrics}</div>
   {detail_sections}
@@ -594,11 +706,11 @@ def _repo_detail_popover_button(detail_id: str) -> str:
     return f'<button type="button" class="projects-detail-button" popovertarget="{html_text(detail_id)}">详情</button>'
 
 
-def _repo_detail_popover(item: dict[str, Any], detail_id: str) -> str:
+def _repo_detail_popover(item: dict[str, Any], detail_id: str, *, audience: Audience) -> str:
     return (
         f'<div id="{html_text(detail_id)}" class="projects-detail-popover" popover>'
         f'<button type="button" class="projects-detail-close" popovertarget="{html_text(detail_id)}" popovertargetaction="hide">关闭</button>'
-        f'{_repo_detail_panel(item, detail_id)}'
+        f'{_repo_detail_panel(item, detail_id, audience=audience)}'
         '</div>'
     )
 
@@ -619,27 +731,35 @@ def _sorted_repos_for_table(data: dict[str, Any]) -> list[dict[str, Any]]:
     )
 
 
-def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
+def make_table_widget(data: dict[str, Any], *, audience: Audience = "private") -> dict[str, Any]:
     rows: list[str] = []
     popovers: list[str] = []
     for index, item in enumerate(_sorted_repos_for_table(data)):
         detail_id = f"projects-detail-{index}"
-        popovers.append(_repo_detail_popover(item, detail_id))
+        popovers.append(_repo_detail_popover(item, detail_id, audience=audience))
         cli = cli_cell(item)
         docs = item.get("docs") if isinstance(item.get("docs"), list) else []
-        docs_url = docs[0].get("url") if docs and isinstance(docs[0], dict) else ""
+        docs_url = safe_external_url(docs[0].get("url")) if docs and isinstance(docs[0], dict) else None
         docs_cell = f'<a href="{html_text(docs_url)}" target="_blank" rel="noreferrer">文档</a>' if docs_url else "—"
+        repository_url = safe_external_url(item.get("html_url"))
+        repository_cell = (
+            f'<a href="{html_text(repository_url)}" target="_blank" rel="noreferrer">{html_text(item.get("name"))}</a>'
+            if repository_url
+            else html_text(item.get("name"))
+        )
         web = normalize_web_metadata(item.get("web"))
         web_url = web["url"] if web else ""
         web_cell = f'<a href="{html_text(web_url)}" target="_blank" rel="noreferrer">网页</a>' if web_url else "—"
+        visibility_cell = f'<td>{_visibility_badge(item)}</td>' if audience == "private" else ""
         rows.append(
             "<tr>"
-            f'<td><a href="{html_text(item.get("html_url"))}" target="_blank" rel="noreferrer">{html_text(item.get("name"))}</a></td>'
+            f'<td>{repository_cell}</td>'
             f'<td>{_repo_detail_popover_button(detail_id)}</td>'
             f'<td class="num">{int(item.get("open_prs") or 0)}</td>'
             f'<td class="num">{int(item.get("open_issues") or 0)}</td>'
             f'<td>{html_text(version_display(item.get("version") if isinstance(item.get("version"), dict) else None))}</td>'
             f'<td>{html_text(display_category(item))}</td>'
+            f'{visibility_cell}'
             f'<td>{chatenv_cell(item)}</td>'
             f'<td class="projects-cli-cell">{cli}</td>'
             f'<td>{docs_cell}</td>'
@@ -647,6 +767,13 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
             f'<td>{html_text(safe_date(item.get("pushed_at") or item.get("updated_at")))}</td>'
             "</tr>"
         )
+    visibility_style = """
+.projects-visibility-badge { display: inline-block; border: 1px solid var(--color-separator); border-radius: 999px; padding: 0.08rem 0.45rem; font-size: 0.82em; font-weight: 600; white-space: nowrap; }
+.projects-visibility-badge.public { color: var(--color-positive); }
+.projects-visibility-badge.private { color: var(--color-negative); }
+.projects-visibility-badge.unknown { color: var(--color-text-subdued); }
+""" if audience == "private" else ""
+    visibility_header = "<th>可见性</th>" if audience == "private" else ""
     source = """
 <style>
 .projects-table-wrap { overflow-x: auto; }
@@ -703,10 +830,11 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
 .projects-env-table th, .projects-env-table td { padding: 0.34rem 0.45rem; border-bottom: 1px solid var(--color-separator); text-align: left; vertical-align: top; }
 .projects-env-table code { white-space: nowrap; }
 @media (max-width: 720px) { .projects-detail-popover { width: calc(100vw - 1rem); max-height: 92vh; } .projects-detail-tabset { grid-template-columns: 1fr; } .projects-detail-tab-nav { position: static; flex-direction: row; } .projects-detail-tab-label { flex: 1; justify-content: center; } }
+""" + visibility_style + """
 </style>
 <div id="projects-table-root" class="projects-table-wrap">
 <table class="projects-table">
-<thead><tr><th>仓库</th><th>详情</th><th>PR</th><th>Issue</th><th>版本</th><th>类型</th><th>Env</th><th>CLI</th><th>文档</th><th>网页</th><th>最近提交</th></tr></thead>
+<thead><tr><th>仓库</th><th>详情</th><th>PR</th><th>Issue</th><th>版本</th><th>类型</th>""" + visibility_header + """<th>Env</th><th>CLI</th><th>文档</th><th>网页</th><th>最近提交</th></tr></thead>
 <tbody>
 """ + "\n".join(rows) + """
 </tbody>
@@ -716,23 +844,32 @@ def make_table_widget(data: dict[str, Any]) -> dict[str, Any]:
     return {"type": "html", "title": "一览表", "source": source}
 
 
-def build_projects_page(data: dict[str, Any], *, page_name: str = PAGE_NAME) -> dict[str, Any]:
-    """Build the Glance page object for the ChatArch projects dashboard."""
+def build_projects_page(
+    data: dict[str, Any],
+    *,
+    page_name: str = PAGE_NAME,
+    audience: Audience = "private",
+) -> dict[str, Any]:
+    """Build a private page, or project full data at the public trust boundary."""
+
+    if audience not in {"private", "public"}:
+        raise ValueError("audience must be `private` or `public`")
+    render_data = project_public_inventory(data) if audience == "public" else data
 
     page = {
         "name": page_name,
         "columns": [
-            {"size": "small", "widgets": [{"type": "bookmarks", "title": "概览", "groups": make_overview_groups(data)}]},
+            {"size": "small", "widgets": [{"type": "bookmarks", "title": "概览", "groups": make_overview_groups(render_data)}]},
             {
                 "size": "full",
                 "widgets": [
                     {
                         "type": "group",
                         "widgets": [
-                            make_sort_widget(data, "最近提交", "recent"),
-                            make_sort_widget(data, "PR-issue", "triage"),
-                            make_categories_widget(data),
-                            make_table_widget(data),
+                            make_sort_widget(render_data, "最近提交", "recent"),
+                            make_sort_widget(render_data, "PR-issue", "triage"),
+                            make_categories_widget(render_data),
+                            make_table_widget(render_data, audience=audience),
                         ],
                     }
                 ],

@@ -46,6 +46,8 @@
 - 通过 ChatGH/GitHub 当前数据刷新 repository inventory JSON，生成带 `generated_at` 的 Glance `项目` page；版本展示只看 PyPI，CLI 主表只展示 package entrypoint，Python early/non-early 分类使用 latest PyPI actual CLI tree/help 证据校正，旧 baseline 只保留为 reviewed audit evidence。
 - `项目` 页一览表为每个仓库生成原生点击 `详情` 按钮；详情卡片展示项目 description、基础信息、CLI entrypoint、保留 `# comment` 的 brief CLI tree 代码块，以及真实注册的 ChatEnv Env key、说明、敏感标记和默认存在标记；有 ENV 元数据时 CLI/ENV 可点击切换，但不展示任何值。
 - 当前 page tabs 固定为：`最近提交`、`PR-issue`、`分类`、`一览表`。
+- 支持显式 public/private 项目视图：authenticated 默认视图保留全量清单，只把字面 boolean 标记显示为 `Public`/`Private`，缺失或畸形值显示 `Unknown`；anonymous 渲染边界自行从 full inventory 投影，发布的 allowlist artifact 不包含 private 行、source/CLI/Env/evidence 元数据、private 派生计数或可见性标记。
+- `chatglance access render-public` 从显式 full config/inventory 生成 public YAML/JSON 候选；public config 只含静态公开首页和项目页，不继承 `auth`、private server、网站服务、订阅详情、服务器页或原首页 runtime widgets。repository/docs/Web 链接必须是外部 HTTPS URL；两个 mode-`0600` 候选在同一个预先存在的非 symlink 目录内 stage、fsync 并成对原子替换，第二个发布失败时回滚第一个。
 - `PR-issue` 只显示 PR/Issue 非 0 的仓库，并按 `(PR, Issue, 最近提交)` 降序。
 - 生成 config 副本时清理 legacy generated pages：`Projects`、`ChatArch Projects`、`ChatArch Projects List`。
 - 为 Glance `server-stats` 写入“只显示有意义磁盘”的 Disk 配置：当前 live 策略始终保留 `/`，只有当 `/home` 是独立挂载点时才加 `/home`；每个可见 mountpoint 都显式写入 `hide: false`，避免 Disk 显示 `n/a`，同时继续隐藏 snap/loop/tmp/overlay。
@@ -101,6 +103,17 @@ chatglance refresh --scheduled --runtime-home "$HOME/.chatarch/glance" --json-ou
 完整命令面见 [CLI 树](docs/cli-tree.md)，运行 `chatglance --tree` / `chatglance --tree-brief` 读取真实注册命令。配置清单和低层步骤见 [手动刷新](docs/refresh.md)、[项目页](docs/projects.md) 和 [服务器页](docs/infra.md)。
 
 ## CLI 示例
+
+生成 detached public config/inventory 候选（只写显式输出，不发布或刷新）：
+
+```bash
+mkdir -p playground
+chatglance access render-public \
+  --config /path/to/full-glance.yml \
+  --inventory /path/to/full-projects.json \
+  --config-output playground/public-glance.yml \
+  --inventory-output playground/public-projects.json
+```
 
 刷新 GitHub/ChatGH 当前项目数据：
 

@@ -12,6 +12,8 @@ chatglance
 ├── --version  # Show the version and exit.
 ├── --tree  # Print the registered CLI tree and exit.
 ├── --tree-brief  # Print the registered CLI tree without parameter signatures and exit.
+├── access  # Render detached public dashboard candidates.
+│   └── render-public [--config CONFIG-PATH] [--inventory INVENTORY-PATH] [--config-output CONFIG-OUTPUT] [--inventory-output INVENTORY-OUTPUT] [--host HOST] [--port PORT]  # Write public config and inventory candidates without publishing them.
 ├── account-limits  # Render the `订阅详情` Glance page.
 │   ├── collect [--profiles PROFILES] [--output OUTPUT-PATH] [--history HISTORY-PATH] [--timeout TIMEOUT] [--reset-timeout RESET-TIMEOUT] [--no-public-reset] [--reset-policies RESET-POLICIES] [--reset-base-url RESET-BASE-URL] [--execute-resets] [--fail-on-profile-error]  # Scan usage/reset cards without model requests and write a safe snapshot.
 │   ├── control-serve [--runtime-home RUNTIME-HOME] [--public-origin PUBLIC-ORIGIN] [--port PORT]  # Serve authenticated reset switches on loopback; never redeem cards.
@@ -56,6 +58,8 @@ chatglance
 ├── --version  # Show the version and exit.
 ├── --tree  # Print the registered CLI tree and exit.
 ├── --tree-brief  # Print the registered CLI tree without parameter signatures and exit.
+├── access  # Render detached public dashboard candidates.
+│   └── render-public  # Write public config and inventory candidates without publishing them.
 ├── account-limits  # Render the `订阅详情` Glance page.
 │   ├── collect  # Scan usage/reset cards without model requests and write a safe snapshot.
 │   ├── control-serve  # Serve authenticated reset switches on loopback; never redeem cards.
@@ -92,6 +96,7 @@ chatglance
 
 ## 边界
 
+- `access render-public` 只读取显式 full config/inventory，并把 detached public candidates 写到同一个预先存在的非 symlink 目录内的两个不同路径；它以 mode `0600` stage/fsync 后成对原子替换，失败时回滚，但不发布到 live config、不触发 refresh。
 - `projects`、`servers`、`sites`、`account-limits`、`disks` 和 `home` 命令只写显式传入的输出路径，不应输出 GitHub token、代理凭据或账户敏感值。
 - `runtime maintain` 可替换 runtime config，并可按显式选项重启 service。
 - `runtime install-systemd` 与 `runtime start` 会修改或启动 user-level systemd 状态；`runtime status` 只回读安全状态字段。

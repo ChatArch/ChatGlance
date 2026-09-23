@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.17 - 2026-09-23
+
+- Add a fail-closed public project projector with an explicit nested row allowlist. It retains only literal `private: false` rows, omits source/owner, CLI, Env, package/evidence, visibility, and arbitrary metadata, validates all published external URLs, and recomputes public counts/categories without private totals.
+- Add explicit private/public project rendering: the backward-compatible authenticated view labels literal visibility as `Public` or `Private` and malformed/missing values as `Unknown`; the anonymous view reprojects full inventory at its own render boundary and emits no visibility UI.
+- Add a minimal anonymous Glance config transformation and `chatglance access render-public` candidate command. Public config never inherits auth, private pages/home widgets, or server values; an optional server mapping requires explicit validated `host` and `port` values. Candidate outputs must share a pre-existing non-symlink directory and are staged/fsynced at mode `0600`, atomically replaced as a rollback-safe pair, and reported through redacted errors.
+- Route the anonymous home bookmark to Glance's exact `projects` slug so the public project link does not resolve to a trailing-slash 404.
+
 ## 0.1.16 - 2026-09-22
 
 - Add a reviewed, explicit `网页` link column after `文档` on the `项目` page. Links come only from validated runtime project metadata with a declared page kind; they are never inferred from a repository name, documentation URL, CLI, Hub, or service relationship.

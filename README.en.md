@@ -46,6 +46,8 @@ An explicit CRS profile containing a dedicated management Key and fixed account-
 - Refresh repository inventory JSON from current ChatGH/GitHub data and render a Glance `项目` page with a visible `generated_at` refresh timestamp; version display is PyPI-only, the compact table shows package entrypoints only, and Python early/non-early classification is corrected from latest-PyPI actual CLI tree/help evidence while stale baseline categories remain audit evidence only.
 - Generate native-click `详情` buttons in the `项目` table; the detail card shows project description, basics, CLI entrypoints, a brief CLI tree code block with preserved `# ...` comments, and registered ChatEnv Env keys, descriptions, sensitivity flags, and default-presence flags. Projects with ENV metadata expose a CLI/ENV click switch, and no values are shown.
 - Keep the current tabs limited to `最近提交`, `PR-issue`, `分类`, and `一览表`.
+- Support explicit public/private project audiences: the authenticated default keeps the full inventory and labels only literal boolean visibility as `Public`/`Private` (`Unknown` otherwise); the anonymous render boundary projects the full inventory itself and publishes an allowlisted artifact with no private rows, source/CLI/Env/evidence metadata, private-derived counts, or visibility labels.
+- Generate public YAML/JSON candidates with `chatglance access render-public`. The public config contains only a static public home and project page and never inherits `auth`, the private server, sites, account limits, servers, or runtime widgets from the full home. Repository/docs/Web links must be external HTTPS URLs, and the two mode-`0600` candidates are staged, fsynced, and atomically replaced with pair rollback in one pre-existing non-symlink directory.
 - Filter the triage tab to repositories with non-zero PR or Issue counts and sort by `(PR, Issue, recent commit)` descending.
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.
 - Patch Glance `server-stats` to show only selected meaningful disks. The current live policy keeps `/` and adds `/home` only when it is a separate mountpoint; each visible entry is written with `hide: false` so the Disk card does not render `n/a`, while snap/loop/tmp overlays stay hidden.
@@ -99,6 +101,17 @@ Account requests use the profile's reverse-proxy Base URLs, and ChatCRS ignores 
 Read the live command surface with `chatglance --tree` / `--tree-brief`; see [CLI tree](docs/cli-tree.md) and [manual refresh](docs/refresh.md) for configuration and side-effect details.
 
 ## CLI examples
+
+Render detached public config/inventory candidates (explicit outputs only; no publication or refresh):
+
+```bash
+mkdir -p playground
+chatglance access render-public \
+  --config /path/to/full-glance.yml \
+  --inventory /path/to/full-projects.json \
+  --config-output playground/public-glance.yml \
+  --inventory-output playground/public-projects.json
+```
 
 Refresh current GitHub/ChatGH project data:
 
