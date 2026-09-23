@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add a private single-origin optional-login candidate API/CLI using Glance's session-selected authenticated columns. Preserve auth and routing, keep the existing `/项目` link, reject unsafe shared head/assets, and write explicit candidates atomically at `0600` with redacted failures.
+- Keep guest allowlist and authenticated full project columns distinct through project updates, runtime maintenance and native refresh; existing private mode remains unchanged.
+
 ## 0.1.17 - 2026-09-23
 
 - Add a fail-closed public project projector with an explicit nested row allowlist. It retains only literal `private: false` rows, omits source/owner, CLI, Env, package/evidence, visibility, and arbitrary metadata, validates all published external URLs, and recomputes public counts/categories without private totals.

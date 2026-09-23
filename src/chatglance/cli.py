@@ -92,6 +92,25 @@ def access() -> None:
     """Render detached public dashboard candidates."""
 
 
+@access.command("render-single-origin-optional-login")
+@click.option("--config", "config_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Existing private Glance YAML input.")
+@click.option("--inventory", "inventory_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Full project inventory input.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Explicit private candidate YAML destination in an existing safe directory.")
+def render_single_origin_optional_login(config_path: Path, inventory_path: Path, output_path: Path) -> None:
+    """Write a private single-instance optional-login candidate without publishing it."""
+
+    from .optional_login import build_single_origin_optional_login_config, write_optional_login_candidate
+
+    try:
+        config = load_yaml(config_path)
+        inventory = load_inventory(inventory_path)
+        candidate = build_single_origin_optional_login_config(config, inventory)
+        write_optional_login_candidate(output_path, dump_yaml(candidate), protected_paths=(config_path, inventory_path))
+    except Exception:
+        raise click.ClickException("optional-login candidate rejected; check input, shared content and output paths") from None
+    click.echo("wrote private optional-login candidate")
+
+
 @access.command("render-public")
 @click.option("--config", "config_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Full private Glance YAML used only as transformation input.")
 @click.option("--inventory", "inventory_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Full project inventory JSON to project.")
@@ -292,8 +311,11 @@ def render_projects_page(data_path: Path, output_path: Path, page_name: str) -> 
 def update_projects_config(data_path: Path, config_path: Path, output_path: Path, page_name: str) -> None:
     """Write a config copy with the generated project page replaced."""
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    update_projects_page_from_files(config_path, data_path, output_path, page_name=page_name)
+    from .access import CandidateWriteError
+    try:
+        update_projects_page_from_files(config_path, data_path, output_path, page_name=page_name)
+    except CandidateWriteError:
+        raise click.ClickException("optional-login project candidate output rejected") from None
     click.echo(f"wrote {output_path}")
 
 

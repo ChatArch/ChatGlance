@@ -47,6 +47,7 @@
 - `项目` 页一览表为每个仓库生成原生点击 `详情` 按钮；详情卡片展示项目 description、基础信息、CLI entrypoint、保留 `# comment` 的 brief CLI tree 代码块，以及真实注册的 ChatEnv Env key、说明、敏感标记和默认存在标记；有 ENV 元数据时 CLI/ENV 可点击切换，但不展示任何值。
 - 当前 page tabs 固定为：`最近提交`、`PR-issue`、`分类`、`一览表`。
 - 支持显式 public/private 项目视图：authenticated 默认视图保留全量清单，只把字面 boolean 标记显示为 `Public`/`Private`，缺失或畸形值显示 `Unknown`；anonymous 渲染边界自行从 full inventory 投影，发布的 allowlist artifact 不包含 private 行、source/CLI/Env/evidence 元数据、private 派生计数或可见性标记。
+- 同址可选登录候选：`chatglance access render-single-origin-optional-login --config PRIVATE.yml --inventory FULL.json --output CANDIDATE.yml`，单 Glance 实例同一 `/项目` slug 按会话选择公开/完整列；私有候选文件不可作为 guest asset 发布。详见 [项目页面契约](docs/projects.md)。
 - `chatglance access render-public` 从显式 full config/inventory 生成 public YAML/JSON 候选；public config 只含静态公开首页和项目页，不继承 `auth`、private server、网站服务、订阅详情、服务器页或原首页 runtime widgets。repository/docs/Web 链接必须是外部 HTTPS URL；两个 mode-`0600` 候选在同一个预先存在的非 symlink 目录内 stage、fsync 并成对原子替换，第二个发布失败时回滚第一个。
 - `PR-issue` 只显示 PR/Issue 非 0 的仓库，并按 `(PR, Issue, 最近提交)` 降序。
 - 生成 config 副本时清理 legacy generated pages：`Projects`、`ChatArch Projects`、`ChatArch Projects List`。

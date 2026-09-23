@@ -226,7 +226,7 @@ def write_public_candidates(
     return config_path, inventory_path
 
 
-def build_public_home_page() -> JsonMapping:
+def build_public_home_page(*, projects_slug: str = "projects") -> JsonMapping:
     """Return the explicit static home used by the anonymous dashboard."""
 
     return {
@@ -244,7 +244,7 @@ def build_public_home_page() -> JsonMapping:
                                 "links": [
                                     {
                                         "title": "公开项目",
-                                        "url": "/projects",
+                                        "url": f"/{projects_slug}",
                                         "description": "浏览 ChatArch 公开项目",
                                         "icon": "si:github",
                                     },
