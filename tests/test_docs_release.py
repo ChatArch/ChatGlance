@@ -24,7 +24,7 @@ def test_release_metadata_and_changelog():
     docs_deps = project["optional-dependencies"]["docs"]
     for requirement in ("mkdocs>=1.6,<2", "mkdocs-material>=9.5,<10", "mkdocs-static-i18n>=1.2,<2", "mike>=2,<3"):
         assert requirement in docs_deps
-    assert (ROOT / "CHANGELOG.md").read_text().startswith("# Changelog\n\n## 0.1.18 - 2026-09-23\n")
+    assert (ROOT / "CHANGELOG.md").read_text().startswith("# Changelog\n\n## 0.1.18 - 2026-09-24\n")
 
 
 def test_site_config_bilingual_and_matched_pages():

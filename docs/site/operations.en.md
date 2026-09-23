@@ -14,6 +14,12 @@ chatglance refresh --json-output --no-restart
 
 Manual calls without `--scheduled` never redeem reset cards; account pages only display snapshots. Existing scheduling must use explicit `--scheduled` with per-account policy, not infer authority from a rendered toggle. When refreshing projects in optional-login mode, guest columns are rebuilt from the Public allowlist and authenticated columns retain full rows. A broken layout is rejected rather than overwritten with private guest content.
 
+## Manual check and use
+
+After signing in, open the account control popup on the subscription page and choose **检查并用卡** (check and use a credit). Only after explicit confirmation does the server reload that account's current policy, live quota and available cards. It attempts at most one exact card only when the configured threshold and all existing time-window, forecast, identity and idempotency conditions pass. It does not wait for the next scheduled scan or weaken existing safeguards.
+
+Cancelling, viewing, ordinary refreshes and native form submissions without JavaScript never redeem. The action reports success, unmet conditions or an uncertain result with its check time; the checklist above remains explicitly the last scheduled snapshot. Do not repeat an uncertain action before reconciling the ledger and quota. Production acceptance only views or cancels the confirmation; synthetic accounts and cards validate consumption.
+
 ## Service boundary
 
 - `projects update-config` writes an **explicit output path**, not a deployment; a single-origin candidate cannot alias its inputs.
