@@ -12,6 +12,8 @@
 [English](README.en.md) | [简体中文](README.md)
 </div>
 
+Documentation site (available after its first deployment): [ChatGlance docs](https://arch.gh.wzhecnu.cn/ChatGlance/). Until then, use the [source homepage](docs/site/index.en.md); this link does not assert Pages is live.
+
 # ChatGlance
 
 `ChatGlance` is the ChatArch/WZHECNU repository for Glance website deployment source and operations helpers. It preserves the current site's page-generation logic, configuration transformations, user-level service templates, verification notes, and safety boundaries; the `chatglance` CLI is only the helper entrypoint for applying those rules.
@@ -47,7 +49,8 @@ An explicit CRS profile containing a dedicated management Key and fixed account-
 - Generate native-click `详情` buttons in the `项目` table; the detail card shows project description, basics, CLI entrypoints, a brief CLI tree code block with preserved `# ...` comments, and registered ChatEnv Env keys, descriptions, sensitivity flags, and default-presence flags. Projects with ENV metadata expose a CLI/ENV click switch, and no values are shown.
 - Keep the current tabs limited to `最近提交`, `PR-issue`, `分类`, and `一览表`.
 - Support explicit public/private project audiences: the authenticated default keeps the full inventory and labels only literal boolean visibility as `Public`/`Private` (`Unknown` otherwise); the anonymous render boundary projects the full inventory itself and publishes an allowlisted artifact with no private rows, source/CLI/Env/evidence metadata, private-derived counts, or visibility labels.
-- Single-origin optional-login candidate: `chatglance access render-single-origin-optional-login --config PRIVATE.yml --inventory FULL.json --output CANDIDATE.yml` uses one Glance instance and the existing `/项目` slug with server-selected guest/authenticated columns. Keep the private candidate off guest assets; see [project contract](docs/projects.md).
+- Single-origin optional-login candidate: `chatglance access render-single-origin-optional-login --config PRIVATE.yml --inventory FULL.json --output CANDIDATE.yml` uses one Glance instance and the existing `/项目` slug with server-selected guest/authenticated columns. Keep the private candidate off guest assets; see [projects and access](docs/site/projects.en.md).
+- Single-origin optional login requires the `public` and `authenticated-columns` capabilities in [ChatArch/glance chatarch-v0.1.0](https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0), which provides a Linux amd64 binary and `SHA256SUMS`. Unmodified Glance v0.8.5 does not support these fields. Installing ChatGlance does not replace the Glance binary; verify checksums, configuration and both guest/authenticated routes before a service upgrade.
 - Generate public YAML/JSON candidates with `chatglance access render-public`. The public config contains only a static public home and project page and never inherits `auth`, the private server, sites, account limits, servers, or runtime widgets from the full home. Repository/docs/Web links must be external HTTPS URLs, and the two mode-`0600` candidates are staged, fsynced, and atomically replaced with pair rollback in one pre-existing non-symlink directory.
 - Filter the triage tab to repositories with non-zero PR or Issue counts and sort by `(PR, Issue, recent commit)` descending.
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.
@@ -61,7 +64,7 @@ An explicit CRS profile containing a dedicated management Key and fixed account-
 
 ## Quick start
 
-For a new machine that should host a similar but still highly customizable Glance site, start with [`docs/quickstart.md`](docs/quickstart.md): `glance.yml` / widgets / HTML/CSS remain the primary frontend configuration surface, while `chatglance` only manages collection, rendering, validation, backup, and replacement.
+For a new machine that should host a similar but still customizable Glance site, start with the [quickstart](docs/site/quickstart.en.md): `glance.yml` / widgets / HTML/CSS remain the primary frontend configuration surface, while `chatglance` only manages collection, rendering, validation, backup, and replacement.
 
 ```bash
 pip install -e ".[dev]"
@@ -79,7 +82,7 @@ python -m twine check dist/*
 The installed package can refresh an existing runtime without a source checkout:
 
 ```bash
-python -m pip install ChatGlance==0.1.10
+python -m pip install ChatGlance
 chatglance refresh
 chatglance refresh account-limits
 chatglance refresh projects sites
@@ -99,7 +102,7 @@ chatglance refresh --scheduled --runtime-home "$HOME/.chatarch/glance" --json-ou
 
 Account requests use the profile's reverse-proxy Base URLs, and ChatCRS ignores local proxies. Do not prepend `proxy_on`. Select non-secret inputs explicitly with `--server-inventory`, `--sites-inventory`, `--gatus-db` and the other collector options. Omit `--scheduled` for non-consuming diagnostics.
 
-Read the live command surface with `chatglance --tree` / `--tree-brief`; see [CLI tree](docs/cli-tree.md) and [manual refresh](docs/refresh.md) for configuration and side-effect details.
+Read the installed command surface with `chatglance --tree` / `--tree-brief`; see the [segmented CLI reference](docs/site/cli.en.md) or the [complete registry tree](docs/cli-tree.md).
 
 ## CLI examples
 
