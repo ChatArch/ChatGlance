@@ -87,6 +87,75 @@ def main() -> None:
     """Generate and maintain ChatArch Glance dashboard config."""
 
 
+@main.group()
+def access() -> None:
+    """Render detached public dashboard candidates."""
+
+
+@access.command("render-public")
+@click.option("--config", "config_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Full private Glance YAML used only as transformation input.")
+@click.option("--inventory", "inventory_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Full project inventory JSON to project.")
+@click.option("--config-output", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Explicit public Glance YAML candidate; both outputs must share an existing non-symlink directory.")
+@click.option("--inventory-output", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Explicit public inventory JSON candidate in the same safe directory.")
+@click.option("--host", help="Optional explicit host for the public Glance server mapping; requires --port.")
+@click.option("--port", type=click.IntRange(min=1, max=65535), help="Optional explicit port for the public Glance server mapping; requires --host.")
+def render_public_access(
+    config_path: Path,
+    inventory_path: Path,
+    config_output: Path,
+    inventory_output: Path,
+    host: str | None,
+    port: int | None,
+) -> None:
+    """Write public config and inventory candidates without publishing them."""
+
+    import yaml
+
+    from chatglance.access import (
+        CandidateWriteError,
+        build_public_glance_config,
+        preflight_public_candidate_paths,
+        project_public_inventory,
+        validate_public_server,
+        write_public_candidates,
+    )
+
+    if (host is None) != (port is None):
+        raise click.ClickException("--host and --port must be supplied together")
+
+    try:
+        preflight_public_candidate_paths(
+            config_output,
+            inventory_output,
+            protected_paths=(config_path, inventory_path),
+        )
+        server = validate_public_server({"host": host, "port": port}) if host is not None and port is not None else None
+        config = load_yaml(config_path)
+        inventory = load_inventory(inventory_path)
+        public_inventory = project_public_inventory(inventory)
+        public_config = build_public_glance_config(config, inventory, server=server)
+        write_public_candidates(
+            config_output,
+            dump_yaml(public_config),
+            inventory_output,
+            json.dumps(public_inventory, ensure_ascii=False, indent=2) + "\n",
+            protected_paths=(config_path, inventory_path),
+        )
+    except CandidateWriteError as exc:
+        raise click.ClickException(str(exc)) from None
+    except json.JSONDecodeError:
+        raise click.ClickException("invalid project inventory JSON") from None
+    except yaml.YAMLError:
+        raise click.ClickException("invalid Glance YAML") from None
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from None
+    except (OSError, UnicodeError):
+        raise click.ClickException("could not read candidate input") from None
+
+    repo_count = public_inventory["counts"]["visible_repos"]
+    click.echo(f"config={config_output} inventory={inventory_output} repos={repo_count} pages={len(public_config['pages'])}")
+
+
 @main.command("refresh")
 @click.argument("pages", nargs=-1, type=click.Choice(["projects", "servers", "sites", "account-limits"]))
 @click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), envvar="CHATGLANCE_RUNTIME_HOME", help="Runtime home; defaults to the effective ChatArch home/glance.")

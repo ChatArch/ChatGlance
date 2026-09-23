@@ -22,6 +22,7 @@ The page contains:
    - Python package early/non-early classification is checked against the latest published package's actual CLI tree, not just entrypoint count or stale overrides.
 5. **一览表**
    - repository link and a native-click detail button;
+   - authenticated/private rendering adds an explicit `可见性` badge: `Public` only for literal `private: false`, `Private` only for literal `private: true`, and `Unknown` for missing or malformed visibility;
    - open PR count;
    - open issue count;
    - version;
@@ -35,10 +36,36 @@ The page contains:
    - table category order is `Python 包` first, `Node / npm 包` next, then service/docs/other projects, with `Python (early)` projects last.
 6. **仓库详情卡片**
    - GitHub/docs/Web links, description, version/category/PR/Issue/commit metrics;
+   - authenticated/private rendering repeats the explicit `可见性` badge (`Public`, `Private`, or `Unknown` under the same literal-boolean rule);
    - package CLI entrypoints plus a scrollable brief CLI tree code block when actual tree evidence is available; inline `# ...` comments from `--tree-brief` are preserved;
    - projects with ChatEnv/ENV metadata expose CLI and ENV modules behind a lightweight click switch so the CLI tree does not push ENV details out of view;
    - ChatEnv schema table when a provider/schema is registered: schema, ENV key, description, sensitivity flag, and default-presence flag only;
    - dependency-only ChatEnv projects are omitted from the ENV detail section until they register a provider/schema.
+
+## Public/private projection contract
+
+The authenticated page keeps the full inventory and is the backward-compatible default for `build_projects_page`. The anonymous boundary always receives the full inventory and projects it itself:
+
+1. `build_projects_page(full_inventory, audience="public")` calls the trusted projector at render time, retains only rows whose source `private` flag is exactly `false`, and emits no visibility column, badge, or private row. A markerless or edited detached artifact is not trusted as full input.
+2. `chatglance.access.project_public_inventory(full_inventory)` separately produces the JSON publication artifact. Its explicit row schema contains only the displayed name, validated repository/docs/Web URLs, description, PR/Issue counts, dates, normalized category, and allowlisted version fields. It omits `full_name`, visibility, CLI, Env, package/evidence, collector fields, the entire source block, and all arbitrary fields. Counts and categories are recomputed only from retained rows.
+
+`chatglance.access.build_public_glance_config` passes the full inventory through that render boundary and reconstructs an anonymous config with only an explicit static `ChatArch` home and the projected `项目` page. It never inherits `auth`, the private server mapping, existing home widgets, or any site/account/server page. A public `server` mapping is included only when the caller explicitly supplies a plain validated `host` and `port` mapping.
+
+Repository, docs, and reviewed Web links render only when they are well-formed external HTTPS URLs with no credentials and no local/private host. Invalid links are omitted from bookmarks, table cells, and detail cards rather than escaped into clickable HTML.
+
+The thin file adapter writes candidates only to explicit paths:
+
+```bash
+chatglance access render-public \
+  --config /path/to/full-glance.yml \
+  --inventory /path/to/full-projects.json \
+  --config-output /path/to/candidate/public-glance.yml \
+  --inventory-output /path/to/candidate/public-projects.json
+```
+
+Create one trusted output directory first and place both distinct candidate paths directly in it. The directory and targets must not be symlinks; the directory must already exist, and existing targets must be regular files. The command fully stages and fsyncs mode-`0600` files in that directory, atomically replaces both ordinary candidates, and restores/removes the first output if publishing the second fails. Parse and filesystem failures are reported with redacted Click errors.
+
+Add `--host HOST --port PORT` together only when the public candidate should contain an explicit server mapping. The command validates its inputs and builds both candidates before creating either output, prints only output paths plus public repository/page counts, and does not publish to live runtime, refresh, restart, or modify service state.
 
 ## Refresh rules
 
@@ -66,7 +93,7 @@ Recommended live invocation:
 ```bash
 CHATGLANCE_BIN=$HOME/.chatarch/venv/bin/chatglance \
 CHATGLANCE_RUNTIME_HOME=$HOME/.chatarch/glance \
-bash /home/zhihong/Playground/core/ChatGlance/scripts/refresh-projects-page.sh
+bash <chatglance-repository>/scripts/refresh-projects-page.sh
 ```
 
 By default the script uses the current runtime inventory JSON as `--baseline-data` before writing the next snapshot. This preserves reviewed categories only where current tree evidence does not contradict them and preserves valid reviewed Web metadata, while updating repo counts, PR/Issue counts, PyPI versions, entrypoints, actual CLI tree counts, and `generated_at`.
@@ -104,4 +131,4 @@ After every refresh, check:
 8. Sample rows: `ChatCI` (trivial actual tree -> `Python (early)`), `ChatCRS` (complex actual tree -> `Python 包`), `ChatGlance`, `ChatSMTP`, `ChatSync`, `ChatFlow`, `ChatExplore`.
 9. Secret scan for token/auth/password/header patterns returns no hits in project JSON/page YAML/CLI-tree TSV.
 10. Live page order remains `ChatArch` → `项目` → `服务器`.
-11. Public unauthenticated smoke still redirects to `/login`.
+11. Anonymous smoke shows only the static public home and projected public project page; its JSON/YAML/HTML contains no private repository name, URL, description, CLI/ENV metadata, count, source metadata, or visibility label. Authenticated smoke retains the full page with literal `Public`/`Private` badges and `Unknown` for malformed visibility.
