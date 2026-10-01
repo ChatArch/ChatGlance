@@ -45,6 +45,7 @@ MANUAL_SCRIPT = """(() => {
   const form = document.querySelector('#manual-credit');
   if (!form) return;
   const button = form.querySelector('button');
+  const forceButton = document.querySelector('#force-credit');
   const status = document.querySelector('#manual-status');
   const labels = {
     reset_verified: '成功：已确认用卡并重置额度', disabled: '未满足：账号未开启',
@@ -56,16 +57,26 @@ MANUAL_SCRIPT = """(() => {
     blocked_pending: '结果待确认：已阻断再次用卡', uncertain: '结果待确认：请勿重试',
     invalid_request: '操作未获授权，请刷新页面',
   };
-  form.addEventListener('submit', async event => {
+  async function submitCredit(event, force = false) {
     event.preventDefault();
-    if (button.disabled || !window.confirm('重新检查当前账号，条件全部满足时最多使用一张重置卡。确定继续？')) return;
+    if (button.disabled || forceButton.disabled) return;
+    const warning = force
+      ? '强制消耗一张重置卡，跳过自动开关、额度、剩余时间、预测和冷却等业务条件；结果不明时不能重试。确定继续？'
+      : '重新检查当前账号，条件全部满足时最多使用一张重置卡。确定继续？';
+    if (!window.confirm(warning)) return;
     button.disabled = true;
+    forceButton.disabled = true;
     status.textContent = '检查中…';
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), 90000);
     try {
       const body = new URLSearchParams(new FormData(form));
-      body.set('confirm', 'use-one-credit');
+      if (force) {
+        body.set('action', 'force');
+        body.set('confirm', 'force-one-credit');
+      } else {
+        body.set('confirm', 'use-one-credit');
+      }
       const response = await fetch(form.action, {
         method: 'POST', credentials: 'same-origin',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -75,14 +86,22 @@ MANUAL_SCRIPT = """(() => {
       if (!response.ok && result.reason !== 'invalid_request') throw new Error('unavailable');
       const message = labels[result.reason] || (result.state === 'uncertain'
         ? '结果待确认：请勿重试' : '未满足：' + result.reason);
-      status.textContent = message + (result.checked_at ? ' · 本次检查 ' + result.checked_at : '');
+      const count = Number.isInteger(result.available_count) ? ' · 剩余 ' + result.available_count + ' 张' : '';
+      const usage = Array.isArray(result.windows) ? result.windows
+        .filter(window => typeof window.used_percent === 'number')
+        .map(window => window.name + ' ' + window.used_percent + '%').join(' / ') : '';
+      status.textContent = message + count + (usage ? ' · 用量 ' + usage : '')
+        + (result.checked_at ? ' · 本次检查 ' + result.checked_at : '');
     } catch (_) {
       status.textContent = '结果待确认：网络超时或连接中断，请勿重试，刷新页面核对状态。';
     } finally {
       clearTimeout(timer);
     }
-  });
+  }
+  form.addEventListener('submit', event => submitCredit(event));
+  forceButton.addEventListener('click', event => submitCredit(event, true));
   button.disabled = false;
+  forceButton.disabled = false;
 })();"""
 _MANUAL_HASH = base64.b64encode(hashlib.sha256(MANUAL_SCRIPT.encode()).digest()).decode()
 CONTROL_CSP = (
@@ -205,8 +224,8 @@ def render_control_page(report, token, revision, *, overridden=False):
 <section class="execution-checks" aria-label="自动用卡执行清单">{"".join(forms)}{rows}</section>
 <section class="manual-credit" aria-label="手动检查并用卡"><form id="manual-credit" method="post" action="use-credit">
 <input type="hidden" name="profile" value="{_e(profile)}"><input type="hidden" name="csrf" value="{_e(token)}">
-<button type="submit" disabled>检查并用卡</button></form>
-<p class="meta">仅确认后重新查询本账号；条件满足才最多使用一张。结果不明时不会自动重试。</p>
+<button type="submit" disabled>检查并用卡</button><button id="force-credit" type="button" disabled>强制用一张卡</button></form>
+<p class="meta">普通检查遵守自动条件；强制用卡跳过业务条件，但仍要求确切有效卡及去重保护。结果不明时不要重试。</p>
 <p id="manual-status" role="status" aria-live="polite">尚未手动检查</p></section>
 <footer class="footer">自动用卡只会在一次计划刷新内：先读取额度和卡片，再在同一次刷新中判断并最多消费一次。查看或刷新本小窗不会兑换。<br><a href="?{_e(urlencode({"profile":profile}))}">刷新状态</a></footer>
 <script>{THEME_SCRIPT}</script><script>{MANUAL_SCRIPT}</script></body></html>'''

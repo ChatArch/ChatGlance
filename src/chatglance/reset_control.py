@@ -255,14 +255,17 @@ class ControlApp:
     def use_credit(self, values, cookie, origin):
         if origin != self.public_origin:
             raise ControlError("拒绝跨站操作", 403)
-        if set(values) != {"profile", "csrf", "confirm"} or values["confirm"] != "use-one-credit":
+        normal = set(values) == {"profile", "csrf", "confirm"} and values["confirm"] == "use-one-credit"
+        force = (set(values) == {"profile", "csrf", "action", "confirm"}
+                 and values["action"] == "force" and values["confirm"] == "force-one-credit")
+        if not (normal or force):
             raise ControlError("操作参数不完整")
         with self.lock:
             self.consume_token(cookie, values["csrf"])
         _, policies, _ = self.flags(values["profile"])
         policy = policies[values["profile"]]
         from .codex_collector import _managed_client_options, fetch_public_codex_reset
-        from .codex_resets import scan_profile
+        from .codex_resets import force_profile, scan_profile
         settings = collection_settings(home=self.home)
         try:
             options = _managed_client_options(settings, [values["profile"]])
@@ -270,13 +273,17 @@ class ControlApp:
                 raise ValueError
         except (ValueError, TypeError, KeyError):
             raise ControlError("账号映射不可用") from None
-        if not policy.enabled:
+        if not force and not policy.enabled:
             return {"state": "unmet", "reason": "disabled", "checked_at": _iso_time()}
         forecast = (fetch_public_codex_reset(3).get("forecast")
-                    if policy.skip_if_forecast_24h_above is not None else None)
-        row = scan_profile(values["profile"], policy=policy, execute=True,
-                           home=self.home, timeout=8, forecast=forecast,
-                           require_exact_credit=True, **options)
+                    if not force and policy.skip_if_forecast_24h_above is not None else None)
+        if force:
+            row = force_profile(values["profile"], policy=policy,
+                                home=self.home, timeout=8, **options)
+        else:
+            row = scan_profile(values["profile"], policy=policy, execute=True,
+                               home=self.home, timeout=8, forecast=forecast,
+                               require_exact_credit=True, **options)
         auto = row["auto_reset"]
         status = auto["status"]
         reason = auto["reason"] if status == "conditions_not_met" else status
@@ -291,7 +298,10 @@ class ControlApp:
         state = ("success" if reason == "reset_verified" else
                  "uncertain" if reason in {"uncertain", "blocked_pending", "state_error", "pending"}
                  else "unmet")
-        return {"state": state, "reason": reason, "checked_at": row["observed_at"]}
+        return {"state": state, "reason": reason, "checked_at": row["observed_at"],
+                "available_count": row["reset_credits"]["available_count"],
+                "windows": [{"name": window["name"], "used_percent": window["used_percent"]}
+                            for window in row["windows"]]}
 
 
 def _iso_time():

@@ -180,6 +180,26 @@ def evaluate_policy(rawusage: dict, rawcredits: dict, policy: ResetPolicy, *, no
     return {**result, "reason": "conditions_not_met"}
 
 
+def _force_decision(rawusage: Any, rawcredits: Any, now: float) -> dict:
+    decision = {"eligible": False, "reason": "query_failed_or_stale", "target": None}
+    if not _fresh(rawusage) or not _fresh(rawcredits):
+        return decision
+    count = _count(rawcredits)
+    if count is None:
+        return {**decision, "reason": "credits_unknown"}
+    if count == 0:
+        return {**decision, "reason": "no_credit"}
+    if not _exact_credit_id(rawcredits, now):
+        return {**decision, "reason": "no_exact_credit"}
+    windows = [window for window in _windows(rawusage, now)
+               if window["used_percent"] is not None and window["reset_epoch"] is not None
+               and window["reset_epoch"] > now]
+    if not windows:
+        return decision
+    target = max(windows, key=lambda window: window["used_percent"])
+    return {"eligible": True, "reason": "eligible", "target": target}
+
+
 def _credits_summary(raw: Any, usage: Any, now: float) -> dict:
     count = _count(raw)
     status = "ok" if count is not None else "unknown"
@@ -242,7 +262,25 @@ def _block(row: dict | None, fingerprint: str, now: float) -> str | None:
     return None
 
 
-def _reserve(path: Path, identity: str, fingerprint: str, now: float) -> tuple[str | None, dict]:
+def _force_block(row: dict | None, fingerprint: str, now: float) -> str | None:
+    if row and row["status"] == "pending":
+        return "blocked_pending"
+    if row and row["status"] == "uncertain":
+        try:
+            old_name, old_reset = json.loads(row["fingerprint"])
+            name, current_reset = json.loads(fingerprint)
+            if (not isinstance(old_name, str) or old_name != name
+                    or not _number(old_reset) or not _number(current_reset)
+                    or old_reset > now or current_reset <= old_reset):
+                return "blocked_pending"
+        except (ValueError, TypeError):
+            return "blocked_pending"
+    if row and row["status"] not in KNOWN_NO_RESET | {"reset_verified", "conditions_expired", "uncertain"}:
+        return "blocked_pending"
+    return None
+
+
+def _reserve(path: Path, identity: str, fingerprint: str, now: float, *, force: bool = False) -> tuple[str | None, dict]:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if path.is_symlink():
         raise OSError("Ledger symlinks are not allowed")
@@ -261,9 +299,14 @@ def _reserve(path: Path, identity: str, fingerprint: str, now: float) -> tuple[s
         db.execute("BEGIN IMMEDIATE")
         old = db.execute("SELECT * FROM reset_ledger WHERE identity=?", (identity,)).fetchone()
         old = dict(old) if old else None
-        blocked = _block(old, fingerprint, now)
+        blocked = _force_block(old, fingerprint, now) if force else _block(old, fingerprint, now)
         if blocked:
             return None, {"status": blocked, "last_action": _last_action(old)}
+        if force and old and old["status"] == "uncertain":
+            db.execute("""CREATE TABLE IF NOT EXISTS reset_ledger_archive (
+                request_id TEXT PRIMARY KEY, record TEXT NOT NULL, archived_at REAL NOT NULL)""")
+            db.execute("INSERT INTO reset_ledger_archive VALUES (?,?,?)",
+                       (old["request_id"], json.dumps(old), now))
         request_id = str(uuid4())
         db.execute("INSERT OR REPLACE INTO reset_ledger VALUES (?,?,?,?,?,?)",
                    (identity, request_id, "pending", fingerprint, now, 0))
@@ -287,7 +330,8 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
                  state_dir: str | Path | None = None, now: float | None = None,
                  reset_base_url: str | None = None, timeout: float = 20,
                  forecast: dict | None = None, client_factory: Callable | None = None,
-                 token_service: str = 'Codex', require_exact_credit: bool = False) -> dict:
+                 token_service: str = 'Codex', require_exact_credit: bool = False,
+                 _force: bool = False) -> dict:
     """Return a redacted Glance row; execute requires both opt-in gates.
 
     Dry runs do not create state. Uncertain POSTs/readbacks stay blocked without
@@ -354,12 +398,13 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
         row["last_successful_at"] = row["observed_at"]
     if row["status"] != "ok":
         row.update(error_type="CodexProbeError", error="额度或重置卡详情查询失败 / 数据不完整")
-    decision = evaluate_policy(rawusage, rawcredits, policy, now=now, forecast=forecast)
+    decision = (_force_decision(rawusage, rawcredits, now) if _force else
+                evaluate_policy(rawusage, rawcredits, policy, now=now, forecast=forecast))
     if require_exact_credit and decision["eligible"] and not _exact_credit_id(rawcredits, now):
         decision.update(eligible=False, reason="no_exact_credit", target=None)
     auto.update(decision)
-    auto["status"] = "disabled" if not policy.enabled else "conditions_not_met"
-    if policy.enabled and row["status"] != "ok":
+    auto["status"] = "conditions_not_met" if _force or policy.enabled else "disabled"
+    if (_force or policy.enabled) and row["status"] != "ok":
         auto["status"] = "query_failed"
     path = _ledger_path(home, state_dir)
     target = decision["target"]
@@ -367,19 +412,21 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
     try:
         previous = _read_ledger(path, identity)
         auto["last_action"] = _last_action(previous)
-        blocked = _block(previous, fingerprint, now)
+        blocked = None if _force else _block(previous, fingerprint, now)
         if blocked:
             auto["status"] = blocked
         elif decision["eligible"] and not execute:
             auto["status"] = "dry_run"
         elif decision["eligible"] and row["status"] == "ok" and execute:
-            request_id, reservation = _reserve(path, identity, fingerprint, now)
+            request_id, reservation = (_reserve(path, identity, fingerprint, now, force=True)
+                                       if _force else _reserve(path, identity, fingerprint, now))
             auto.update(reservation)
             if request_id:
                 # The reservation can wait on another process. Recheck using
                 # wall-clock time immediately before the only consuming call.
                 post_now = clock()
-                post_decision = evaluate_policy(rawusage, rawcredits, policy, now=post_now, forecast=forecast)
+                post_decision = (_force_decision(rawusage, rawcredits, post_now) if _force else
+                                 evaluate_policy(rawusage, rawcredits, policy, now=post_now, forecast=forecast))
                 credit_id = _exact_credit_id(rawcredits, post_now) if require_exact_credit else None
                 if require_exact_credit and post_decision["eligible"] and not credit_id:
                     post_decision.update(eligible=False, reason="no_exact_credit", target=None)
@@ -398,6 +445,12 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
                               "observed_at": _iso(now), "used_percent": w["used_percent"]}
                              for w in row["windows"] if w["reset_at"]]
     return row
+
+
+def force_profile(profile: str, policy: ResetPolicy | None = None, **kwargs) -> dict:
+    """Explicit one-card authorization; bypass business policy, not physical or ledger safety."""
+    return scan_profile(profile, policy=policy, execute=True, require_exact_credit=True,
+                        _force=True, **kwargs)
 
 
 def _consume_and_verify(client, before_usage, before_credits, target, row, path, identity, request_id, now, *, credit_id=None):

@@ -3,6 +3,7 @@
 import json
 from io import BytesIO
 import re
+import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlencode
@@ -38,7 +39,7 @@ class SyntheticAccount:
         ] if self.available else []}
 
     def consume(self, request_id, *, credit_id=None, execute=False):
-        assert execute and credit_id == "card-1" and len(self.posts) == 0
+        assert execute and credit_id == "card-1" and self.available > 0
         self.posts.append(request_id)
         if self.uncertain:
             raise TimeoutError("private-key=DO_NOT_RENDER")
@@ -89,6 +90,201 @@ def action(base, profile="alpha", **updates):
     assert status == 200
     csrf = re.search(r'name="csrf" value="([^"]+)"', body).group(1)
     return {"profile": profile, "csrf": csrf, "confirm": "use-one-credit", **updates}
+
+
+def force_action(base, profile="alpha", **updates):
+    return {**action(base, profile), "action": "force", "confirm": "force-one-credit", **updates}
+
+
+def test_force_bypasses_business_policy_without_mutating_it(manual):
+    app, accounts, store, policies = manual
+    policies["alpha"].update(enabled=False, threshold_percent=100,
+                             min_remaining_seconds=900000,
+                             target_window_seconds=3600,
+                             skip_if_forecast_24h_above=0)
+    current = store.load_active(ChatGlanceConfig)
+    current["CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES"] = json.dumps(policies)
+    store.save_active(ChatGlanceConfig, current)
+    accounts["alpha"].used = 10
+    accounts["alpha"].seconds = 60
+    status, body, _ = request(app, "/use-credit", values=force_action(app))
+    result = json.loads(body)
+    assert status == 200 and result["reason"] == "reset_verified"
+    assert result["available_count"] == 0
+    assert result["windows"][0]["used_percent"] == 0
+    assert len(accounts["alpha"].posts) == 1
+    assert store.load_active(ChatGlanceConfig)["CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES"] == json.dumps(policies)
+
+
+def test_force_no_card_and_missing_confirmation_do_not_post(manual):
+    app, accounts, _, _ = manual
+    for values in (action(app, action="force"), force_action(app, confirm="use-one-credit"),
+                   {key: val for key, val in force_action(app).items() if key != "confirm"}):
+        assert request(app, "/use-credit", values=values)[0] == 400
+    assert accounts["alpha"].gets == 0
+    accounts["alpha"].available = 0
+    code, body, _ = request(app, "/use-credit", values=force_action(app))
+    assert code == 200 and json.loads(body)["reason"] == "no_credit"
+    assert not accounts["alpha"].posts
+
+
+def test_force_zero_usage_defers_to_upstream_no_reset(manual, monkeypatch):
+    app, accounts, _, _ = manual
+    account = accounts["alpha"]
+    account.used = 0
+    def no_reset(request_id, *, credit_id=None, execute=False):
+        assert execute and credit_id == "card-1"
+        account.posts.append(request_id)
+        return {"code": "nothing_to_reset", "windows_reset": 0}
+    monkeypatch.setattr(account, "consume", no_reset)
+    result = json.loads(request(app, "/use-credit", values=force_action(app))[1])
+    assert result["reason"] == "nothing_to_reset"
+    assert result["available_count"] == 1 and result["windows"][0]["used_percent"] == 0
+    assert len(account.posts) == 1
+
+
+def test_force_auth_origin_replay_and_no_js(manual):
+    app, accounts, _, _ = manual
+    values = force_action(app)
+    assert request(app, "/use-credit", values=values, cookie="")[0] == 401
+    assert request(app, "/use-credit", values=values, origin="https://other.example")[0] == 403
+    assert request(app, "/use-credit", values={**values, "csrf": "bad"})[0] == 403
+    _, page, _ = request(app)
+    form = re.search(r'<form id="manual-credit".*?</form>', page, re.S).group(0)
+    native = dict(re.findall(r'<input[^>]+name="([^"]+)" value="([^"]*)"', form))
+    assert 'id="force-credit" type="button" disabled' in form
+    assert "强制消耗一张重置卡" in page
+    assert request(app, "/use-credit", values=native)[0] == 400
+    assert not accounts["alpha"].gets
+    assert json.loads(request(app, "/use-credit", values=values)[1])["reason"] == "reset_verified"
+    assert request(app, "/use-credit", values=values)[0] == 403
+    assert len(accounts["alpha"].posts) == 1
+
+
+def test_force_current_unknown_blocks_even_when_policy_is_disabled(manual):
+    app, accounts, _, _ = manual
+    accounts["alpha"].uncertain = True
+    assert json.loads(request(app, "/use-credit", values=force_action(app))[1])["reason"] == "uncertain"
+    accounts["alpha"].uncertain = False
+    result = json.loads(request(app, "/use-credit", values=force_action(app))[1])
+    assert result["reason"] == "blocked_pending"
+    assert len(accounts["alpha"].posts) == 1
+
+
+@pytest.mark.parametrize("ledger_status", ["pending", "unexpected_status"])
+def test_force_old_pending_or_unknown_status_never_archives(manual, ledger_status):
+    app, accounts, _, _ = manual
+    from chatglance.codex_resets import _ledger_path
+    accounts["alpha"].uncertain = True
+    request(app, "/use-credit", values=force_action(app))
+    path = _ledger_path(app.home, None)
+    with sqlite3.connect(path) as db:
+        old_id = db.execute("SELECT request_id FROM reset_ledger").fetchone()[0]
+        db.execute("UPDATE reset_ledger SET status=?, fingerprint=?",
+                   (ledger_status, json.dumps(["primary_window", time.time() - 5])))
+    accounts["alpha"].uncertain = False
+    result = json.loads(request(app, "/use-credit", values=force_action(app))[1])
+    assert result["reason"] == "blocked_pending"
+    with sqlite3.connect(path) as db:
+        assert db.execute("SELECT request_id,status FROM reset_ledger").fetchone() == (old_id, ledger_status)
+        assert db.execute("SELECT name FROM sqlite_master WHERE name='reset_ledger_archive'").fetchone() is None
+    assert len(accounts["alpha"].posts) == 1
+
+
+def test_force_skips_resolved_cooldown_but_not_physical_credit(manual):
+    app, accounts, _, _ = manual
+    accounts["alpha"].available = 2
+    request(app, "/use-credit", values=action(app))
+    assert len(accounts["alpha"].posts) == 1
+    accounts["alpha"].used = 30
+    accounts["alpha"].available = 1
+    result = json.loads(request(app, "/use-credit", values=force_action(app))[1])
+    assert result["reason"] == "reset_verified"
+    assert len(accounts["alpha"].posts) == 2
+
+
+def test_force_no_reset_200_is_not_success(manual, monkeypatch):
+    app, accounts, _, _ = manual
+    account = accounts["alpha"]
+    def no_reset(request_id, *, credit_id=None, execute=False):
+        assert execute and credit_id == "card-1"
+        account.posts.append(request_id)
+        return {"code": "nothing_to_reset", "windows_reset": 0}
+    monkeypatch.setattr(account, "consume", no_reset)
+    result = json.loads(request(app, "/use-credit", values=force_action(app))[1])
+    assert result["reason"] == "nothing_to_reset" and result["available_count"] == 1
+    assert len(account.posts) == 1
+
+
+def test_force_expired_unknown_archived_atomically(manual):
+    app, accounts, _, _ = manual
+    from chatglance.codex_resets import _ledger_path
+    accounts["alpha"].uncertain = True
+    request(app, "/use-credit", values=force_action(app))
+    path = _ledger_path(app.home, None)
+    with sqlite3.connect(path) as db:
+        old_id = db.execute("SELECT request_id FROM reset_ledger").fetchone()[0]
+        db.execute("UPDATE reset_ledger SET fingerprint=?", (json.dumps(["primary_window", time.time() - 5]),))
+    accounts["alpha"].uncertain = False
+    result = json.loads(request(app, "/use-credit", values=force_action(app))[1])
+    assert result["reason"] == "reset_verified"
+    with sqlite3.connect(path) as db:
+        archived = json.loads(db.execute("SELECT record FROM reset_ledger_archive").fetchone()[0])
+        current = db.execute("SELECT request_id,status FROM reset_ledger").fetchone()
+    assert archived["request_id"] == old_id and archived["status"] == "uncertain"
+    assert current[0] != old_id and current[1] == "reset_verified"
+    assert len(accounts["alpha"].posts) == 2
+
+
+def test_force_archive_failure_preserves_unknown_barrier(manual):
+    app, accounts, _, _ = manual
+    from chatglance.codex_resets import _ledger_path
+    accounts["alpha"].uncertain = True
+    request(app, "/use-credit", values=force_action(app))
+    path = _ledger_path(app.home, None)
+    with sqlite3.connect(path) as db:
+        old_id = db.execute("SELECT request_id FROM reset_ledger").fetchone()[0]
+        db.execute("UPDATE reset_ledger SET fingerprint=?", (json.dumps(["primary_window", time.time() - 5]),))
+        db.execute("CREATE TABLE reset_ledger_archive (invalid TEXT)")
+    accounts["alpha"].uncertain = False
+    result = json.loads(request(app, "/use-credit", values=force_action(app))[1])
+    assert result["reason"] == "state_error"
+    with sqlite3.connect(path) as db:
+        assert db.execute("SELECT request_id,status FROM reset_ledger").fetchone() == (old_id, "uncertain")
+    assert len(accounts["alpha"].posts) == 1
+
+
+def test_force_unknown_window_never_bypasses_unknown(manual):
+    app, accounts, _, _ = manual
+    accounts["alpha"].uncertain = True
+    request(app, "/use-credit", values=force_action(app))
+    accounts["alpha"].uncertain = False
+    accounts["alpha"].seconds = -10
+    result = json.loads(request(app, "/use-credit", values=force_action(app))[1])
+    assert result["reason"] != "reset_verified"
+    assert len(accounts["alpha"].posts) == 1
+
+
+def test_force_storage_failure_never_posts(manual, monkeypatch):
+    app, accounts, _, _ = manual
+    from chatglance import codex_resets
+    def fail(*args, **kwargs):
+        raise OSError("private=DO_NOT_RENDER")
+    monkeypatch.setattr(codex_resets, "_reserve", fail)
+    result = json.loads(request(app, "/use-credit", values=force_action(app))[1])
+    assert result["reason"] == "state_error"
+    assert "DO_NOT_RENDER" not in str(result)
+    assert not accounts["alpha"].posts
+
+
+def test_force_concurrent_normal_share_pending_barrier(manual):
+    app, accounts, _, _ = manual
+    accounts["alpha"].uncertain = True
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda values: request(app, "/use-credit", values=values),
+                                (action(app), force_action(app))))
+    assert len(accounts["alpha"].posts) == 1
+    assert {json.loads(body)["reason"] for _, body, _ in results} <= {"uncertain", "blocked_pending", "state_error"}
 
 
 @pytest.mark.parametrize("profile", ["alpha", "beta"])
