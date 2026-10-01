@@ -454,6 +454,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Service boundary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#force-one-credit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Force one credit
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -559,6 +576,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Service boundary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#force-one-credit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Force one credit
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -605,6 +639,8 @@ chatglance<span class="w"> </span>refresh<span class="w"> </span>--json-output<s
 <p>After signing in, open the account control popup on the subscription page and choose <strong>检查并用卡</strong> (check and use a credit). Only after explicit confirmation does the server reload that account's current policy, live quota and available cards. It attempts at most one exact card only when the configured threshold and all existing time-window, forecast, identity and idempotency conditions pass. It does not wait for the next scheduled scan or weaken existing safeguards.</p>
 <p>Cancelling, viewing, ordinary refreshes and native form submissions without JavaScript never redeem. The action reports success, unmet conditions or an uncertain result with its check time; the checklist above remains explicitly the last scheduled snapshot. Do not repeat an uncertain action before reconciling the ledger and quota. Production acceptance only views or cancels the confirmation; synthetic accounts and cards validate consumption.</p>
 <h2 id="service-boundary">Service boundary</h2>
+<h3 id="force-one-credit">Force one credit</h3>
+<p>The account popup's <strong>强制用一张卡</strong> (force one credit) skips automatic enablement, usage thresholds, remaining-time requirements, forecasts and business cooldowns. After separate confirmation, the server consumes at most one exact available credit for that account and reads back credits and usage without changing saved settings. Login, same-origin CSRF and duplicate protection still apply: in-flight or current uncertain operations block another consume, and timeouts never retry automatically. An expired old-window unknown record is archived only under force authorization, not relabelled as unconsumed. The management Key needs consume permission for the selected account.</p>
 <ul>
 <li><code>projects update-config</code> writes an <strong>explicit output path</strong>, not a deployment; a single-origin candidate cannot alias its inputs.</li>
 <li><code>runtime maintain</code> operates on an existing config and can validate, back up, or restart; confirm inputs, permissions, and backups before invoking it on any real runtime.</li>
