@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.19 - 2026-10-01
+
+- Add an authenticated “强制用一张卡” control with separate confirmation; it skips automatic business thresholds and cooldowns without changing saved settings, while requiring fresh exact-card reads, durable duplicate protection and verified readback. No-JavaScript or cancelled submissions cannot consume.
+
 ## 0.1.18 - 2026-09-24
 
 - Add a private single-origin optional-login candidate API/CLI using Glance's session-selected authenticated columns. Preserve auth and routing, keep the existing `/项目` link, reject unsafe shared head/assets, and write explicit candidates atomically at `0600` with redacted failures.

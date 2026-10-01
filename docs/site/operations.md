@@ -22,6 +22,10 @@ chatglance refresh --json-output --no-restart
 
 ## 服务边界
 
+### 强制使用一张卡
+
+账号控制小窗的 **强制用一张卡** 不检查自动开关、用量阈值、剩余时间、预测或业务冷却。接受独立的二次确认后，服务端针对当前账号使用至多一张确切可用卡，并回读卡数和用量；设置本身不变。登录、同源CSRF和防重复保护仍执行：正在处理或当前结果未知时不能再用，超时不会自动重试。已结束旧额度窗的未知记录仅在force授权下归档，不改写为“未消费”。管理Key必须对所选账号具有消费权限。
+
 - `projects update-config` 写**显式输出路径**，不是直接部署；同址候选输出不能别名覆盖输入。
 - `runtime maintain` 会维护现有运行配置并可选择验证、备份或重启；在真实环境调用前必须确认输入、权限和备份目录。
 - `runtime render-systemd` 可审查模板；`runtime install-systemd` 和 `runtime start` 会更改 user-level service/timer。本站文档**不会**启动它们。

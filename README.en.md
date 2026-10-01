@@ -22,7 +22,7 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 
 ## Reset decisions and manual controls
 
-Subscription cards collapse reset information by default. Forecast details live only in the centered, host-themed popup. Each account has one independent automatic-reset switch, included in the execution checklist and paused/waiting/ready summary. Enabling requires explicit confirmation; there is no immediate-redemption button. See [reset controls](docs/reset-controls.md) for deployment and security boundaries.
+Subscription cards collapse reset information by default. Forecast details live only in the centered, host-themed popup. Each account has one independent automatic-reset switch, included in the execution checklist and paused/waiting/ready summary. Enabling requires explicit confirmation. The authenticated control popup has separate check-and-use and force-one-card buttons; force requires its own confirmation and does not change automatic policy. See [reset controls](docs/reset-controls.md) for security boundaries.
 
 ## CRS-managed subscriptions (0.1.13)
 

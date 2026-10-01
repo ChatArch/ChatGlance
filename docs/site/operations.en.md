@@ -22,6 +22,10 @@ Cancelling, viewing, ordinary refreshes and native form submissions without Java
 
 ## Service boundary
 
+### Force one credit
+
+The account popup's **强制用一张卡** (force one credit) skips automatic enablement, usage thresholds, remaining-time requirements, forecasts and business cooldowns. After separate confirmation, the server consumes at most one exact available credit for that account and reads back credits and usage without changing saved settings. Login, same-origin CSRF and duplicate protection still apply: in-flight or current uncertain operations block another consume, and timeouts never retry automatically. An expired old-window unknown record is archived only under force authorization, not relabelled as unconsumed. The management Key needs consume permission for the selected account.
+
 - `projects update-config` writes an **explicit output path**, not a deployment; a single-origin candidate cannot alias its inputs.
 - `runtime maintain` operates on an existing config and can validate, back up, or restart; confirm inputs, permissions, and backups before invoking it on any real runtime.
 - `runtime render-systemd` shows templates; `runtime install-systemd` and `runtime start` change user-level service/timer state. This documentation **does not** start them.
