@@ -586,7 +586,7 @@ chatglance<span class="w"> </span>access<span class="w"> </span>render-single-or
 <span class="w">  </span>--inventory<span class="w"> </span>inventory.json<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--output<span class="w"> </span>candidate.yml
 </code></pre></div>
-<p>输出只报告完成状态，不打印 <code>auth</code> 或私有行；目标需与输入不同，候选以 <code>0600</code> 原子写入。原有首页、<code>/项目</code> 路径和其它需要登录的页面保持身份。其他页面不能因为新首页开放而改成访客可见。</p>
+<p>输出只报告完成状态，不打印 <code>auth</code> 或私有行；目标需与输入不同，候选以 <code>0600</code> 原子写入。原有首页和其它需要登录的页面保持身份；项目页名称仍为“项目”，规范路径改为 <code>/projects</code>（旧 <code>/项目</code> 须由代理精确重定向）。其他页面不能因为新首页开放而改成访客可见。</p>
 <h2 id="3">3. 验证、审查，再由运维决定是否部署</h2>
 <p>对<strong>明确选定且包含</strong> <code>public</code> + <code>authenticated-columns</code> 能力的 Glance 可执行文件运行：</p>
 <div class="highlight"><pre><span></span><code>glance<span class="w"> </span>-config<span class="w"> </span>candidate.yml<span class="w"> </span>config:validate
