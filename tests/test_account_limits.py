@@ -630,7 +630,7 @@ def test_render_account_limits_html_shows_global_codex_reset_calendar_from_publi
     assert "default Primary" not in html
 
 
-def test_render_account_limits_html_falls_back_to_account_reset_windows_when_public_tracker_missing() -> None:
+def test_render_account_limits_html_keeps_official_calendar_empty_without_public_records() -> None:
     data = sample_account_limits_data()
     data.pop("codex_reset")
     data["codex"][0]["reset_history"] = [
@@ -645,7 +645,8 @@ def test_render_account_limits_html_falls_back_to_account_reset_windows_when_pub
     normalized = normalize_account_limits_data(data)
     html = render_account_limits_html(data)
 
-    assert normalized["counts"]["codex_reset_events"] == 1
+    assert normalized["counts"]["codex_reset_events"] == 0
     assert "Codex 官方重置日历" in html
-    assert "账号窗口采样" in html
-    assert "<span class=\"day-number\">18</span>" in html
+    assert "官方重置记录暂不可用" in html
+    assert "账号窗口采样" not in html
+    assert "<span class=\"day-number\">18</span>" not in html

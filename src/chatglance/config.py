@@ -31,18 +31,32 @@ class ChatGlanceConfig(BaseEnvConfig):
         "CHATGLANCE_SITES_UPTIME_BASE_URL",
         desc="Optional HTTP(S) base URL of the website-services Uptime dashboard.",
     )
+    CHATGLANCE_ACCOUNT_LIMITS_PROFILES = EnvField(
+        "CHATGLANCE_ACCOUNT_LIMITS_PROFILES", default="",
+        desc="Space- or comma-separated Codex profiles for manual refresh; empty uses the current snapshot.",
+    )
+
+    CHATGLANCE_ACCOUNT_LIMITS_CRS_PROFILE = EnvField(
+        "CHATGLANCE_ACCOUNT_LIMITS_CRS_PROFILE", default="",
+        desc="Named CRS profile with a dedicated management Key; empty keeps local Codex mode.",
+    )
+    CHATGLANCE_ACCOUNT_LIMITS_CRS_ACCOUNTS = EnvField(
+        "CHATGLANCE_ACCOUNT_LIMITS_CRS_ACCOUNTS", default="{}",
+        desc="JSON mapping selected display/policy labels to exact CRS account IDs; no OAuth values.",
+    )
 
     CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES = EnvField(
         "CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES", default="{}",
-        desc="Per-profile reset policy JSON: enabled, threshold_percent and min_remaining_seconds.",
+        desc="Per-profile reset policy JSON: enabled, threshold_percent, min_remaining_seconds, optional target_window_seconds and skip_if_forecast_24h_above.",
     )
     CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL = EnvField(
         "CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL",
         desc="Optional HTTPS backend base for reset-credit queries and consumption only.",
     )
-    CHATGLANCE_ACCOUNT_LIMITS_RESET_EXECUTE = EnvField(
-        "CHATGLANCE_ACCOUNT_LIMITS_RESET_EXECUTE", default="false",
-        desc="Explicitly enable real policy-driven consumption; false is monitor-only.",
+
+    CHATGLANCE_ACCOUNT_LIMITS_CONTROL_PATH = EnvField(
+        "CHATGLANCE_ACCOUNT_LIMITS_CONTROL_PATH", default="",
+        desc="Same-origin trailing-slash path of authenticated reset controls; empty hides the entry.",
     )
 
     @classmethod
@@ -64,16 +78,16 @@ def collection_settings(*, home=None) -> dict:
         values = {}
     def resolve(key, default):
         return os.environ[key] if key in os.environ else values.get(key, default)
-    raw = resolve("CHATGLANCE_ACCOUNT_LIMITS_RESET_EXECUTE", "false")
-    if isinstance(raw, bool):
-        execute = raw
-    elif isinstance(raw, str) and raw.lower() in ("1", "true", "yes", "on", "0", "false", "no", "off", ""):
-        execute = raw.lower() in ("1", "true", "yes", "on")
-    else:
-        raise ValueError("CHATGLANCE_ACCOUNT_LIMITS_RESET_EXECUTE must be an explicit boolean")
-    return {"reset_policies": resolve("CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES", "{}"),
+    legacy = "CHATGLANCE_ACCOUNT_LIMITS_RESET_EXECUTE"
+    if legacy in values or legacy in os.environ:
+        raise ValueError("Legacy global execution setting requires per-account migration before scanning")
+    return {"profiles": resolve("CHATGLANCE_ACCOUNT_LIMITS_PROFILES", ""),
+            "crs_profile": resolve("CHATGLANCE_ACCOUNT_LIMITS_CRS_PROFILE", ""),
+            "crs_accounts": resolve("CHATGLANCE_ACCOUNT_LIMITS_CRS_ACCOUNTS", "{}"),
+            "reset_policies": resolve("CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES", "{}"),
             "reset_base_url": resolve("CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL", "") or None,
-            "execute_resets": execute}
+
+            "control_path": resolve("CHATGLANCE_ACCOUNT_LIMITS_CONTROL_PATH", "") or ""}
 
 
 def site_settings(*, home=None) -> dict[str, str]:

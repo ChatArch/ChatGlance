@@ -5,6 +5,74 @@
 - Derive default SVG destination labels from each service public URL; omit credentials, query strings and fragments.
 - Resolve website-service domain/Uptime defaults from runtime inventory or typed ChatEnv, with no production-domain fallback.
 - Document portable default inline SVG covers and optional explicit external covers.
+## 0.1.19 - 2026-10-01
+
+- Add an authenticated “强制用一张卡” control with separate confirmation; it skips automatic business thresholds and cooldowns without changing saved settings, while requiring fresh exact-card reads, durable duplicate protection and verified readback. No-JavaScript or cancelled submissions cannot consume.
+
+## 0.1.18 - 2026-09-24
+
+- Add a private single-origin optional-login candidate API/CLI using Glance's session-selected authenticated columns. Preserve auth and routing, keep the existing `/项目` link, reject unsafe shared head/assets, and write explicit candidates atomically at `0600` with redacted failures.
+- Keep guest allowlist and authenticated full project columns distinct through project updates, runtime maintenance and native refresh; existing private mode remains unchanged.
+- Add an authenticated, CSRF-protected manual check-and-use control with an explicit confirmation dialog, fresh policy/account checks, exact-card selection and the scheduled scanner's shared idempotency ledger. Cancellation and no-JavaScript native submissions cannot consume cards; uncertain results never retry automatically.
+- Prepare the first bilingual MkDocs Material site, strict CI docs build, same-repository PR preview at `dev/`, and root deployment workflow with preview preservation. Publishing and live Pages verification remain separate operator gates.
+
+## 0.1.17 - 2026-09-23
+
+- Add a fail-closed public project projector with an explicit nested row allowlist. It retains only literal `private: false` rows, omits source/owner, CLI, Env, package/evidence, visibility, and arbitrary metadata, validates all published external URLs, and recomputes public counts/categories without private totals.
+- Add explicit private/public project rendering: the backward-compatible authenticated view labels literal visibility as `Public` or `Private` and malformed/missing values as `Unknown`; the anonymous view reprojects full inventory at its own render boundary and emits no visibility UI.
+- Add a minimal anonymous Glance config transformation and `chatglance access render-public` candidate command. Public config never inherits auth, private pages/home widgets, or server values; an optional server mapping requires explicit validated `host` and `port` values. Candidate outputs must share a pre-existing non-symlink directory and are staged/fsynced at mode `0600`, atomically replaced as a rollback-safe pair, and reported through redacted errors.
+- Route the anonymous home bookmark to Glance's exact `projects` slug so the public project link does not resolve to a trailing-slash 404.
+
+## 0.1.16 - 2026-09-22
+
+- Add a reviewed, explicit `网页` link column after `文档` on the `项目` page. Links come only from validated runtime project metadata with a declared page kind; they are never inferred from a repository name, documentation URL, CLI, Hub, or service relationship.
+
+## 0.1.15 - 2026-09-22
+
+- Remove the internal snapshot-freshness predicate from the human execution checklist. The planned refresh timestamp remains visible, while the independent business conditions retain their own pass/fail results.
+- Add explicit reviewed project Web links to the `项目` table and detail popovers, preserving only allowlisted public HTTPS metadata from runtime inventory overrides without inferring links from other project relationships.
+
+## 0.1.14 - 2026-09-22
+
+- Bind automatic reset evaluation and its at-most-once consume call to the same fresh `--scheduled` account-limits refresh; opening or reloading the control popup never re-evaluates or redeems a card.
+- Render each checklist item as the last planned refresh's independent pass/fail result, with a separate `上次计划检查` timestamp instead of turning every item into a generic pending state as data ages.
+- Replace user-facing `待核对` wording with explicit failed-data or protected-result messages; internal uncertain receipts remain fail-closed and block duplicate consumption.
+
+## 0.1.13 - 2026-09-21
+
+- Add an opt-in CRS-managed subscription backend with typed CRS profile and account-ID mapping; upstream OAuth remains on the CRS service.
+- Keep local Codex mode unchanged when no CRS profile is selected. CRS-mode mapping, dependency or authorization failures never fall back to local OAuth.
+- Preserve per-account policies, non-consuming manual refresh, cached-display warnings and uncertain-consumption guards across the remote client path.
+- Validate every account mapping before any forecast/account I/O or scheduled action; require ChatCRS 0.3.5 for the managed client.
+
+## 0.1.12 - 2026-09-20
+
+- Extend the package-owned `chatglance refresh` pipeline with explicit scheduled mode and non-secret collector inputs, so installed-package refreshes do not need a source checkout or host-local business scripts.
+- Keep manual refresh non-consuming; explicit `--scheduled` follows the existing per-account policies while retaining the shared lock, partial-result handling, validated publication and at most one service restart.
+- Request standard profile renewal from ChatCRS 0.3.4 and inherit each profile's backend Base URL for reset queries unless explicitly overridden; do not implement OAuth or activate local proxies in the dashboard.
+- Preserve safe credential/error status and successful-observation timestamps; keep stale data display-only.
+
+## 0.1.11 - 2026-09-17
+
+- Show separate five-hour and seven-day usage bars with their own reset times when both windows are provided; do not invent absent windows or change the selected reset-policy window.
+- Group reset-card information in a collapsible account-card section and add an authenticated decision popup with one independent automatic-reset switch per account.
+- Retire the persistent global execution setting. Legacy configurations fail closed until migrated with their effective per-account states preserved; normal collection follows account switches, while explicit inspection and manual refresh never consume.
+- Keep card typography native, center the popup, and highlight rolling-24h forecast probability, source update time and veto/unavailable states without claiming a low probability is safe.
+- Parse only the current successful SSR route's snapshot from real inline script nodes; reject history, comments, inert markup and ambiguous data.
+
+- Add optional exact quota-window selection for reset policy and the account card, so a weekly/total allowance never falls back to a five-hour window.
+- Add an optional rolling-24h public forecast veto, with strict threshold, source timestamps, a two-hour freshness limit and fail-closed handling; this is an experimental probability, not prediction accuracy.
+- Fetch the fresh public forecast before account decisions, keep cached history display-only, and recheck every guard before consumption. Manual refresh remains non-consuming.
+
+## 0.1.10
+
+- 新增安装包自带的 `chatglance refresh [PAGES]...` 与可复用 Python API，支持全部已配置页面或指定页面的只读手动刷新，不兑换重置卡。
+- 手动刷新复用现有配置、共享锁、候选校验和备份，保留页面顺序；失败页不覆盖，部分结果明确返回非零，最多重启一次服务。
+- 新增可选 `refresh-manual.sh` 薄入口；默认复用相同发行版本的 CLI 树证据，完整发行包探测为显式选项。
+
+- 官方重置日历抓取失败或解析为空时，保留上次成功的完整历史，并显示缓存及最后成功时间；连续失败不会伪造缓存更新时间。
+- 官方日历不再混入账号预计重置窗口采样，避免历史月份消失及错误高亮；同一天多次重置按实际事件数统计。
+- 缓存仅用于展示，不参与自动重置卡决策；显式停用公共记录采集仍然生效。
 
 ## 0.1.9 - 2026-09-09
 

@@ -2,7 +2,7 @@
 """Collect Codex usage and banked reset details for ChatGlance.
 
 Periodic scans use GET only unless both per-profile policy and real-execution
-settings are enabled. No model request or automatic OAuth refresh is made.
+settings are enabled. No model request is made; ChatCRS owns OAuth refresh.
 Policy/ledger decisions are made on fresh data before display-only stale fallbacks.
 """
 from __future__ import annotations
@@ -16,12 +16,14 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from chatglance import __version__
 from chatglance.codex_resets import ResetPolicy, parse_policies, scan_profile
+from chatglance.codex_forecast import MAX_PUBLIC_BODY_BYTES, parse_public_forecast
 from chatglance.config import collection_settings
 
 EXPECTED_QUOTA_KEYS = {
@@ -211,9 +213,13 @@ def fetch_public_codex_reset(timeout: int) -> dict[str, Any]:
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
-            body = response.read(1_000_000).decode("utf-8", errors="replace")
-    except (OSError, urllib.error.URLError) as exc:
-        return {"source": PUBLIC_RESET_SOURCE, "status": "error", "error": type(exc).__name__, "events": []}
+            raw = response.read(MAX_PUBLIC_BODY_BYTES + 1)
+            if len(raw) > MAX_PUBLIC_BODY_BYTES:
+                raise ValueError("Public source exceeds size limit")
+            body = raw.decode("utf-8", errors="replace")
+    except (OSError, urllib.error.URLError, ValueError) as exc:
+        return {"source": PUBLIC_RESET_SOURCE, "status": "error", "error": type(exc).__name__,
+                "events": [], "forecast": parse_public_forecast("")}
     events = parse_public_reset_events(body)
     return {
         "source": PUBLIC_RESET_SOURCE,
@@ -221,6 +227,7 @@ def fetch_public_codex_reset(timeout: int) -> dict[str, Any]:
         "confirmed_reset_count": len(events),
         "latest": events[0] if events else {},
         "events": events,
+        "forecast": parse_public_forecast(body),
     }
 
 
@@ -415,6 +422,44 @@ def apply_last_known_values(current: list[dict[str, Any]], previous: dict[str, d
             payload["last_successful_at"] = last_successful_at
 
 
+def apply_last_known_public_reset(
+    current: dict[str, Any], history: Path | None, *, generated_at: str
+) -> dict[str, Any]:
+    """Retain confirmed public history on failure without making it look fresh."""
+    result = deepcopy(current)
+    if result.get("status") == "ok" and result.get("events"):
+        result["using_last_known_values"] = False
+        result["last_successful_at"] = generated_at
+        return result
+    if result.get("status") == "skipped" or history is None:
+        return result
+    try:
+        snapshot = json.loads(history.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return result
+    if not isinstance(snapshot, dict):
+        return result
+    previous = snapshot.get("codex_reset")
+    if not isinstance(previous, dict) or not (
+        previous.get("status") == "ok" or previous.get("using_last_known_values") is True
+    ):
+        return result
+    events = previous.get("events")
+    if not isinstance(events, list) or not events or not all(isinstance(item, dict) for item in events):
+        return result
+    result.update(
+        source=previous.get("source") or PUBLIC_RESET_SOURCE,
+        events=deepcopy(events),
+        latest=deepcopy(previous.get("latest") or events[0]),
+        confirmed_reset_count=len(events),
+        using_last_known_values=True,
+        last_successful_at=previous.get("last_successful_at") or (
+            snapshot.get("generated_at") if previous.get("status") == "ok" else None
+        ),
+    )
+    return result
+
+
 def merge_history(current: list[dict[str, Any]], previous: list[dict[str, Any]]) -> list[dict[str, Any]]:
     merged: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
@@ -428,6 +473,46 @@ def merge_history(current: list[dict[str, Any]], previous: list[dict[str, Any]])
     return merged[:120]
 
 
+def _managed_client_options(settings: dict, profiles: list[str]) -> dict:
+    """Choose one credential owner for the whole collection, never a fallback."""
+    crs_profile = settings.get('crs_profile') or ''
+    if not crs_profile:
+        return {}
+    if not isinstance(crs_profile, str) or not crs_profile.strip() or crs_profile != crs_profile.strip():
+        raise ValueError('CRS profile must be an explicit nonempty name')
+
+    def unique(pairs):
+        values = {}
+        for key, value in pairs:
+            if key in values:
+                raise ValueError('Duplicate CRS account mapping')
+            values[key] = value
+        return values
+
+    try:
+        accounts = json.loads(settings.get('crs_accounts') or '{}', object_pairs_hook=unique)
+        if not isinstance(accounts, dict) or any(
+            not isinstance(label, str) or not label or label != label.strip()
+            # Validate the complete wire-ID grammar before any batch I/O.
+            or not isinstance(account, str)
+            or re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}', account) is None
+            for label, account in accounts.items()
+        ) or any(label not in accounts for label in profiles):
+            raise ValueError
+    except (TypeError, ValueError):
+        raise ValueError('CRS account mapping must map every selected label to one nonempty account ID') from None
+
+    def factory(label, *, home=None, timeout=20):
+        # Import lazily: older released providers must not affect local mode.
+        from chatcrs.managed_codex import CrsManagedCodexClient
+        return CrsManagedCodexClient.from_profile(
+            crs_profile, account_id=accounts[label], home=home, timeout=timeout,
+            require_management_key=True,
+        )
+
+    return {'client_factory': factory, 'token_service': 'CRS'}
+
+
 def collect_account_limits(*, profiles, output_path: str | Path, history_path: str | Path | None = None,
                            timeout: float = 20, reset_timeout: float = 20, no_public_reset: bool = False,
                            reset_policies: str | None = None, reset_base_url: str | None = None,
@@ -435,31 +520,43 @@ def collect_account_limits(*, profiles, output_path: str | Path, history_path: s
     """Collect fresh usage/credits and apply policy, then write the safe snapshot.
 
     This importable API is also used by the published CLI. No model smoke or
-    automatic token refresh is performed. Last-known values are display-only.
+    package-local token refresh is performed; ChatCRS uses its standard token
+    lifecycle. Last-known values are display-only.
     """
     settings = collection_settings(home=home)
     reset_policies = settings['reset_policies'] if reset_policies is None else reset_policies
     reset_base_url = settings['reset_base_url'] if reset_base_url is None else reset_base_url
-    execute_resets = settings['execute_resets'] if execute_resets is None else execute_resets
+    # A configured account's enabled flag is its only persistent permission.
+    # Explicit False is a per-call inspection mode, not another account setting.
+    execute_resets = True if execute_resets is None else execute_resets
     if type(execute_resets) is not bool:
         raise ValueError('execute_resets must be boolean')
     policies = parse_policies(reset_policies)
     profiles = parse_profiles(profiles if isinstance(profiles, str) else ' '.join(profiles))
     if not profiles:
         raise ValueError('At least one explicit Codex profile is required')
+    client_options = _managed_client_options(settings, profiles)
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     history = Path(history_path) if history_path is not None else None
     previous_profiles = load_previous_profiles(history)
+    # Fetch fresh forecast before any account may authorize a consuming request.
+    # History cache is still applied only after decisions and never supplies it.
+    public_reset = ({'source': PUBLIC_RESET_SOURCE, 'status': 'skipped', 'events': [], 'forecast': None}
+                    if no_public_reset else fetch_public_codex_reset(reset_timeout))
     payloads = [profile_payload(profile, timeout, policy=policies.get(profile, ResetPolicy()),
-                execute=execute_resets, reset_base_url=reset_base_url or None, home=home) for profile in profiles]
+                execute=execute_resets, reset_base_url=reset_base_url or None, home=home,
+                forecast=public_reset.get('forecast'), **client_options) for profile in profiles]
     apply_last_known_values(payloads, previous_profiles)
     merged_history = merge_history([event for item in payloads for event in item.get('reset_history', [])], load_history(history))
     for payload in payloads:
         payload['reset_history'] = [event for event in merged_history if event.get('profile') == payload['profile']]
-    result = {'generated_at': iso_now(), 'collector_version': __version__, 'refresh_status': refresh_status(payloads),
+    generated_at = iso_now()
+    public_reset = apply_last_known_public_reset(public_reset, history, generated_at=generated_at)
+    result = {'generated_at': generated_at, 'collector_version': __version__, 'refresh_status': refresh_status(payloads),
               'accounts': [], 'codex': payloads,
-              'codex_reset': {'source': PUBLIC_RESET_SOURCE, 'status': 'skipped', 'events': []} if no_public_reset else fetch_public_codex_reset(reset_timeout),
+              'codex_reset': public_reset,
+              'reset_control_path': settings.get('control_path', ''),
               'resources': [{'kind': 'codex', 'title': 'Codex account usage', 'profiles': profiles, 'sections': ['usage_cards','reset_calendar']}]}
     output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + '\n', encoding='utf-8')
     return result

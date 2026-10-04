@@ -88,6 +88,142 @@ def main() -> None:
 
 
 @main.group()
+def access() -> None:
+    """Render detached public dashboard candidates."""
+
+
+@access.command("render-single-origin-optional-login")
+@click.option("--config", "config_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Existing private Glance YAML input.")
+@click.option("--inventory", "inventory_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Full project inventory input.")
+@click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Explicit private candidate YAML destination in an existing safe directory.")
+def render_single_origin_optional_login(config_path: Path, inventory_path: Path, output_path: Path) -> None:
+    """Write a private single-instance optional-login candidate without publishing it."""
+
+    from .optional_login import build_single_origin_optional_login_config, write_optional_login_candidate
+
+    try:
+        config = load_yaml(config_path)
+        inventory = load_inventory(inventory_path)
+        candidate = build_single_origin_optional_login_config(config, inventory)
+        write_optional_login_candidate(output_path, dump_yaml(candidate), protected_paths=(config_path, inventory_path))
+    except Exception:
+        raise click.ClickException("optional-login candidate rejected; check input, shared content and output paths") from None
+    click.echo("wrote private optional-login candidate")
+
+
+@access.command("render-public")
+@click.option("--config", "config_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Full private Glance YAML used only as transformation input.")
+@click.option("--inventory", "inventory_path", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True, help="Full project inventory JSON to project.")
+@click.option("--config-output", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Explicit public Glance YAML candidate; both outputs must share an existing non-symlink directory.")
+@click.option("--inventory-output", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Explicit public inventory JSON candidate in the same safe directory.")
+@click.option("--host", help="Optional explicit host for the public Glance server mapping; requires --port.")
+@click.option("--port", type=click.IntRange(min=1, max=65535), help="Optional explicit port for the public Glance server mapping; requires --host.")
+def render_public_access(
+    config_path: Path,
+    inventory_path: Path,
+    config_output: Path,
+    inventory_output: Path,
+    host: str | None,
+    port: int | None,
+) -> None:
+    """Write public config and inventory candidates without publishing them."""
+
+    import yaml
+
+    from chatglance.access import (
+        CandidateWriteError,
+        build_public_glance_config,
+        preflight_public_candidate_paths,
+        project_public_inventory,
+        validate_public_server,
+        write_public_candidates,
+    )
+
+    if (host is None) != (port is None):
+        raise click.ClickException("--host and --port must be supplied together")
+
+    try:
+        preflight_public_candidate_paths(
+            config_output,
+            inventory_output,
+            protected_paths=(config_path, inventory_path),
+        )
+        server = validate_public_server({"host": host, "port": port}) if host is not None and port is not None else None
+        config = load_yaml(config_path)
+        inventory = load_inventory(inventory_path)
+        public_inventory = project_public_inventory(inventory)
+        public_config = build_public_glance_config(config, inventory, server=server)
+        write_public_candidates(
+            config_output,
+            dump_yaml(public_config),
+            inventory_output,
+            json.dumps(public_inventory, ensure_ascii=False, indent=2) + "\n",
+            protected_paths=(config_path, inventory_path),
+        )
+    except CandidateWriteError as exc:
+        raise click.ClickException(str(exc)) from None
+    except json.JSONDecodeError:
+        raise click.ClickException("invalid project inventory JSON") from None
+    except yaml.YAMLError:
+        raise click.ClickException("invalid Glance YAML") from None
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from None
+    except (OSError, UnicodeError):
+        raise click.ClickException("could not read candidate input") from None
+
+    repo_count = public_inventory["counts"]["visible_repos"]
+    click.echo(f"config={config_output} inventory={inventory_output} repos={repo_count} pages={len(public_config['pages'])}")
+
+
+@main.command("refresh")
+@click.argument("pages", nargs=-1, type=click.Choice(["projects", "servers", "sites", "account-limits"]))
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), envvar="CHATGLANCE_RUNTIME_HOME", help="Runtime home; defaults to the effective ChatArch home/glance.")
+@click.option("--glance-bin", type=click.Path(path_type=Path, dir_okay=False), envvar="GLANCE_BIN", help="Glance executable for mandatory candidate validation.")
+@click.option("--service-name", default="chatarch-glance.service", envvar="CHATGLANCE_SERVICE_NAME", show_default=True, help="Existing systemd user service restarted at most once.")
+@click.option("--no-restart", is_flag=True, help="Publish validated artifacts without restarting the service.")
+@click.option("--scheduled", is_flag=True, help="Run existing per-account automatic policies; defaults to fresh CLI trees and publishing offline servers. No persistent switch is changed.")
+@click.option("--profiles", help="Explicit account profiles; otherwise use ChatEnv or the current snapshot.")
+@click.option("--actual-cli-tree/--no-actual-cli-tree", default=None, help="Install/probe current package CLI trees; default on for scheduled, off for manual.")
+@click.option("--allow-offline-regression/--no-allow-offline-regression", default=None, help="Publish offline server probes; default on for scheduled, off for manual.")
+@click.option("--projects-owner", envvar="CHATGLANCE_PROJECTS_OWNER", help="GitHub organization; otherwise reuse the snapshot owner or ChatArch.")
+@click.option("--project-workers", type=click.IntRange(min=1), default=4, envvar="CHATGLANCE_PROJECTS_WORKERS", show_default=True, help="Concurrent project metadata workers.")
+@click.option("--uvx-bin", default="uvx", envvar="CHATGLANCE_UVX_BIN", show_default=True, help="uvx executable for optional released-package CLI tree probes.")
+@click.option("--cli-tree-timeout", type=click.IntRange(min=1), default=90, envvar="CHATGLANCE_CLI_TREE_TIMEOUT", show_default=True, help="Per-entrypoint CLI tree timeout in seconds.")
+@click.option("--server-inventory", type=click.Path(path_type=Path, dir_okay=False), envvar="CHATGLANCE_INFRA_CONFIG", help="Reviewed inventory; defaults to runtime config/server-inventory.yml.")
+@click.option("--sites-inventory", type=click.Path(path_type=Path, dir_okay=False), envvar="CHATGLANCE_SITES_CONFIG", help="Reviewed inventory; defaults to runtime config/site-services.yml.")
+@click.option("--gatus-db", type=click.Path(path_type=Path, dir_okay=False), envvar="CHATGLANCE_GATUS_DB", help="Existing monitor database; defaults to sibling uptime-gatus/data/gatus.db if present.")
+@click.option("--account-timeout", type=click.IntRange(min=1), default=60, envvar="CHATGLANCE_ACCOUNT_LIMITS_TIMEOUT", show_default=True, help="Per-account ChatCRS request timeout in seconds.")
+@click.option("--reset-timeout", type=click.IntRange(min=1), default=20, show_default=True, help="Public calendar/forecast request timeout in seconds.")
+@click.option("--no-public-reset", is_flag=True, help="Skip the public reset calendar and forecast; required forecast policies fail closed.")
+@click.option("--reset-base-url", help="Explicit non-secret reset backend override; otherwise ChatEnv setting or the account's backend base.")
+@click.option("--json-output", is_flag=True, help="Emit a structured refresh result; partial failures exit 1.")
+def refresh(pages, runtime_home, glance_bin, service_name, no_restart, scheduled, profiles, actual_cli_tree, allow_offline_regression, json_output, **collection_options) -> None:
+    """Refresh configured pages natively; manual mode never redeems reset cards."""
+    from chatglance.codex_collector import parse_profiles
+    from chatglance.refresh import CollectionOptions, RefreshError, refresh_runtime
+    import yaml
+    try:
+        result = refresh_runtime(
+            runtime_home, pages, glance_bin=glance_bin, restart=not no_restart,
+            service_name=service_name, profiles=parse_profiles(profiles) if profiles else None,
+            actual_cli_tree=actual_cli_tree, allow_offline_regression=allow_offline_regression,
+            scheduled=scheduled, collection=CollectionOptions(**collection_options),
+        )
+    except RefreshError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        raise click.ClickException(f"refresh failed ({type(exc).__name__}); check runtime configuration") from exc
+    if json_output:
+        click.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        for page in result["pages"]:
+            click.echo(f"{page['page']}: {page['status']}" + (f" ({page['error_type']}; live artifacts unchanged)" if page.get("error_type") else ""))
+        click.echo(f"changed={str(result['changed']).lower()} restarted={str(result['restarted']).lower()} reset_execution={str(result['reset_execution']).lower()}")
+    if not result["ok"]:
+        raise click.exceptions.Exit(1)
+
+
+@main.group()
 def projects() -> None:
     """Generate Glance project dashboard pages."""
 
@@ -175,8 +311,11 @@ def render_projects_page(data_path: Path, output_path: Path, page_name: str) -> 
 def update_projects_config(data_path: Path, config_path: Path, output_path: Path, page_name: str) -> None:
     """Write a config copy with the generated project page replaced."""
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    update_projects_page_from_files(config_path, data_path, output_path, page_name=page_name)
+    from .access import CandidateWriteError
+    try:
+        update_projects_page_from_files(config_path, data_path, output_path, page_name=page_name)
+    except CandidateWriteError:
+        raise click.ClickException("optional-login project candidate output rejected") from None
     click.echo(f"wrote {output_path}")
 
 
@@ -430,6 +569,23 @@ def account_limits() -> None:
     """Render the `订阅详情` Glance page."""
 
 
+@account_limits.command("control-serve")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), default=None)
+@click.option("--public-origin", required=True, help="Exact HTTPS origin used for CSRF protection; no path.")
+@click.option("--port", type=click.IntRange(1, 65535), default=5679, show_default=True)
+def serve_reset_controls(runtime_home: Path | None, public_origin: str, port: int) -> None:
+    """Serve authenticated reset switches on loopback; never redeem cards."""
+    from chatenv import get_paths
+    from chatglance.reset_control import ControlError, serve_controls
+    root = runtime_home.expanduser() if runtime_home is not None else get_paths().home_dir / "glance"
+    try:
+        serve_controls(runtime_home=root, public_origin=public_origin, port=port)
+    except ControlError as exc:
+        raise click.ClickException(str(exc)) from None
+    except OSError:
+        raise click.ClickException("Could not start the loopback control service.") from None
+
+
 @account_limits.command("collect")
 @click.option("--profiles", required=True, help="Space/comma-separated Codex profile names to scan.")
 @click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True)
@@ -439,7 +595,7 @@ def account_limits() -> None:
 @click.option("--no-public-reset", is_flag=True, help="Skip the public reset calendar source.")
 @click.option("--reset-policies", default=None, help="Per-profile policy JSON; otherwise use process env / typed ChatEnv settings.")
 @click.option("--reset-base-url", default=None, help="Explicit HTTPS base for reset-card endpoints only.")
-@click.option("--execute-resets/--no-execute-resets", default=None, help="Opt into real policy-driven consumption. Default is disabled; explicit no wins over configuration.")
+@click.option("--execute-resets/--no-execute-resets", default=None, help="Default follows each account's enabled switch. Explicit --no-execute-resets is a one-call read-only inspection.")
 @click.option("--fail-on-profile-error", is_flag=True)
 def collect_account_limits(profiles, output_path, history_path, timeout, reset_timeout, no_public_reset, reset_policies, reset_base_url, execute_resets, fail_on_profile_error):
     """Scan usage/reset cards without model requests and write a safe snapshot."""
@@ -535,16 +691,21 @@ def maintain_runtime(runtime_home: Path, config_path: Path, data_path: Path, bac
     backups = runtime_path(runtime_home, backup_dir) if backup_dir else None
     binary = runtime_path(runtime_home, glance_bin) if validate else None
     mountpoints = discover_meaningful_mountpoints()
-    result = maintain_config(
-        config_path=config,
-        data_path=data,
-        output_path=config,
-        backup_dir=backups,
-        validate_bin=binary,
-        page_name=page_name,
-        restart_service=restart_service,
-        mountpoints=mountpoints,
-    )
+    from chatglance.refresh import RefreshError, _refresh_lock
+    try:
+        with _refresh_lock(runtime_home):
+            result = maintain_config(
+                config_path=config,
+                data_path=data,
+                output_path=config,
+                backup_dir=backups,
+                validate_bin=binary,
+                page_name=page_name,
+                restart_service=restart_service,
+                mountpoints=mountpoints,
+            )
+    except RefreshError as exc:
+        raise click.ClickException(str(exc)) from exc
     click.echo(
         " ".join(
             [

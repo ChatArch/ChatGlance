@@ -12,11 +12,21 @@
 [English](README.en.md) | [简体中文](README.md)
 </div>
 
+Documentation site (available after its first deployment): [ChatGlance docs](https://arch.gh.wzhecnu.cn/ChatGlance/). Until then, use the [source homepage](docs/site/index.en.md); this link does not assert Pages is live.
+
 # ChatGlance
 
-`ChatGlance` is the private ChatArch/WZHECNU repository for Glance website deployment source and operations records. It preserves the current site's page-generation logic, configuration transformations, user-level service templates, verification notes, and safety boundaries; the `chatglance` CLI is only the helper entrypoint for applying those rules.
+`ChatGlance` is the ChatArch/WZHECNU repository for Glance website deployment source and operations helpers. It preserves the current site's page-generation logic, configuration transformations, user-level service templates, verification notes, and safety boundaries; the `chatglance` CLI is only the helper entrypoint for applying those rules.
 
 It is not an npm project and does not reimplement the Glance backend. Upstream Glance remains a Go single-binary dashboard server; `ChatGlance` owns reusable Python code and private deployment records for repository inventory rendering, Glance YAML page generation, inline HTML table generation, selected Disk mountpoint display, and user-level runtime maintenance.
+
+## Reset decisions and manual controls
+
+Subscription cards collapse reset information by default. Forecast details live only in the centered, host-themed popup. Each account has one independent automatic-reset switch, included in the execution checklist and paused/waiting/ready summary. Enabling requires explicit confirmation. The authenticated control popup has separate check-and-use and force-one-card buttons; force requires its own confirmation and does not change automatic policy. See [reset controls](docs/reset-controls.md) for security boundaries.
+
+## CRS-managed subscriptions (0.1.13)
+
+An explicit CRS profile containing a dedicated management Key and fixed account-ID mapping can route subscription collection entirely through the CRS service, keeping upstream OAuth server-owned. This mode requires the corresponding native CRS API and ChatCRS 0.3.5 or a newer compatible client; missing configuration, capabilities or authorization never fall back to local OAuth. Existing mode is not switched automatically, and manual refresh remains non-consuming. See [Codex reset policy](docs/codex-reset-policy.md) for configuration and migration boundaries.
 
 ## Repository contents
 
@@ -27,10 +37,10 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 - `docs/site-architecture.md`: boundary between ChatGlance as a Python package, the Glance runtime, generated config, and runtime data refresh scripts.
 - `docs/projects.md`: project-page display contract, PyPI-only version rule, entrypoint-only display rule, actual CLI-tree classification evidence, and refresh review checklist.
 - `docs/infra.md`: configuration mechanism, external data-generation chain, refresh workflow, and cron/timer template for the Infra/`服务器` page.
-- `docs/deployment/current-site.md`: private repository-only deployment record for the current live Glance site. It is excluded from public package artifacts.
+- `docs/deployment/current-site.md`: native CLI and user service/timer deployment contract; concrete topology, secrets and live evidence remain outside the repository.
 - `examples/server-inventory.example.yml` / `examples/site-services.example.yml`: sanitized inventory config templates. Real inventories belong in the runtime config directory.
-- `scripts/refresh-projects-page.sh`: script template that refreshes current GitHub/ChatGH project data, renders the `项目` page, validates a candidate config, and safely replaces it.
-- `scripts/refresh-server-status.sh` / `scripts/refresh-sites-page.sh`: external refresh script templates for manual runs, cron, or systemd user timers.
+- `chatglance refresh [PAGES]...`: installed-package collection, validation and publication without a source checkout or host-local business scripts.
+- `chatglance refresh --scheduled`: explicit scheduled execution for the existing timer, preserving per-account policies and the shared lock.
 - `README.md` / `README.en.md` / `CHANGELOG.md`: collaboration and package-facing entry points; do not include live auth, tokens, password hashes, proxy credentials, or secret-bearing files.
 
 ## Current capabilities
@@ -38,6 +48,10 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 - Refresh repository inventory JSON from current ChatGH/GitHub data and render a Glance `项目` page with a visible `generated_at` refresh timestamp; version display is PyPI-only, the compact table shows package entrypoints only, and Python early/non-early classification is corrected from latest-PyPI actual CLI tree/help evidence while stale baseline categories remain audit evidence only.
 - Generate native-click `详情` buttons in the `项目` table; the detail card shows project description, basics, CLI entrypoints, a brief CLI tree code block with preserved `# ...` comments, and registered ChatEnv Env keys, descriptions, sensitivity flags, and default-presence flags. Projects with ENV metadata expose a CLI/ENV click switch, and no values are shown.
 - Keep the current tabs limited to `最近提交`, `PR-issue`, `分类`, and `一览表`.
+- Support explicit public/private project audiences: the authenticated default keeps the full inventory and labels only literal boolean visibility as `Public`/`Private` (`Unknown` otherwise); the anonymous render boundary projects the full inventory itself and publishes an allowlisted artifact with no private rows, source/CLI/Env/evidence metadata, private-derived counts, or visibility labels.
+- Single-origin optional-login candidate: `chatglance access render-single-origin-optional-login --config PRIVATE.yml --inventory FULL.json --output CANDIDATE.yml` uses one Glance instance and the existing `/项目` slug with server-selected guest/authenticated columns. Keep the private candidate off guest assets; see [projects and access](docs/site/projects.en.md).
+- Single-origin optional login requires the `public` and `authenticated-columns` capabilities in [ChatArch/glance chatarch-v0.1.0](https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0), which provides a Linux amd64 binary and `SHA256SUMS`. Unmodified Glance v0.8.5 does not support these fields. Installing ChatGlance does not replace the Glance binary; verify checksums, configuration and both guest/authenticated routes before a service upgrade.
+- Generate public YAML/JSON candidates with `chatglance access render-public`. The public config contains only a static public home and project page and never inherits `auth`, the private server, sites, account limits, servers, or runtime widgets from the full home. Repository/docs/Web links must be external HTTPS URLs, and the two mode-`0600` candidates are staged, fsynced, and atomically replaced with pair rollback in one pre-existing non-symlink directory.
 - Filter the triage tab to repositories with non-zero PR or Issue counts and sort by `(PR, Issue, recent commit)` descending.
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.
 - Patch Glance `server-stats` to show only selected meaningful disks. The current live policy keeps `/` and adds `/home` only when it is a separate mountpoint; each visible entry is written with `hide: false` so the Disk card does not render `n/a`, while snap/loop/tmp overlays stay hidden.
@@ -50,7 +64,7 @@ It is not an npm project and does not reimplement the Glance backend. Upstream G
 
 ## Quick start
 
-For a new machine that should host a similar but still highly customizable Glance site, start with [`docs/quickstart.md`](docs/quickstart.md): `glance.yml` / widgets / HTML/CSS remain the primary frontend configuration surface, while `chatglance` only manages collection, rendering, validation, backup, and replacement.
+For a new machine that should host a similar but still customizable Glance site, start with the [quickstart](docs/site/quickstart.en.md): `glance.yml` / widgets / HTML/CSS remain the primary frontend configuration surface, while `chatglance` only manages collection, rendering, validation, backup, and replacement.
 
 ```bash
 pip install -e ".[dev]"
@@ -63,47 +77,47 @@ python -m build
 python -m twine check dist/*
 ```
 
-## CLI tree
+## Manual refresh and CLI tree
 
-See [`docs/cli-tree.md`](docs/cli-tree.md) for the complete command surface. ChatStyle renders `chatglance --tree` from the real Click registry with parameter signatures; `chatglance --tree-brief` keeps the same nodes and descriptions without signatures. Tests run both entry points and compare them byte-for-byte with the documented trees.
-
-The recommended `项目` refresh entry point is also a repository script. It uses ChatGH's Python API for the current repository list and PR/Issue/timestamp fields, then reads default-branch manifest/entrypoint evidence without cloning, building, or executing repository source trees. For Python package maturity, it probes the latest published PyPI package with `uvx --from <package>@latest <entrypoint> --tree-brief`, falling back to `--tree` or help output, and writes `project-cli-tree-report.tsv` as audit evidence. Private repository reads fall back in order from explicit token environment variables, to the current checkout's repo-local GitHub credential, to the typed active ChatGlance ChatEnv profile, and finally to ChatGH's shared ChatEnv profile. Token values are never printed:
+The installed package can refresh an existing runtime without a source checkout:
 
 ```bash
-CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
-CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
-bash scripts/refresh-projects-page.sh
+python -m pip install ChatGlance
+chatglance refresh
+chatglance refresh account-limits
+chatglance refresh projects sites
 ```
 
-The generated project overview includes a `刷新时间` item so operators can see when the PR/Issue data was refreshed. The table's detail button also shows repository basics, CLI entrypoints, and non-secret ChatEnv/ENV schema metadata.
+With no page arguments, refresh only generated pages already configured in Glance. Supported keys are `projects`, `servers`, `sites`, and `account-limits`. The default runtime is `glance/` under the effective ChatArch home; override it with `--runtime-home`.
 
-The recommended Infra/`服务器` refresh entry point is the external script, not hand-editing JSON:
+The command reuses reviewed inventories, existing ChatEnv/snapshot account profiles, and existing GitHub credentials. Manual refresh never redeems reset cards or changes their configured policy. It shares the scheduled-refresh lock, validates candidates before publication, preserves page order and unrelated content, backs up changes, and restarts the existing Glance user service at most once.
+
+Failed pages keep their old artifacts while successful pages continue. Partial/cached results exit nonzero. Use `--no-restart` for external lifecycle ownership, `--json-output` for automation, or `--allow-offline-regression` to intentionally publish newly offline servers. Project refresh reuses CLI evidence only for the same released version, package identity, and entrypoints; `--actual-cli-tree` explicitly re-probes published packages.
+
+Both manual and scheduled refreshes call the installed CLI directly. A scheduled `account-limits` run reads usage, credits, and forecast, then evaluates and may redeem at most one card in that same refresh; there is no separate dynamic redemption timer. The control popup reports that scheduled result and timestamp only—opening or reloading it never reevaluates or redeems. Manual refresh neither changes automatic-reset policies nor consumes cards. CRS-managed mode renews upstream OAuth on the service; legacy local Codex mode retains the standard ChatCRS/ChatEnv token lifecycle.
 
 ```bash
-cp examples/server-inventory.example.yml ~/.chatarch/glance/config/server-inventory.yml
-$EDITOR ~/.chatarch/glance/config/server-inventory.yml
-
-CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
-CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
-CHATGLANCE_INFRA_CONFIG=~/.chatarch/glance/config/server-inventory.yml \
-bash scripts/refresh-server-status.sh
+chatglance refresh --scheduled --runtime-home "$HOME/.chatarch/glance" --json-output
 ```
 
-The script calls `chatglance servers collect/render-page/update-config`, writes a candidate config, runs `glance config:validate`, then backs up/replaces the live config when content changed; service-manager actions stay in the outer cron/systemd wrapper or a manual operator step. See [`docs/infra.md`](docs/infra.md) for the full mechanism.
+Account requests use the profile's reverse-proxy Base URLs, and ChatCRS ignores local proxies. Do not prepend `proxy_on`. Select non-secret inputs explicitly with `--server-inventory`, `--sites-inventory`, `--gatus-db` and the other collector options. Omit `--scheduled` for non-consuming diagnostics.
 
-The `网站服务` page refresh uses a fixed reviewed inventory and does not auto-scan Nginx. Omit `cover_url` for the default inline SVG: no image host is needed, and its destination label comes from the service's actual `public_url`. External images remain an explicit opt-in. Configure domain/Uptime defaults in runtime inventory or the existing ChatEnv `ChatGlance` profile; see [website-service configuration](docs/site-services.en.md):
+Website services use built-in SVG covers when `cover_url` is omitted; destination labels come from the actual `public_url`. Runtime inventory or the existing ChatEnv profile supplies domain/Uptime defaults; see [website-service configuration](docs/site-services.en.md). Refresh through native `chatglance refresh sites`, without checkout scripts or an image host.
 
-```bash
-cp examples/site-services.example.yml ~/.chatarch/glance/config/site-services.yml
-$EDITOR ~/.chatarch/glance/config/site-services.yml
-
-CHATGLANCE_BIN=~/.chatarch/venv/bin/chatglance \
-CHATGLANCE_RUNTIME_HOME=~/.chatarch/glance \
-CHATGLANCE_SITES_CONFIG=~/.chatarch/glance/config/site-services.yml \
-bash scripts/refresh-sites-page.sh
-```
+Read the installed command surface with `chatglance --tree` / `--tree-brief`; see the [segmented CLI reference](docs/site/cli.en.md) or the [complete registry tree](docs/cli-tree.md).
 
 ## CLI examples
+
+Render detached public config/inventory candidates (explicit outputs only; no publication or refresh):
+
+```bash
+mkdir -p playground
+chatglance access render-public \
+  --config /path/to/full-glance.yml \
+  --inventory /path/to/full-projects.json \
+  --config-output playground/public-glance.yml \
+  --inventory-output playground/public-projects.json
+```
 
 Refresh current GitHub/ChatGH project data:
 
@@ -250,9 +264,9 @@ Only the matching profile quota probe is affected; other profiles, usage GET, cr
 
 ## Banked Codex resets and scanning
 
-Subscription cards show available reset count, next expiry, per-profile policy and latest action. The page is read-only, with no configuration or redemption buttons. Unknown counts are not zero.
+Subscription cards show available cards, next expiry and latest actions. The authenticated popup contains one independent automatic-reset switch per account; there is no global gate or immediate-redemption button. Unknown counts are not zero.
 
-All three conditions must hold: main-window **usage >=95%**, **more than24 hours until natural reset**, and **available cards >0**. Primary/secondary are interpreted by actual timing; extra model limits never trigger. Each profile defaults to disabled; real consumption additionally requires explicit execution.
+All three conditions must hold: main-window **usage >=95%**, **more than24 hours until natural reset**, and **available cards >0**. Primary/secondary are interpreted by actual timing; extra model limits never trigger. Each profile defaults to disabled; enabling it is that account's only durable execution permission.
 
 ```bash
 chatglance account-limits collect --profiles "work personal" --output account-limits.json --no-execute-resets
@@ -262,13 +276,12 @@ chatglance account-limits render-page --data account-limits.json --output accoun
 Backend settings come from process environment or the typed ChatGlance ChatEnv schema; explicit CLI options win:
 
 ```dotenv
-CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES={"work":{"enabled":true,"threshold_percent":95,"min_remaining_seconds":86400},"personal":{"enabled":false}}
+CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES={"work":{"enabled":false,"threshold_percent":95,"min_remaining_seconds":86400},"personal":{"enabled":false}}
 CHATGLANCE_ACCOUNT_LIMITS_RESET_BASE_URL=https://chatgpt.com/backend-api
-CHATGLANCE_ACCOUNT_LIMITS_RESET_EXECUTE=false
 ```
 
-Only enable execution after reviewing policy. `--no-execute-resets` overrides configuration for read-only acceptance. The optional reset base changes reset endpoints only, preserving the Codex profile usage base. Egress/proxy setup is deployment-owned.
+Set an account's `enabled=true` only after reviewing its policy; it can then consume when all conditions hold. `--no-execute-resets` and `chatglance refresh` remain non-consuming inspection paths. Retire legacy global settings using the migration in [reset controls](docs/reset-controls.md). The optional reset base changes reset endpoints only, preserving the Codex profile usage base. Egress/proxy setup is deployment-owned.
 
-Periodic collection makes GET requests, not quota model probes or implicit OAuth refreshes. Missing, failed or stale data cannot authorize consumption. Last-known values are display-only. Account aliases share durable de-duplication state under ChatArch home's `chatglance/` directory. Persist a request ID before POST; at most one card per scan; ambiguous outcomes block further automatic retries. Success requires explicit reset plus credit-count and usage GET readback. Redemption changes the natural reset schedule and never purchases Credits.
+Collection uses GETs for inspection and POSTs for eligible enabled-account redemption, never quota model probes or implicit OAuth refreshes. Missing, failed or stale data cannot authorize consumption. Last-known values are display-only. Account aliases share durable de-duplication state under ChatArch home's `chatglance/` directory. Persist a request ID before POST; at most one card per scan; ambiguous outcomes block further automatic retries. Success requires explicit reset plus credit-count and usage GET readback. Redemption changes the natural reset schedule and never purchases Credits.
 
 Python APIs: `chatglance.codex_collector.collect_account_limits`, `chatglance.codex_resets.scan_profile`, `ResetPolicy`. The published package owns collection; the old script is a thin entrypoint.

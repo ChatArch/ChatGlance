@@ -1,7 +1,8 @@
 """Conservative, profile-scoped Codex reset policy and durable reservations.
 
-ChatCRS owns credentials and HTTP. This module never refreshes OAuth, probes a
-model, or retries a consume request. Only fresh GET data may authorize a reset.
+ChatCRS owns credentials, standard OAuth refresh and no-proxy HTTP. This module
+never implements OAuth, probes a model, or retries a consume request.
+Only fresh GET data may authorize a reset.
 """
 from __future__ import annotations
 
@@ -14,11 +15,12 @@ import os
 from pathlib import Path
 import sqlite3
 import time
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from chatenv import get_paths
 from chatcrs.reset_credits import CodexResetClient as CodexClient
+from chatglance.codex_forecast import forecast_snapshot
 
 BJT = timezone(timedelta(hours=8))
 COOLDOWN_SECONDS = 3600
@@ -35,6 +37,8 @@ class ResetPolicy:
     enabled: bool = False
     threshold_percent: float = 95
     min_remaining_seconds: float = 86400
+    target_window_seconds: float | None = None
+    skip_if_forecast_24h_above: float | None = None
 
     def __post_init__(self) -> None:
         if type(self.enabled) is not bool:
@@ -43,6 +47,12 @@ class ResetPolicy:
             raise ValueError("threshold_percent must be a finite number between 0 and 100")
         if not _number(self.min_remaining_seconds) or self.min_remaining_seconds < 0:
             raise ValueError("min_remaining_seconds must be a finite nonnegative number")
+        if self.target_window_seconds is not None and (
+                not _number(self.target_window_seconds) or self.target_window_seconds <= 0):
+            raise ValueError("target_window_seconds must be a finite positive number or null")
+        if self.skip_if_forecast_24h_above is not None and (
+                not _number(self.skip_if_forecast_24h_above) or not 0 <= self.skip_if_forecast_24h_above <= 100):
+            raise ValueError("skip_if_forecast_24h_above must be a finite number between 0 and 100 or null")
 
 
 def parse_policies(text: str | None) -> dict[str, ResetPolicy]:
@@ -66,7 +76,7 @@ def parse_policies(text: str | None) -> dict[str, ResetPolicy]:
             result[profile] = ResetPolicy(**policy)
         return result
     except (ValueError, TypeError):
-        raise ValueError("Reset policies must map profile names to enabled, threshold_percent and min_remaining_seconds") from None
+        raise ValueError("Reset policies must map profile names to enabled, threshold_percent, min_remaining_seconds, target_window_seconds and skip_if_forecast_24h_above") from None
 
 
 def _epoch(value: Any) -> float | None:
@@ -99,6 +109,18 @@ def _count(raw: Any) -> int | None:
     return value if type(value) is int and value >= 0 else None
 
 
+def _exact_credit_id(raw: Any, now: float) -> str | None:
+    rows = raw.get("credits") if isinstance(raw, dict) else None
+    if _count(raw) is None or _count(raw) == 0 or not isinstance(rows, list):
+        return None
+    for card in rows:
+        if (isinstance(card, dict) and isinstance(card.get("id"), str)
+                and bool(card["id"]) and card.get("status") == "available"
+                and (_epoch(card.get("expires_at")) or 0) > now):
+            return card["id"]
+    return None
+
+
 def _windows(raw: Any, now: float) -> list[dict[str, Any]]:
     limit = raw.get("rate_limit") if isinstance(raw, dict) else None
     if not isinstance(limit, dict):
@@ -115,17 +137,20 @@ def _windows(raw: Any, now: float) -> list[dict[str, Any]]:
         windows.append({"name": name, "label": name.split("_")[0].title(), "used_percent": used,
                         "reset_at": _iso(reset), "reset_epoch": reset,
                         "reset_after_seconds": reset - now if reset is not None else None,
+                        "window_seconds": duration if _number(duration) and duration > 0 else None,
                         "window_minutes": duration / 60 if _number(duration) and duration > 0 else None})
     return windows
 
 
-def evaluate_policy(rawusage: dict, rawcredits: dict, policy: ResetPolicy, *, now: float) -> dict:
+def evaluate_policy(rawusage: dict, rawcredits: dict, policy: ResetPolicy, *, now: float,
+                    forecast: dict | None = None) -> dict:
     """AND of main-window usage, actual absolute reset time, and available cards.
 
     Primary is not assumed to be the short window. Unanchored relative countdowns
     and additional/model/review limits are deliberately ineligible.
     """
-    result = {"eligible": False, "reason": "disabled", "target": None}
+    result = {"eligible": False, "reason": "disabled", "target": None,
+              "forecast": forecast_snapshot(forecast, now=now)}
     if not policy.enabled:
         return result
     if not _number(now) or _epoch(now) is None or not _fresh(rawusage) or not _fresh(rawcredits):
@@ -135,12 +160,44 @@ def evaluate_policy(rawusage: dict, rawcredits: dict, policy: ResetPolicy, *, no
         return {**result, "reason": "credits_unknown"}
     if count == 0:
         return {**result, "reason": "no_credit"}
-    for window in _windows(rawusage, now):
+    if policy.skip_if_forecast_24h_above is not None:
+        if result["forecast"]["status"] != "ok":
+            return {**result, "reason": "forecast_unavailable"}
+        if result["forecast"]["probability_24h_percent"] > policy.skip_if_forecast_24h_above:
+            return {**result, "reason": "forecast_above_threshold"}
+    windows = _windows(rawusage, now)
+    if policy.target_window_seconds is not None:
+        windows = [w for w in windows if w["window_seconds"] == policy.target_window_seconds]
+        if not windows:
+            return {**result, "reason": "target_window_missing"}
+        if len(windows) > 1:
+            return {**result, "reason": "target_window_ambiguous"}
+    for window in windows:
         if (window["used_percent"] is not None and window["used_percent"] >= policy.threshold_percent
                 and window["reset_after_seconds"] is not None
                 and window["reset_after_seconds"] > policy.min_remaining_seconds):
-            return {"eligible": True, "reason": "eligible", "target": window}
+            return {**result, "eligible": True, "reason": "eligible", "target": window}
     return {**result, "reason": "conditions_not_met"}
+
+
+def _force_decision(rawusage: Any, rawcredits: Any, now: float) -> dict:
+    decision = {"eligible": False, "reason": "query_failed_or_stale", "target": None}
+    if not _fresh(rawusage) or not _fresh(rawcredits):
+        return decision
+    count = _count(rawcredits)
+    if count is None:
+        return {**decision, "reason": "credits_unknown"}
+    if count == 0:
+        return {**decision, "reason": "no_credit"}
+    if not _exact_credit_id(rawcredits, now):
+        return {**decision, "reason": "no_exact_credit"}
+    windows = [window for window in _windows(rawusage, now)
+               if window["used_percent"] is not None and window["reset_epoch"] is not None
+               and window["reset_epoch"] > now]
+    if not windows:
+        return decision
+    target = max(windows, key=lambda window: window["used_percent"])
+    return {"eligible": True, "reason": "eligible", "target": target}
 
 
 def _credits_summary(raw: Any, usage: Any, now: float) -> dict:
@@ -205,7 +262,25 @@ def _block(row: dict | None, fingerprint: str, now: float) -> str | None:
     return None
 
 
-def _reserve(path: Path, identity: str, fingerprint: str, now: float) -> tuple[str | None, dict]:
+def _force_block(row: dict | None, fingerprint: str, now: float) -> str | None:
+    if row and row["status"] == "pending":
+        return "blocked_pending"
+    if row and row["status"] == "uncertain":
+        try:
+            old_name, old_reset = json.loads(row["fingerprint"])
+            name, current_reset = json.loads(fingerprint)
+            if (not isinstance(old_name, str) or old_name != name
+                    or not _number(old_reset) or not _number(current_reset)
+                    or old_reset > now or current_reset <= old_reset):
+                return "blocked_pending"
+        except (ValueError, TypeError):
+            return "blocked_pending"
+    if row and row["status"] not in KNOWN_NO_RESET | {"reset_verified", "conditions_expired", "uncertain"}:
+        return "blocked_pending"
+    return None
+
+
+def _reserve(path: Path, identity: str, fingerprint: str, now: float, *, force: bool = False) -> tuple[str | None, dict]:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if path.is_symlink():
         raise OSError("Ledger symlinks are not allowed")
@@ -224,9 +299,14 @@ def _reserve(path: Path, identity: str, fingerprint: str, now: float) -> tuple[s
         db.execute("BEGIN IMMEDIATE")
         old = db.execute("SELECT * FROM reset_ledger WHERE identity=?", (identity,)).fetchone()
         old = dict(old) if old else None
-        blocked = _block(old, fingerprint, now)
+        blocked = _force_block(old, fingerprint, now) if force else _block(old, fingerprint, now)
         if blocked:
             return None, {"status": blocked, "last_action": _last_action(old)}
+        if force and old and old["status"] == "uncertain":
+            db.execute("""CREATE TABLE IF NOT EXISTS reset_ledger_archive (
+                request_id TEXT PRIMARY KEY, record TEXT NOT NULL, archived_at REAL NOT NULL)""")
+            db.execute("INSERT INTO reset_ledger_archive VALUES (?,?,?)",
+                       (old["request_id"], json.dumps(old), now))
         request_id = str(uuid4())
         db.execute("INSERT OR REPLACE INTO reset_ledger VALUES (?,?,?,?,?,?)",
                    (identity, request_id, "pending", fingerprint, now, 0))
@@ -248,7 +328,10 @@ def _finish(path: Path, identity: str, request_id: str, status: str, now: float)
 def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bool = False,
                  client: Any = None, home: str | Path | None = None,
                  state_dir: str | Path | None = None, now: float | None = None,
-                 reset_base_url: str | None = None, timeout: float = 20) -> dict:
+                 reset_base_url: str | None = None, timeout: float = 20,
+                 forecast: dict | None = None, client_factory: Callable | None = None,
+                 token_service: str = 'Codex', require_exact_credit: bool = False,
+                 _force: bool = False) -> dict:
     """Return a redacted Glance row; execute requires both opt-in gates.
 
     Dry runs do not create state. Uncertain POSTs/readbacks stay blocked without
@@ -262,17 +345,29 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
     if not _number(now) or _epoch(now) is None:
         raise ValueError("now must be a valid timestamp")
     auto = {"policy": asdict(policy), "execute": execute, "status": "disabled",
-            "eligible": False, "reason": "disabled", "last_action": None}
+            "eligible": False, "reason": "disabled", "last_action": None,
+            "forecast": forecast_snapshot(forecast, now=now)}
     row = {"profile": profile, "account_name": profile, "plan": "Codex", "status": "error",
-           "credential_status": "probe_failed", "token_service": "Codex", "refresh_attempted": False,
+           "credential_status": "probe_failed", "token_service": token_service,
+           "refresh_requested": client is None, "refresh_attempted": None,
            "observed_at": _iso(now), "windows": [], "reset_history": [], "auto_reset": auto,
            "reset_credits": _credits_summary(None, None, now)}
     try:
-        client = client if client is not None else CodexClient.from_profile(
-            profile, home=home, reset_base_url=reset_base_url, timeout=timeout)
+        if client is None:
+            if client_factory is not None:
+                client = client_factory(profile, home=home, timeout=timeout)
+            elif token_service == 'CRS':
+                raise ValueError('A CRS client factory is required')
+            else:
+                client = CodexClient.from_profile(
+                    profile, home=home, reset_base_url=reset_base_url, timeout=timeout, refresh=True)
         identity = _identity(client)
-    except Exception:
-        row.update(error_type="CodexProbeError", error="Codex 凭据配置不可用")
+    except Exception as exc:
+        if getattr(exc, "status", None) in (401, 403):
+            row["credential_status"] = "invalid_or_expired"
+        row.update(error_type="CodexProbeError", error=(
+            "CRS 托管账号接口或管理鉴权不可用；未回退本机 OAuth"
+            if token_service == 'CRS' else "Codex 凭据配置或续期不可用"))
         auto.update(status="query_failed", reason="client_unavailable")
         return row
     row["account_id"] = "hash:" + identity[:12]
@@ -299,12 +394,17 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
     if usage_ok:
         row["credential_status"] = "valid"
     row["status"] = "ok" if usage_ok and credits_ok else "partial" if usage_ok else "error"
+    if row["status"] == "ok":
+        row["last_successful_at"] = row["observed_at"]
     if row["status"] != "ok":
         row.update(error_type="CodexProbeError", error="额度或重置卡详情查询失败 / 数据不完整")
-    decision = evaluate_policy(rawusage, rawcredits, policy, now=now)
+    decision = (_force_decision(rawusage, rawcredits, now) if _force else
+                evaluate_policy(rawusage, rawcredits, policy, now=now, forecast=forecast))
+    if require_exact_credit and decision["eligible"] and not _exact_credit_id(rawcredits, now):
+        decision.update(eligible=False, reason="no_exact_credit", target=None)
     auto.update(decision)
-    auto["status"] = "disabled" if not policy.enabled else "conditions_not_met"
-    if policy.enabled and row["status"] != "ok":
+    auto["status"] = "conditions_not_met" if _force or policy.enabled else "disabled"
+    if (_force or policy.enabled) and row["status"] != "ok":
         auto["status"] = "query_failed"
     path = _ledger_path(home, state_dir)
     target = decision["target"]
@@ -312,26 +412,31 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
     try:
         previous = _read_ledger(path, identity)
         auto["last_action"] = _last_action(previous)
-        blocked = _block(previous, fingerprint, now)
+        blocked = None if _force else _block(previous, fingerprint, now)
         if blocked:
             auto["status"] = blocked
         elif decision["eligible"] and not execute:
             auto["status"] = "dry_run"
         elif decision["eligible"] and row["status"] == "ok" and execute:
-            request_id, reservation = _reserve(path, identity, fingerprint, now)
+            request_id, reservation = (_reserve(path, identity, fingerprint, now, force=True)
+                                       if _force else _reserve(path, identity, fingerprint, now))
             auto.update(reservation)
             if request_id:
                 # The reservation can wait on another process. Recheck using
                 # wall-clock time immediately before the only consuming call.
                 post_now = clock()
-                post_decision = evaluate_policy(rawusage, rawcredits, policy, now=post_now)
+                post_decision = (_force_decision(rawusage, rawcredits, post_now) if _force else
+                                 evaluate_policy(rawusage, rawcredits, policy, now=post_now, forecast=forecast))
+                credit_id = _exact_credit_id(rawcredits, post_now) if require_exact_credit else None
+                if require_exact_credit and post_decision["eligible"] and not credit_id:
+                    post_decision.update(eligible=False, reason="no_exact_credit", target=None)
+                auto.update(post_decision)
                 if not post_decision["eligible"]:
                     _finish(path, identity, request_id, "conditions_expired", post_now)
-                    auto.update(post_decision)
                     auto.update(status="conditions_expired", last_action={"status": "conditions_expired", "at": _iso(post_now)})
                     row["windows"] = _windows(rawusage, post_now)
                 else:
-                    _consume_and_verify(client, rawusage, rawcredits, post_decision["target"], row, path, identity, request_id, post_now)
+                    _consume_and_verify(client, rawusage, rawcredits, post_decision["target"], row, path, identity, request_id, post_now, credit_id=credit_id)
     except (OSError, sqlite3.Error, RuntimeError):
         # Never proceed when durable state is unavailable. If a POST happened,
         # its persisted pending row remains a fail-closed barrier.
@@ -342,10 +447,17 @@ def scan_profile(profile: str, policy: ResetPolicy | None = None, *, execute: bo
     return row
 
 
-def _consume_and_verify(client, before_usage, before_credits, target, row, path, identity, request_id, now):
+def force_profile(profile: str, policy: ResetPolicy | None = None, **kwargs) -> dict:
+    """Explicit one-card authorization; bypass business policy, not physical or ledger safety."""
+    return scan_profile(profile, policy=policy, execute=True, require_exact_credit=True,
+                        _force=True, **kwargs)
+
+
+def _consume_and_verify(client, before_usage, before_credits, target, row, path, identity, request_id, now, *, credit_id=None):
     status = "uncertain"
     try:
-        result = client.consume(request_id, execute=True)
+        result = (client.consume(request_id, execute=True, credit_id=credit_id)
+                  if credit_id is not None else client.consume(request_id, execute=True))
         # GET both after POST, even for non-reset outcomes. HTTP 200 alone
         # never proves consumption; arbitrary result text is never serialized.
         after_usage = client.usage()

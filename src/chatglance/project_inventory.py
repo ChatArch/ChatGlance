@@ -26,7 +26,7 @@ from zoneinfo import ZoneInfo
 from chatenv import EnvStore, get_paths
 
 from chatglance.config import ChatGlanceConfig
-from chatglance.projects import category_key, display_category
+from chatglance.projects import category_key, display_category, normalize_web_metadata
 
 JsonDict = dict[str, Any]
 FetchText = Callable[[str, str], str | None]
@@ -347,7 +347,7 @@ def baseline_repositories(data: JsonDict | None) -> dict[str, JsonDict]:
 
 
 def load_baseline_inventory(path: str | Path | None) -> JsonDict | None:
-    """Load an optional prior inventory used to preserve reviewed categories."""
+    """Load an optional prior inventory used to preserve reviewed overrides."""
 
     if path is None:
         return None
@@ -815,6 +815,7 @@ def enrich_repository(
     """Enrich a ChatGH repo row with lightweight manifest and CLI evidence."""
 
     item = dict(row)
+    item.pop("web", None)
     name = str(item.get("name") or "").strip()
     full_name = str(item.get("full_name") or f"{owner}/{name}")
     evidence: JsonDict = dict(_as_dict(item.get("evidence")))
@@ -874,6 +875,9 @@ def enrich_repository(
     if baseline_category:
         item["reviewed_category"] = baseline_category
         item["category"] = baseline_category
+    baseline_web = normalize_web_metadata(baseline.get("web"))
+    if baseline_web:
+        item["web"] = baseline_web
 
     item["package"] = package
     if actual_cli_tree_fetcher and package.get("python_name"):

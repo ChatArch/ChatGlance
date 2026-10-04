@@ -7,5 +7,8 @@ include docs/site-services.en.md
 include docs/infra.md
 include docs/cli-tree.md
 include docs/codex-reset-policy.md
+include docs/reset-controls.md
+include mkdocs.yml
+recursive-include docs/site *.md
 recursive-include examples *.yml
 recursive-include scripts *.sh

@@ -32,6 +32,14 @@ def replace_projects_page(config: dict[str, Any], inventory: dict[str, Any], *, 
     pages.
     """
 
+    from .optional_login import _project_page, optional_login_enabled
+
+    if optional_login_enabled(config):
+        if page_name != PAGE_NAME:
+            raise ValueError("optional-login project name cannot be changed")
+        updated = deepcopy(config)
+        updated["pages"] = [_project_page(inventory, page) if page.get("name") == PAGE_NAME else page for page in updated["pages"]]
+        return updated
     updated = deepcopy(config)
     pages = updated.setdefault("pages", [])
     if not isinstance(pages, list):
@@ -53,7 +61,7 @@ def iter_widgets(value: Any) -> Iterator[dict[str, Any]]:
     if isinstance(value, dict):
         if "type" in value:
             yield value
-        for key in ("widgets", "columns"):
+        for key in ("widgets", "columns", "authenticated-columns"):
             nested = value.get(key)
             if isinstance(nested, list):
                 for item in nested:
@@ -165,7 +173,13 @@ def update_projects_page_from_files(config_path: str | Path, data_path: str | Pa
     config = load_yaml(config_path)
     inventory = load_inventory(data_path)
     updated = replace_projects_page(config, inventory, page_name=page_name)
-    write_yaml(output_path, updated)
+    from .optional_login import optional_login_enabled, write_optional_login_candidate
+
+    if optional_login_enabled(config):
+        write_optional_login_candidate(output_path, dump_yaml(updated), protected_paths=(config_path, data_path))
+    else:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        write_yaml(output_path, updated)
     return Path(output_path)
 
 
