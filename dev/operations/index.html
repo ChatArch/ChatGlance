@@ -649,7 +649,7 @@ chatglance<span class="w"> </span>refresh<span class="w"> </span>--json-output<s
 </ul>
 <h2 id="_6">部署后的阅读与安全验收</h2>
 <ol>
-<li>在目标<strong>同一网址</strong>匿名读公开首页和 <code>/项目</code>，检查导航、内容接口、HTML/JSON/缓存均没有 Private 标识、URL、计数或 CLI/Env。</li>
+<li>在目标<strong>同一网址</strong>匿名读公开首页和 <code>/projects</code>，检查导航、内容接口、HTML/JSON/缓存均没有 Private 标识、URL、计数或 CLI/Env；验证旧 <code>/项目</code> 精确重定向。</li>
 <li>用现有 Glance 账号登录，读同一路径确认全量 Public/Private/Unknown；直访未授权页面和内容接口应受服务器保护。</li>
 <li>注销并刷新、返回和再次读取，确认私有响应不能从缓存复现；移动/桌面导航均须手工检查。</li>
 <li>确认实际 Glance 可执行文件具有 <code>public</code>、<code>authenticated-columns</code> 能力，并保留升级前配置与回滚方案。<strong>不要</strong>把静态文档站构建成功当作这些结果。</li>

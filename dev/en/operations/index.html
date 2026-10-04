@@ -649,7 +649,7 @@ chatglance<span class="w"> </span>refresh<span class="w"> </span>--json-output<s
 </ul>
 <h2 id="post-deployment-functional-and-security-acceptance">Post-deployment functional and security acceptance</h2>
 <ol>
-<li>At the <strong>same URL</strong>, read guest home and <code>/项目</code>; inspect navigation, content APIs, HTML/JSON/caches for zero Private identifiers, URLs, counts, or CLI/Env details.</li>
+<li>At the <strong>same URL</strong>, read guest home and <code>/projects</code>; inspect navigation, content APIs, HTML/JSON/caches for zero Private identifiers, URLs, counts, or CLI/Env details; verify the exact legacy <code>/项目</code> redirect.</li>
 <li>Sign in with an existing Glance account and inspect all Public/Private/Unknown rows at the same path. Direct visits to private pages and content APIs must be server-protected.</li>
 <li>Log out, reload, navigate back, and fetch again; private responses must not be recoverable from caches. Test mobile and desktop navigation manually.</li>
 <li>Identify the actual Glance executable with both <code>public</code> and <code>authenticated-columns</code>, and retain pre-upgrade config and rollback options. <strong>Do not</strong> mistake a static docs build for this evidence.</li>
