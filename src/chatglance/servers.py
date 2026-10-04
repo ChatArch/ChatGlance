@@ -978,6 +978,7 @@ def _server_card(server: dict[str, Any]) -> str:
     gpus = cast(list[dict[str, Any]], server.get("gpus")) if isinstance(server.get("gpus"), list) else []
     primary_disk = next((disk for disk in disks if disk.get("mountpoint") == "/"), disks[0] if disks else {})
     error_html = f'<div class="server-error">{html_text(server.get("error"))}</div>' if server.get("error") else ""
+    note_html = f'<div class="server-note">备注：{html_text(server.get("note"))}</div>' if server.get("note") else ""
     return f"""
 <div class="server-card status-{html_text(server.get('status'), 'unknown')}">
   <div class="server-card-head">
@@ -988,6 +989,7 @@ def _server_card(server: dict[str, Any]) -> str:
     <span class="server-pill">{html_text(_status_label(text_value(server.get('status'), 'unknown')))}</span>
   </div>
   {error_html}
+  {note_html}
   <div class="metric-grid">
     <div><span>IP</span><strong>{html_text(server.get('ip'))}</strong></div>
     <div><span>CPU</span><strong>{html_text(format_percent(cpu.get('usage_percent')))} · {html_text(cpu.get('cores'))} cores · load {html_text(cpu.get('load1'))}</strong></div>
@@ -1023,6 +1025,7 @@ def render_servers_html(data: dict[str, Any]) -> str:
 .status-online .server-pill {{ color: var(--color-positive); }}
 .status-unreachable .server-pill, .status-error .server-pill {{ color: var(--color-negative); }}
 .server-error {{ color: var(--color-negative); margin-bottom: 0.55rem; }}
+.server-note {{ white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 0.55rem; }}
 .metric-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 0.55rem; }}
 .metric-grid div {{ border: 1px solid var(--color-separator); border-radius: 10px; padding: 0.5rem; min-width: 0; }}
 .metric-grid span {{ display: block; color: var(--color-text-subdue); font-size: 0.75rem; margin-bottom: 0.25rem; }}
@@ -1056,6 +1059,7 @@ def build_servers_page(
             {
                 "size": "full",
                 "widgets": [
+                    {"type": "html", "title": "服务器刷新与备注", "source": '<iframe title="服务器手动刷新与备注" loading="lazy" style="width:100%;height:250px;border:0" src="/_chatglance/reset-policy/pages/?page=servers"></iframe>'},
                     {
                         "type": "html",
                         "title": widget_title,

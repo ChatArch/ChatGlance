@@ -11,6 +11,7 @@ from typing import Any, Literal
 from .urls import safe_external_url
 
 PAGE_NAME = "项目"
+PAGE_SLUG = "projects"
 LEGACY_PAGE_NAMES = {"Projects", "ChatArch Projects", "ChatArch Projects List"}
 
 CATEGORY_LABELS = {
@@ -858,6 +859,7 @@ def build_projects_page(
 
     page = {
         "name": page_name,
+        "slug": PAGE_SLUG,
         "columns": [
             {"size": "small", "widgets": [{"type": "bookmarks", "title": "概览", "groups": make_overview_groups(render_data)}]},
             {
@@ -876,6 +878,11 @@ def build_projects_page(
             },
         ],
     }
+    if audience == "private":
+        page["columns"][0]["widgets"].insert(0, {
+            "type": "html", "title": "项目刷新",
+            "source": '<iframe title="项目手动刷新" loading="lazy" style="width:100%;height:100px;border:0" src="/_chatglance/reset-policy/pages/?page=projects"></iframe>',
+        })
     return page
 
 

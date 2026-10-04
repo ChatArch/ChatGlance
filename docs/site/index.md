@@ -8,7 +8,7 @@ ChatGlance 是 Glance 仪表盘的**配置生成与运维工具**，不是网站
 
     ---
 
-    从 [项目与访问](projects.md) 了解 `public: true`、`authenticated-columns` 和同一路径 `/项目` 的权限边界。候选配置**不是**上线命令。
+    从 [项目与访问](projects.md) 了解 `public: true`、`authenticated-columns` 和同一路径 `/projects` 的权限边界。候选配置**不是**上线命令。
 
 -   :material-rocket-launch-outline: **新建可定制的站点**
 

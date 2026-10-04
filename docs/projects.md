@@ -1,5 +1,7 @@
 # Project Page Refresh Contract
 
+The canonical URL for “项目” is `/projects` in both private and optional-login modes. Deploy an exact reverse-proxy redirect for legacy `/项目` (including its URL-encoded spelling); do not create a second public project page.
+
 The Glance `项目` page is generated from a reviewed ChatArch repository inventory. It is not a raw dump of command trees or arbitrary repository manifests.
 
 ## Displayed content
@@ -50,7 +52,7 @@ The page contains:
 
 The synthetic core integration test is opt-in: set test-only `CHATGLANCE_TEST_GLANCE_BIN` to an executable patched Glance binary when running `pytest tests/test_optional_login.py`. Unset skips only the binary validation test; an explicitly configured missing or non-executable path fails. Do not record local binary paths in source, docs, or CI defaults.
 
-The existing `ChatArch` and `项目` pages keep their order, names, and slugs (including `/项目`). Their ordinary `columns` contain only a static guest home and the literal-Public allowlist; `authenticated-columns` contain the original home widgets and fully rendered project rows with Public/Private/Unknown badges. Both pages explicitly set `public: true`; every other page is private. Glance selects the columns server-side using the existing auth session. The full inventory and config stay server-side, never as guest assets. Auth and trusted server routing are preserved; document head, branding, and theme are **not** inherited into the guest shell. Nonempty document head, assets-path, or head-widgets on either public page are rejected instead of silently making private content guest-visible. Review any new global or shared assets separately before deployment.
+The existing `ChatArch` and `项目` pages keep their order and names; the project slug is `/projects`. Their ordinary `columns` contain only a static guest home and the literal-Public allowlist; `authenticated-columns` contain the original home widgets and fully rendered project rows with Public/Private/Unknown badges. Both pages explicitly set `public: true`; every other page is private. Glance selects the columns server-side using the existing auth session. The full inventory and config stay server-side, never as guest assets. Auth and trusted server routing are preserved; document head, branding, and theme are **not** inherited into the guest shell. Nonempty document head, assets-path, or head-widgets on either public page are rejected instead of silently making private content guest-visible. Review any new global or shared assets separately before deployment.
 
 `projects update-config`, `runtime maintain`, and package-owned `refresh projects` detect the trusted pair of public pages with authenticated columns and regenerate both project layouts; they do not rely on inventory audience metadata. Malformed or partial mode fails closed. Existing non-optional configs retain their ordinary private rendering. After candidate installation, operators still need to validate anonymous/authenticated navigation, direct private URLs, content APIs, logout and cache headers on the actual site; generating a candidate alone does not establish those gates.
 

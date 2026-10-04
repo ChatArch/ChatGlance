@@ -33,7 +33,7 @@ chatglance refresh --json-output --no-restart
 
 ## 部署后的阅读与安全验收
 
-1. 在目标**同一网址**匿名读公开首页和 `/项目`，检查导航、内容接口、HTML/JSON/缓存均没有 Private 标识、URL、计数或 CLI/Env。
+1. 在目标**同一网址**匿名读公开首页和 `/projects`，检查导航、内容接口、HTML/JSON/缓存均没有 Private 标识、URL、计数或 CLI/Env；验证旧 `/项目` 精确重定向。
 2. 用现有 Glance 账号登录，读同一路径确认全量 Public/Private/Unknown；直访未授权页面和内容接口应受服务器保护。
 3. 注销并刷新、返回和再次读取，确认私有响应不能从缓存复现；移动/桌面导航均须手工检查。
 4. 确认实际 Glance 可执行文件具有 `public`、`authenticated-columns` 能力，并保留升级前配置与回滚方案。**不要**把静态文档站构建成功当作这些结果。

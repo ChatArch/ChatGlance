@@ -437,7 +437,7 @@ def test_http_post_route_checks_session_and_returns_redacted_json(manual, monkey
         def __init__(self, address, handler):
             self.handler = handler
 
-    monkeypatch.setattr(module, "HTTPServer", NoSocketServer)
+    monkeypatch.setattr(module, "ThreadingHTTPServer", NoSocketServer)
     monkeypatch.setattr(module, "ControlApp", lambda **kwargs: app)
     server = module.make_control_server(runtime_home=app.runtime_home,
                                         home=app.home, public_origin=ORIGIN, port=0)

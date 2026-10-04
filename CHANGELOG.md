@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add authenticated manual refresh controls for the projects and servers pages, with single-flight jobs, observed snapshot time and shared native refresh locking. Completion reloads the owning page's cards. Add revision-checked private server notes that survive collection; saving re-renders the existing snapshot and updates cards without probing hosts.
+- Use `/projects` as the canonical slug for “项目” in normal and optional-login layouts. An exact reverse-proxy redirect for `/项目` remains a deployment dependency.
+
 ## 0.1.19 - 2026-10-01
 
 - Add an authenticated “强制用一张卡” control with separate confirmation; it skips automatic business thresholds and cooldowns without changing saved settings, while requiring fresh exact-card reads, durable duplicate protection and verified readback. No-JavaScript or cancelled submissions cannot consume.
