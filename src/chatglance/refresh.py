@@ -194,7 +194,8 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
         data = apply_server_inventory_config(data, inventory)
         if previous and server_status_regressions(previous, data) and not allow_offline_regression:
             raise RefreshError("server offline regression; previous snapshot retained")
-        return PageUpdate(key, data, build_servers_page(data, **page_options_from_inventory_config(inventory)))
+        from .page_control import overlay_notes
+        return PageUpdate(key, data, build_servers_page(overlay_notes(root, data), **page_options_from_inventory_config(inventory)))
     from .project_inventory import RefreshOptions, refresh_project_inventory
     from .projects import build_projects_page
     owner = collection.projects_owner or (previous.get("source") or {}).get("owner") or "ChatArch"

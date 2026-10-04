@@ -6,7 +6,7 @@ from dataclasses import asdict
 import hashlib
 import hmac
 from html import escape
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
@@ -151,25 +151,27 @@ class ControlApp:
             return fallback
 
     def token(self, cookie):
-        now = time.monotonic()
-        self.tokens = {
-            key: value for key, value in self.tokens.items() if value[1] > now
-        }
-        if len(self.tokens) >= 128:
-            self.tokens.pop(next(iter(self.tokens)))
-        nonce = secrets.token_urlsafe(24)
-        self.tokens[nonce] = (hashlib.sha256(cookie.encode()).hexdigest(), now + 600)
-        return nonce
+        with self.lock:
+            now = time.monotonic()
+            self.tokens = {
+                key: value for key, value in self.tokens.items() if value[1] > now
+            }
+            if len(self.tokens) >= 128:
+                self.tokens.pop(next(iter(self.tokens)))
+            nonce = secrets.token_urlsafe(24)
+            self.tokens[nonce] = (hashlib.sha256(cookie.encode()).hexdigest(), now + 600)
+            return nonce
 
     def consume_token(self, cookie, token):
-        saved = self.tokens.pop(token, None)
-        actual = hashlib.sha256(cookie.encode()).hexdigest()
-        if (
-            not saved
-            or saved[1] <= time.monotonic()
-            or not hmac.compare_digest(saved[0], actual)
-        ):
-            raise ControlError("操作凭据已失效，请刷新小窗", 403)
+        with self.lock:
+            saved = self.tokens.pop(token, None)
+            actual = hashlib.sha256(cookie.encode()).hexdigest()
+            if (
+                not saved
+                or saved[1] <= time.monotonic()
+                or not hmac.compare_digest(saved[0], actual)
+            ):
+                raise ControlError("操作凭据已失效，请刷新小窗", 403)
 
     def page(self, profile, cookie):
         _, policies, revision = self.flags(profile)
@@ -328,6 +330,8 @@ def make_control_server(
         authenticate=authenticate,
         diagnose=diagnose,
     )
+    from .page_control import PageControlApp, PageControlError, CONTROL_JS, render_page, publish_notes
+    page_app = PageControlApp(runtime_home, public_origin)
 
     class Handler(BaseHTTPRequestHandler):
         def setup(self):
@@ -344,6 +348,7 @@ def make_control_server(
             *,
             location=None,
             content_type="text/html; charset=utf-8",
+            csp=CONTROL_CSP,
         ):
             payload = body.encode()
             self.send_response(status)
@@ -352,7 +357,7 @@ def make_control_server(
             self.send_header("Cache-Control", "no-store")
             self.send_header(
                 "Content-Security-Policy",
-                CONTROL_CSP,
+                csp,
             )
             self.send_header("X-Content-Type-Options", "nosniff")
             if location:
@@ -382,6 +387,19 @@ def make_control_server(
                         200, '{"status":"ok"}', content_type="application/json"
                     )
                     return
+                if target.path.startswith("/pages/"):
+                    cookie = self.check_auth()
+                    if target.path == "/pages/control.js" and not target.query:
+                        self.respond(200, CONTROL_JS, content_type="text/javascript; charset=utf-8", csp="default-src 'none'")
+                        return
+                    query = parse_qs(target.query, max_num_fields=2)
+                    if target.path == "/pages/status" and set(query) == {"page"} and len(query["page"]) == 1:
+                        self.respond(200, json.dumps(page_app.status(query["page"][0])), content_type="application/json")
+                        return
+                    if target.path == "/pages/" and set(query) in ({"page"}, {"page", "alias"}) and all(len(value) == 1 for value in query.values()):
+                        self.respond(200, render_page(page_app, query["page"][0], cookie, query.get("alias", [None])[0]), csp="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'self'; base-uri 'none'")
+                        return
+                    raise ControlError("页面不存在", 404)
                 if target.path != "/":
                     raise ControlError("页面不存在", 404)
                 cookie = self.check_auth()
@@ -391,12 +409,34 @@ def make_control_server(
                 self.respond(200, app.page(query["profile"][0], cookie))
             except ControlError as error:
                 self.handle_error(error)
+            except PageControlError as error:
+                self.handle_error(ControlError(str(error), error.status))
             except Exception:
                 self.handle_error(ControlError("判据暂不可用，请稍后刷新", 503))
 
         def do_POST(self):
             try:
                 target = urlsplit(self.path)
+                if target.path in ("/pages/refresh", "/pages/note") and not target.query:
+                    cookie = self.check_auth()
+                    if self.headers.get("Content-Type", "").split(";")[0] != "application/x-www-form-urlencoded":
+                        raise ControlError("请求格式无效", 415)
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if not 0 < length <= 8192:
+                        raise ControlError("请求过长", 413)
+                    raw = parse_qs(self.rfile.read(length).decode(), keep_blank_values=True, max_num_fields=6)
+                    if any(len(value) != 1 for value in raw.values()):
+                        raise ControlError("不接受重复参数")
+                    values = {key: value[0] for key, value in raw.items()}
+                    if target.path == "/pages/refresh":
+                        result = page_app.start(values, cookie, self.headers.get("Origin"))
+                    else:
+                        if set(values) != {"alias", "note", "revision", "action", "csrf"} or values["action"] != "save":
+                            raise ControlError("操作参数不完整")
+                        page_app.verify(values, cookie, self.headers.get("Origin"))
+                        result = {"state": "saved", **publish_notes(page_app.root, values["alias"], values["note"], values["revision"])}
+                    self.respond(200, json.dumps(result, ensure_ascii=False), content_type="application/json")
+                    return
                 if target.query or target.path not in ("/toggle", "/use-credit"):
                     raise ControlError("操作不存在", 404)
                 cookie = self.check_auth()
@@ -426,23 +466,32 @@ def make_control_server(
                 if urlsplit(self.path).path == "/use-credit":
                     self.respond(error.status, '{"state":"unmet","reason":"invalid_request"}',
                                  content_type="application/json")
+                elif urlsplit(self.path).path.startswith("/pages/"):
+                    self.respond(error.status, json.dumps({"error": str(error)}, ensure_ascii=False), content_type="application/json")
                 else:
                     self.handle_error(error)
+            except PageControlError as error:
+                self.respond(error.status, json.dumps({"error": str(error)}, ensure_ascii=False), content_type="application/json")
             except (ValueError, UnicodeError):
                 if urlsplit(self.path).path == "/use-credit":
                     self.respond(400, '{"state":"unmet","reason":"invalid_request"}',
                                  content_type="application/json")
+                elif urlsplit(self.path).path.startswith("/pages/"):
+                    self.respond(400, '{"error":"请求格式无效"}', content_type="application/json")
                 else:
                     self.handle_error(ControlError("请求格式无效"))
             except Exception:
                 if urlsplit(self.path).path == "/use-credit":
                     self.respond(503, '{"state":"uncertain","reason":"unavailable"}',
                                  content_type="application/json")
+                elif urlsplit(self.path).path.startswith("/pages/"):
+                    self.respond(503, '{"error":"操作未完成，请刷新核对"}', content_type="application/json")
                 else:
                     self.handle_error(ControlError("操作未完成，请刷新核对", 503))
 
-    class Server(HTTPServer):
+    class Server(ThreadingHTTPServer):
         allow_reuse_address = True
+        daemon_threads = True
 
     server = Server((host, port), Handler)
     server.control_app = app

@@ -6,11 +6,11 @@
 
 维护版 [ChatArch/glance chatarch-v0.1.0](https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0) 提供 `public: true` 与 `authenticated-columns`：有效会话时服务端以认证列**替换**普通 `columns`。访客只读普通列；其它页面默认仍需认证。官方 Glance v0.8.5 无此能力；从维护版发布页下载 Linux amd64 资产并用附带的 `SHA256SUMS` 校验，不能只升级 Python 包。
 
-| 同一 `/项目` 页面 | 访客 `columns` | 有效会话 `authenticated-columns` |
+| 同一 `/projects` 页面 | 访客 `columns` | 有效会话 `authenticated-columns` |
 |---|---|---|
 | 仓库 | 仅 literal `private: false` | 全部 Public/Private/Unknown |
 | 信息 | 从 allowlist 重新计算统计/分类，无私有 CLI、Env 或计数 | 全量细节、CLI/Env 的**结构描述**及可见性标记 |
-| 路由 | 原 `项目` 名称与 `/项目` slug | 同一 slug，不再开第二公开站点 |
+| 路由 | 保留 `项目` 名称，规范 slug 为 `/projects` | 同一 slug；旧 `/项目` 由代理精确重定向 |
 
 首页同样有访客的固定书签列和原有私有首页的认证列；服务器、网站服务、订阅等页面不能因为入口公开而放宽。访客导航不包含这些页面，直访和内容接口要由 Glance 验证会话。`auth` 与受信的 `server` 路由不变；共享 `document.head`、`head-widgets` 和可访问的私有资产不被悄悄复制：不安全时直接拒绝候选。读者需在实际部署时核验缓存的 `no-store` / `Vary: Cookie` 及注销后的行为。
 

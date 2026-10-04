@@ -33,7 +33,7 @@ The account popup's **强制用一张卡** (force one credit) skips automatic en
 
 ## Post-deployment functional and security acceptance
 
-1. At the **same URL**, read guest home and `/项目`; inspect navigation, content APIs, HTML/JSON/caches for zero Private identifiers, URLs, counts, or CLI/Env details.
+1. At the **same URL**, read guest home and `/projects`; inspect navigation, content APIs, HTML/JSON/caches for zero Private identifiers, URLs, counts, or CLI/Env details; verify the exact legacy `/项目` redirect.
 2. Sign in with an existing Glance account and inspect all Public/Private/Unknown rows at the same path. Direct visits to private pages and content APIs must be server-protected.
 3. Log out, reload, navigate back, and fetch again; private responses must not be recoverable from caches. Test mobile and desktop navigation manually.
 4. Identify the actual Glance executable with both `public` and `authenticated-columns`, and retain pre-upgrade config and rollback options. **Do not** mistake a static docs build for this evidence.

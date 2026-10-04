@@ -25,7 +25,7 @@ chatglance access render-single-origin-optional-login \
   --output candidate.yml
 ```
 
-Only completion status is printed, never `auth` or private rows. The output must differ from its inputs and is atomically written at `0600`. The original home, `/项目` slug, and all other login-required pages retain their identities. Making home public does not make other pages public.
+Only completion status is printed, never `auth` or private rows. The output must differ from its inputs and is atomically written at `0600`. The original home and all other login-required pages retain their identities. The project title stays “项目”, but its canonical slug is `/projects` (deploy an exact proxy redirect for `/项目`). Making home public does not make other pages public.
 
 ## 3. Validate, review, then let operators decide on deployment
 

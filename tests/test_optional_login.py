@@ -43,14 +43,14 @@ def test_single_origin_optional_login_contract(private_config, inventory):
     assert result["auth"] == private_config["auth"]
     assert result["server"] == private_config["server"]
     assert "SecretBrand" not in json.dumps(result)
-    assert home["slug"] == "home" and projects["slug"] == "项目"
+    assert home["slug"] == "home" and projects["slug"] == "projects"
     assert [page["name"] for page in result["pages"]] == ["ChatArch", "项目", "服务器"]
     assert home["public"] is projects["public"] is True
     assert servers.get("public") is not True and servers["columns"] == private_config["pages"][2]["columns"]
     guest = json.dumps([home["columns"], projects["columns"]], ensure_ascii=False)
     logged_in = json.dumps([home["authenticated-columns"], projects["authenticated-columns"]], ensure_ascii=False)
     assert "private-home-widget" not in guest and "SecretRow" not in guest and "UnknownRow" not in guest
-    assert '"27"' not in guest and "PublicRow" in guest and "/项目" in guest
+    assert '"27"' not in guest and "PublicRow" in guest and "/projects" in guest
     assert "private-home-widget" in logged_in and "SecretRow" in logged_in and "UnknownRow" in logged_in
     assert "Private" in logged_in and "Unknown" in logged_in and "Public" in logged_in
     assert private_config["pages"][0].get("public") is None
@@ -74,7 +74,7 @@ def test_maintenance_and_refresh_keep_optional_login(private_config, inventory):
     fresh = {**inventory, "repositories": inventory["repositories"][:1]}
     for updated in (replace_projects_page(initial, fresh), build_maintained_config(initial, fresh)):
         page = updated["pages"][1]
-        assert page["public"] is True and page["slug"] == "项目"
+        assert page["public"] is True and page["slug"] == "projects"
         assert "SecretRow" not in json.dumps(page["columns"])
         assert "PublicRow" in json.dumps(page["authenticated-columns"])
     _replace_page(initial, build_projects_page(fresh), inventory=fresh)
@@ -129,7 +129,7 @@ def test_candidate_cli_private_output_and_errors(tmp_path, private_config, inven
     assert result.exit_code == 0, result.output
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
     assert "synthetic-secret" not in result.output and "SecretRow" not in result.output
-    assert yaml.safe_load(output.read_text())["pages"][1]["slug"] == "项目"
+    assert yaml.safe_load(output.read_text())["pages"][1]["slug"] == "projects"
     alias = runner.invoke(main, args[:-1] + [str(config)])
     assert alias.exit_code != 0 and config.read_text() == yaml.safe_dump(private_config, allow_unicode=True)
     assert "synthetic-secret" not in alias.output
@@ -199,7 +199,7 @@ def test_native_refresh_projects_retains_optional_columns(tmp_path, private_conf
     result = pipeline.refresh_runtime(root, pages=["projects"], restart=False)
     assert result["ok"] is True
     page = yaml.safe_load(source.read_text())["pages"][1]
-    assert page["public"] is True and page["slug"] == "项目"
+    assert page["public"] is True and page["slug"] == "projects"
     assert "SecretRow" not in json.dumps(page["columns"])
     assert "PublicRow" in json.dumps(page["authenticated-columns"])
     assert stat.S_IMODE(source.stat().st_mode) == 0o600

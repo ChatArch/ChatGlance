@@ -8,7 +8,7 @@ ChatGlance **generates configuration and supports operations** for Glance dashbo
 
     ---
 
-    [Projects and access](projects.md) explains `public: true`, `authenticated-columns`, and the permission boundary at the same `/项目` path. A candidate config does **not** deploy the site.
+    [Projects and access](projects.md) explains `public: true`, `authenticated-columns`, and the permission boundary at the same `/projects` path. A candidate config does **not** deploy the site.
 
 -   :material-rocket-launch-outline: **Build a customizable site**
 

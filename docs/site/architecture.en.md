@@ -15,7 +15,7 @@ Candidate glance.yml / page fragments ── Glance config:validate ──► op
 
 | Area | ChatGlance owns | Glance / operators own |
 |---|---|---|
-| Projects | GitHub metadata, public allowlist, category/version, structural CLI/Env descriptions | Session decisions, authenticated columns at the same `/项目` path, private API isolation |
+| Projects | GitHub metadata, public allowlist, category/version, structural CLI/Env descriptions | Session decisions, authenticated columns at the same `/projects` path, private API isolation |
 | Servers | Read-only snapshots for explicit aliases, `server-stats` disks | SSH credentials, permissions, deployment and uptime |
 | Websites | Reviewed list, SVG covers, optional monitoring status | URL availability, assets and external network access |
 | Accounts | Redacted quota/reset calendar, manual toggles and scheduled decisions | Existing authentication, per-account policies and authorized consumption |

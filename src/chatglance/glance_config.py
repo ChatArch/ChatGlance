@@ -6,7 +6,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Iterator, Mapping, cast
 
-from .projects import LEGACY_PAGE_NAMES, PAGE_NAME, build_projects_page, dump_yaml, load_inventory
+from .projects import LEGACY_PAGE_NAMES, PAGE_NAME, PAGE_SLUG, build_projects_page, dump_yaml, load_inventory
 
 
 def load_yaml(path: str | Path) -> dict[str, Any]:
@@ -39,6 +39,10 @@ def replace_projects_page(config: dict[str, Any], inventory: dict[str, Any], *, 
             raise ValueError("optional-login project name cannot be changed")
         updated = deepcopy(config)
         updated["pages"] = [_project_page(inventory, page) if page.get("name") == PAGE_NAME else page for page in updated["pages"]]
+        from .access import build_public_home_page
+        for page in updated["pages"]:
+            if page.get("name") == "ChatArch":
+                page["columns"] = build_public_home_page(projects_slug=PAGE_SLUG)["columns"]
         return updated
     updated = deepcopy(config)
     pages = updated.setdefault("pages", [])
