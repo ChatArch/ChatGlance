@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.20 - 2026-10-05
 
 - Derive default SVG destination labels from each service public URL; omit credentials, query strings and fragments.
 - Resolve website-service domain/Uptime defaults from runtime inventory or typed ChatEnv, with no production-domain fallback.
