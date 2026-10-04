@@ -1,5 +1,9 @@
 # Native CLI deployment contract
 
+## Legacy projects URL
+
+After `/projects` goes live, add an **exact** top-level HTTPS proxy redirect from `/项目` and its percent-encoded path `/%E9%A1%B9%E7%9B%AE` to `/projects`, retaining the query string. Do not add a duplicate Glance page. The existing `/_chatglance/reset-policy/` proxy strips that prefix and serves `/pages/` from the same authenticated loopback process; no extra upstream is needed. Check both legacy URLs and the navigation after deployment. This configuration change is not made by the package.
+
 This page describes the portable deployment contract. Concrete hostnames, account identities, credentials, live paths and acceptance records belong in private runtime configuration and workspace reports, not this repository.
 
 ## Ownership

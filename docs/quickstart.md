@@ -242,9 +242,12 @@ chatglance sites collect \
 chatglance sites export-covers \
   --data ~/.chatarch/glance/data/site-services.json \
   --output-dir playground/site-covers \
-  --public-base-url https://share.public.example.org/chatglance-site-covers/ \
-  --updated-data ~/.chatarch/glance/data/site-services.json
+  --public-base-url https://share.public.example.org/chatglance-site-covers/
+```
 
+上面的导出只生成可选 SVG 文件，不修改后续用于渲染的 inventory，因此默认仍使用内联封面。需要显式外部封面时，另行上传并配置 `cover_url`。
+
+```bash
 chatglance sites render-page \
   --data ~/.chatarch/glance/data/site-services.json \
   --output ~/.chatarch/glance/data/site-services-page.yml

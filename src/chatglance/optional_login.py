@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .access import CandidateWriteError, _absolute_path, _safe_output_directory, _regular_target_or_missing, _stage_bytes, _fsync_directory, build_public_home_page
-from .projects import PAGE_NAME, build_projects_page
+from .projects import PAGE_NAME, PAGE_SLUG, build_projects_page
 
 
 def _pages(config: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -66,7 +66,7 @@ def _project_page(inventory: dict[str, Any], existing: Mapping[str, Any]) -> dic
     guest = build_projects_page(inventory, audience="public")
     authenticated = build_projects_page(inventory)
     result = _page_metadata(existing)
-    result["slug"] = existing.get("slug") or PAGE_NAME
+    result["slug"] = PAGE_SLUG
     result["public"] = True
     result["columns"] = guest["columns"]
     result["authenticated-columns"] = authenticated["columns"]
@@ -95,7 +95,7 @@ def build_single_origin_optional_login_config(config: Mapping[str, Any], invento
                 raise ValueError("home needs authenticated columns")
             page.clear()
             page.update(_page_metadata(home))
-            page["columns"] = build_public_home_page(projects_slug=projects.get("slug") or PAGE_NAME)["columns"]
+            page["columns"] = build_public_home_page(projects_slug=PAGE_SLUG)["columns"]
             page["authenticated-columns"] = deepcopy(original_columns)
             page["public"] = True
             page.pop("head-widgets", None)

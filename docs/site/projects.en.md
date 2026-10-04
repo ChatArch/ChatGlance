@@ -6,11 +6,11 @@ The full project inventory is **private server-side input**. Only source rows wh
 
 The maintained [ChatArch/glance chatarch-v0.1.0](https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0) release supplies `public: true` and `authenticated-columns`: with a valid session, Glance **replaces** ordinary `columns` server-side. Guests read only ordinary columns; other pages remain auth-required by default. Official Glance v0.8.5 lacks this capability. Download the Linux amd64 asset and verify its `SHA256SUMS`; upgrading only the Python package is insufficient.
 
-| Same `/项目` page | Guest `columns` | Valid session `authenticated-columns` |
+| Same `/projects` page | Guest `columns` | Valid session `authenticated-columns` |
 |---|---|---|
 | Rows | Only literal `private: false` | All rows labeled Public/Private/Unknown |
 | Details | Allowlisted fields with recomputed counts/categories; no private CLI, Env, or totals | Full details, CLI/Env **structural** descriptions, and visibility labels |
-| Route | Existing `项目` name and `/项目` slug | Identical slug; no second public site |
+| Route | Existing `项目` name, canonical `/projects` slug | Identical slug; exact proxy redirect for legacy `/项目` |
 
 Home similarly uses fixed guest bookmarks and the original private home in authenticated columns. Server, sites, and account pages do not become public merely because home is. Guest navigation excludes them, and Glance must check sessions for direct requests and content APIs. Existing `auth` and trusted `server` routing remain; unsafe shared `document.head`, `head-widgets`, and private assets are not silently copied into the guest shell: candidate generation rejects them. At deployment, verify `no-store` / `Vary: Cookie` caching and logout behavior.
 
