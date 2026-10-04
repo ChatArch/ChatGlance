@@ -26,20 +26,20 @@ def sample_sites_data() -> dict:
                 "kind": "Dashboard",
                 "cover_summary": "Status dashboard",
                 "description": "ChatArch dashboard.",
-                "public_url": "https://glance.public.wzhecnu.cn/",
-                "local_host": "glance.local.wzhecnu.cn",
+                "public_url": "https://glance.public.example.org/",
+                "local_host": "glance.internal.example.org",
                 "status": "healthy",
                 "status_code": 200,
-                "uptime_url": "https://uptime.public.wzhecnu.cn/endpoints/chatarch-services_glance",
+                "uptime_url": "https://uptime.public.example.org/endpoints/chatarch-services_glance",
             },
             {
                 "name": "zulip",
                 "title": "Zulip",
                 "description": "Structured realtime chat workspace.",
-                "public_url": "https://zulip.public.wzhecnu.cn/",
-                "local_host": "zulip.local.wzhecnu.cn",
+                "public_url": "https://zulip.public.example.org/",
+                "local_host": "zulip.internal.example.org",
                 "status": "unknown",
-                "uptime_url": "https://uptime.public.wzhecnu.cn/endpoints/chatarch-services_zulip",
+                "uptime_url": "https://uptime.public.example.org/endpoints/chatarch-services_zulip",
             },
         ],
     }
@@ -52,22 +52,22 @@ def test_render_sites_html_uses_cards_covers_public_buttons_and_hides_local_host
     assert "健康 1 个" in html
     assert "data:image/svg+xml;base64," in html
     assert "ChatArch dashboard." in html
-    assert "https://glance.public.wzhecnu.cn/" in html
+    assert "https://glance.public.example.org/" in html
     assert "打开" in html
     assert "↗" in html
     assert "Uptime" in html
-    assert "https://uptime.public.wzhecnu.cn/endpoints/chatarch-services_glance" in html
-    assert "glance.local.wzhecnu.cn" not in html
-    assert "zulip.local.wzhecnu.cn" not in html
+    assert "https://uptime.public.example.org/endpoints/chatarch-services_glance" in html
+    assert "glance.internal.example.org" not in html
+    assert "zulip.internal.example.org" not in html
 
 
 def test_render_sites_html_prefers_external_cover_url_when_present() -> None:
     data = sample_sites_data()
-    data["sites"][0]["cover_url"] = "https://share.public.wzhecnu.cn/covers/glance.svg"
+    data["sites"][0]["cover_url"] = "https://share.public.example.org/covers/glance.svg"
 
     html = render_sites_html(data)
 
-    assert "https://share.public.wzhecnu.cn/covers/glance.svg" in html
+    assert "https://share.public.example.org/covers/glance.svg" in html
     first_card = html.split("</article>", 1)[0]
     assert "data:image/svg+xml;base64," not in first_card
 
@@ -86,14 +86,14 @@ def test_site_card_keeps_repeated_kind_out_of_body_and_health_at_bottom() -> Non
 def test_site_visual_card_mode_uses_image_as_whole_card_and_keeps_footer_actions() -> None:
     data = sample_sites_data()
     data["sites"][0]["card_mode"] = "visual"
-    data["sites"][0]["cover_url"] = "https://share.public.wzhecnu.cn/covers/bilisum.png"
+    data["sites"][0]["cover_url"] = "https://share.public.example.org/covers/bilisum.png"
     data["sites"][0]["title"] = "BiliSum"
     data["sites"][0]["description"] = "Bilibili 视频摘要与内容理解入口。"
 
     html = render_sites_html(data)
     first_card = "<article" + html.split("<article", 1)[1].split("</article>", 1)[0]
 
-    assert "https://share.public.wzhecnu.cn/covers/bilisum.png" in first_card
+    assert "https://share.public.example.org/covers/bilisum.png" in first_card
     assert "<h3>" not in first_card
     assert "site-description" not in first_card
     assert "Bilibili 视频摘要与内容理解入口。" not in first_card
@@ -147,7 +147,9 @@ page:
   name: 网站服务
   slug: sites
   widget_title: 网站服务
-  uptime_base_url: https://uptime.public.wzhecnu.cn/
+  public_domain: public.example.org
+  local_domain: internal.example.org
+  uptime_base_url: https://uptime.public.example.org/
 sites:
   - name: glance
     title: Glance
@@ -162,9 +164,9 @@ sites:
     data = load_sites_inventory(inventory, generated_at="2026-08-12T03:55:00+08:00")
 
     assert data["counts"]["sites"] == 2
-    assert data["sites"][0]["public_url"] == "https://glance.public.wzhecnu.cn/"
-    assert data["sites"][0]["uptime_url"] == "https://uptime.public.wzhecnu.cn/endpoints/chatarch-services_glance"
-    assert data["sites"][0]["local_host"] == "glance.local.wzhecnu.cn"
+    assert data["sites"][0]["public_url"] == "https://glance.public.example.org/"
+    assert data["sites"][0]["uptime_url"] == "https://uptime.public.example.org/endpoints/chatarch-services_glance"
+    assert data["sites"][0]["local_host"] == "glance.internal.example.org"
 
 
 def test_apply_gatus_status_reads_latest_endpoint_results(tmp_path) -> None:
@@ -192,13 +194,13 @@ def test_apply_gatus_status_reads_latest_endpoint_results(tmp_path) -> None:
 def test_export_site_covers_writes_svg_files_and_attaches_public_urls(tmp_path) -> None:
     data = sample_sites_data()
 
-    updated = export_site_covers(data, tmp_path, public_base_url="https://share.public.wzhecnu.cn/covers/")
+    updated = export_site_covers(data, tmp_path, public_base_url="https://share.public.example.org/covers/")
 
     glance_cover = tmp_path / "glance.svg"
     zulip_cover = tmp_path / "zulip.svg"
     assert glance_cover.exists()
     assert zulip_cover.exists()
     assert "<svg" in glance_cover.read_text(encoding="utf-8")
-    assert updated["sites"][0]["cover_url"] == "https://share.public.wzhecnu.cn/covers/glance.svg"
-    assert updated["sites"][1]["cover_url"] == "https://share.public.wzhecnu.cn/covers/zulip.svg"
+    assert updated["sites"][0]["cover_url"] == "https://share.public.example.org/covers/glance.svg"
+    assert updated["sites"][1]["cover_url"] == "https://share.public.example.org/covers/zulip.svg"
     assert "cover_url" not in data["sites"][0]

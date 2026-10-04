@@ -102,6 +102,8 @@ chatglance refresh --scheduled --runtime-home "$HOME/.chatarch/glance" --json-ou
 
 Account requests use the profile's reverse-proxy Base URLs, and ChatCRS ignores local proxies. Do not prepend `proxy_on`. Select non-secret inputs explicitly with `--server-inventory`, `--sites-inventory`, `--gatus-db` and the other collector options. Omit `--scheduled` for non-consuming diagnostics.
 
+Website services use built-in SVG covers when `cover_url` is omitted; destination labels come from the actual `public_url`. Runtime inventory or the existing ChatEnv profile supplies domain/Uptime defaults; see [website-service configuration](docs/site-services.en.md). Refresh through native `chatglance refresh sites`, without checkout scripts or an image host.
+
 Read the installed command surface with `chatglance --tree` / `--tree-brief`; see the [segmented CLI reference](docs/site/cli.en.md) or the [complete registry tree](docs/cli-tree.md).
 
 ## CLI examples
@@ -187,7 +189,7 @@ chatglance sites collect \
 chatglance sites export-covers \
   --data ~/.chatarch/glance/data/site-services.json \
   --output-dir playground/site-covers \
-  --public-base-url https://share.public.wzhecnu.cn/chatglance-site-covers/ \
+  --public-base-url https://share.public.example.org/chatglance-site-covers/ \
   --updated-data ~/.chatarch/glance/data/site-services.json
 
 chatglance sites render-page \

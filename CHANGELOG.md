@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Derive default SVG destination labels from each service public URL; omit credentials, query strings and fragments.
+- Resolve website-service domain/Uptime defaults from runtime inventory or typed ChatEnv, with no production-domain fallback.
+- Document portable default inline SVG covers and optional explicit external covers.
 - Add authenticated manual refresh controls for the projects and servers pages, with single-flight jobs, observed snapshot time and shared native refresh locking. Completion reloads the owning page's cards. Add revision-checked private server notes that survive collection; saving re-renders the existing snapshot and updates cards without probing hosts.
 - Use `/projects` as the canonical slug for “项目” in normal and optional-login layouts. An exact reverse-proxy redirect for `/项目` remains a deployment dependency.
 

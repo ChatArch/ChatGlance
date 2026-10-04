@@ -104,6 +104,8 @@ chatglance refresh --scheduled --runtime-home "$HOME/.chatarch/glance" --json-ou
 
 账号请求使用 profile 中的反向代理 Base URL，ChatCRS 忽略所有本地 Proxy；不在刷新命令前调用 `proxy_on`。可用 `--server-inventory`、`--sites-inventory`、`--gatus-db` 和其他采集参数显式选择非敏感配置。只读诊断不要传 `--scheduled`。
 
+网站服务默认省略 `cover_url`，使用内置 SVG，地址标签来自实际 `public_url`；域名与 Uptime 默认入口通过 runtime inventory 或已有 ChatEnv profile 管理，见[网站服务配置](docs/site-services.md)。用原生 `chatglance refresh sites` 刷新，不依赖仓库脚本或图床。
+
 站点 [分段 CLI 索引](docs/site/cli.md) 按操作边界组织；需要完整注册树可见 [CLI 树](docs/cli-tree.md)，或运行 `chatglance --tree` / `chatglance --tree-brief`。
 
 ## CLI 示例
@@ -189,7 +191,7 @@ chatglance sites collect \
 chatglance sites export-covers \
   --data ~/.chatarch/glance/data/site-services.json \
   --output-dir playground/site-covers \
-  --public-base-url https://share.public.wzhecnu.cn/chatglance-site-covers/ \
+  --public-base-url https://share.public.example.org/chatglance-site-covers/ \
   --updated-data ~/.chatarch/glance/data/site-services.json
 
 chatglance sites render-page \
