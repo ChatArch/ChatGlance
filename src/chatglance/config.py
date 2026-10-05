@@ -43,7 +43,7 @@ class ChatGlanceConfig(BaseEnvConfig):
         desc="Optional HTTP(S) base URL of the website-services Uptime dashboard.",
     )
     CHATGLANCE_ACCOUNT_LIMITS_PROFILES = EnvField(
-        "CHATGLANCE_ACCOUNT_LIMITS_PROFILES", default="",
+        "CHATGLANCE_ACCOUNT_LIMITS_PROFILES", default="", is_sensitive=True,
         desc="Space- or comma-separated Codex profiles for manual refresh; empty uses the current snapshot.",
     )
 
