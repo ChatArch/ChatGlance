@@ -1,0 +1,939 @@
+
+<!doctype html>
+<html lang="zh" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="ChatGlance 的单入口访问、页面生成与安全刷新说明">
+      
+      
+      
+        <link rel="canonical" href="https://arch.gh.wzhecnu.cn/ChatGlance/deployment/">
+      
+      
+        <link rel="prev" href="../architecture/">
+      
+      
+      
+        
+          <link rel="alternate" href="./" hreflang="zh">
+        
+          <link rel="alternate" href="../en/deployment/" hreflang="en">
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>自包含运行 - ChatGlance</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cli" class="md-skip">
+          跳转至
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="页眉">
+    <a href=".." title="ChatGlance" class="md-header__button md-logo" aria-label="ChatGlance" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ChatGlance
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              自包含运行
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="选择当前语言">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="./" hreflang="zh" class="md-select__link">
+              简体中文
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="../en/deployment/" hreflang="en" class="md-select__link">
+              English
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜索" placeholder="搜索" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="查找">
+        
+        <button type="reset" class="md-search__icon md-icon" title="清空当前内容" aria-label="清空当前内容" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜索引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/ChatArch/ChatGlance" title="前往仓库" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="导航栏" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="ChatGlance" class="md-nav__button md-logo" aria-label="ChatGlance" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    ChatGlance
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ChatArch/ChatGlance" title="前往仓库" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    首页
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    快速开始
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    命令索引
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../projects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    项目与访问
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    刷新与运行
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    架构与能力
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    自包含运行
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    自包含运行
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        五层边界与兼容性
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        完整通用目录
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        从零配置、安装、检查、启动
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        原运行目录原地接管，不导出密钥
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        控制、维护、更新与回滚
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        全部打包公共资产清单
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目录">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目录
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        五层边界与兼容性
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        完整通用目录
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        从零配置、安装、检查、启动
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        原运行目录原地接管，不导出密钥
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        控制、维护、更新与回滚
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        全部打包公共资产清单
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="cli">自包含部署与 CLI 管理</h1>
+<h2 id="_1">五层边界与兼容性</h2>
+<ol>
+<li>Git 跟踪的源码负责公共模板、Python API 与文档。</li>
+<li>安装的 <strong>ChatGlance 0.2.0 wheel</strong> 负责全部业务逻辑；服务入口不依赖 checkout。</li>
+<li>单独维护的 <strong>ChatArch/glance chatarch-v0.2.0</strong> 负责网页、登录和会话；不需要新 Go 特性时兼容维护版 0.1.0。未修改上游不能作为登录后端的直接替代品。</li>
+<li>标准 typed ChatEnv 保存敏感配置，home 下 <code>glance/</code> 保存私有运行配置、清单、快照与已校验二进制。</li>
+<li>可选 Linux user-systemd 单元是薄入口；nginx 由操作者单独管理。</li>
+</ol>
+<p>管理部署支持 Linux/POSIX、user systemd、隔离的 Python 安装环境与适合目标架构的维护版 Go 二进制。init/渲染可以不使用 systemd。安装不自动发布、迁移生产、启动服务、发现 SSH 主机或消费重置卡。本指南不是已完成生产切换的声明。</p>
+<h2 id="_2">完整通用目录</h2>
+<div class="highlight"><pre><span></span><code>repository/
+├── src/chatglance/managed.py + managed_cli.py  # 可导入逻辑与薄 CLI
+├── src/chatglance/resources/                 # 下表列出的全部公共资源
+├── scripts/ + examples/                     # 旧薄入口、通用示例
+└── docs/                                    # 双语文档、真实命令树
+CHATARCH_HOME/
+├── envs/                                    # 标准私有 provider 存储
+└── glance/
+    ├── bin/glance + glance.provenance.json   # 已校验程序及来源摘要
+    ├── config/                              # ENV 引用、私有主机/站点清单
+    ├── data/ + cache/ + logs/                # 快照、共享刷新锁
+    ├── scripts/                             # 打包的薄 shell 入口
+    └── private/managed.json + managed-backups/ # 所有权清单与私有备份
+user-systemd-directory/
+├── chatarch-glance.service
+├── chatarch-glance-refresh-pages.service + .timer
+├── chatglance-reset-controls.service        # 可选认证控制
+└── chatarch-glance-maintenance.service + .timer # 仅显式启用
+</code></pre></div>
+<p>默认运行目录为 <code>chatenv.get_paths().home_dir/glance</code>；<code>CHATARCH_HOME</code> 选择 provider home，<code>--runtime-home</code> 选择运行目录。管理清单记录有效 provider home，刷新、校验与控制均使用同一环境。登录名、账号绑定、主机清单和快照都是私有输入，不进入公共源码。</p>
+<h2 id="_3">从零配置、安装、检查、启动</h2>
+<p>先在隔离环境安装经过审查的 wheel，再使用该环境 CLI。下列命令也是从零安装 shell 流程；打包的 shell 脚本仅转交 CLI。</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">CHATARCH_HOME</span><span class="o">=</span><span class="s2">"</span><span class="nv">$PWD</span><span class="s2">/isolated-home"</span>
+chatenv<span class="w"> </span>status
+chatenv<span class="w"> </span>init<span class="w"> </span>-t<span class="w"> </span>chatglance<span class="w"> </span>-i
+chatenv<span class="w"> </span><span class="nb">set</span><span class="w"> </span>-i
+chatglance<span class="w"> </span>runtime<span class="w"> </span>paths
+chatglance<span class="w"> </span>runtime<span class="w"> </span>init<span class="w"> </span>--with-auth
+chatglance<span class="w"> </span>runtime<span class="w"> </span>install-binary<span class="w"> </span>--archive<span class="w"> </span>reviewed.tar.gz<span class="w"> </span>--sha256<span class="w"> </span>EXPECTED_SHA256<span class="w"> </span>--binary-version<span class="w"> </span>chatarch-v0.2.0+40_LOWERCASE_HEX
+chatglance<span class="w"> </span>runtime<span class="w"> </span>install<span class="w"> </span>--page<span class="w"> </span>projects<span class="w"> </span>--interval<span class="w"> </span>30min
+chatglance<span class="w"> </span>runtime<span class="w"> </span>install<span class="w"> </span>--page<span class="w"> </span>projects<span class="w"> </span>--interval<span class="w"> </span>30min<span class="w"> </span>--apply
+chatglance<span class="w"> </span>runtime<span class="w"> </span>check
+chatglance<span class="w"> </span>runtime<span class="w"> </span>status<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--live
+chatglance<span class="w"> </span>runtime<span class="w"> </span>start<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--apply
+</code></pre></div>
+<p>摘要和版本占位符必须替换为<strong>实际观察并审查的发行产物信息</strong>。不猜测校验文件，不下载 unchecked latest。tar 中只允许一个普通 <code>glance</code> 文件；明确授权的 SHA256 允许执行有超时的 staged <code>--version</code>，要求精确的维护版标识 <code>chatarch-vMAJOR.MINOR.PATCH+40hex</code>。来源 JSON 记录实际 tag/source revision 和 archive/binary 摘要。</p>
+<p>用 <code>chatenv set -i</code> 交互保存 <code>CHATGLANCE_LOGIN_USER</code>、<code>CHATGLANCE_LOGIN_SECRET</code>（严格标准 base64，解码<strong>恰好 64 字节</strong>）及完整 bcrypt <code>CHATGLANCE_LOGIN_PASSWORD_HASH</code>，不在 argv 保存密码/密钥。<code>chatenv list</code>、<code>chatenv use -t chatglance PROFILE</code> 管理标准 profile。<strong>托管登录忽略继承的进程 <code>CHATGLANCE_LOGIN_*</code> 与索引 <code>CHATGLANCE_AUTH_*</code></strong>，启动/验证/控制服务只以选定 active EnvStore profile 为准。非认证的 owner、页面、cadence、端口、公网 origin 等配置仍允许进程环境优先；显式 CLI 参数覆盖默认。CRS consumerKey/OAuth/token 仍由原 provider 管理；GitHub 等使用共享 Token resolver，不新建密钥库。</p>
+<p>没有登录配置时省略 <code>--with-auth</code>；已有无认证配置不能被 init 悄悄升级。默认仅回环监听、空清单无网络调用；先审查并添加需要的页面。机器排除策略只写私有 runtime <code>server-inventory.yml</code> 的 <code>inventory.exclude</code> / <code>inventory.excludes</code>；源码仅排除通用 <code>local</code> / <code>localhost</code>。<code>default_candidates: false</code> 保持关闭。</p>
+<p><code>runtime install</code> 默认仅计划、无写入；<code>--apply</code>/<code>--yes</code> 才执行 Go/单元校验、私有备份、逐文件原子替换和 daemon-reload。<code>--enable</code>、<code>--start</code> 必须另行显式选择。未知文件和符号链接拒绝覆盖；<code>--adopt-units</code> 仅授权替换选定且审查过的旧单元。检查 systemd 实际 <code>FragmentPath</code>、<code>DropInPaths</code>、<code>EnvironmentFiles</code>、<code>ExecStart</code>；选定单元 <code>.service.d/*.conf</code> 覆盖必须额外使用 <code>--retire-dropins</code> 审核后私有备份、撤销并读回生效命令。其他覆盖或意外启动命令拒绝。路径正确引用空格/百分号，名称拒绝 URI/换行/specifier 注入。已有所有权拓扑不能被悄悄抛弃；停止并审查后再改变所有权。</p>
+<h2 id="_4">原运行目录原地接管，不导出密钥</h2>
+<p>只选择同一 provider home 的旧 runtime，先备份和 dry-run：</p>
+<div class="highlight"><pre><span></span><code>chatglance<span class="w"> </span>runtime<span class="w"> </span>adopt<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--public-origin<span class="w"> </span>https://example.invalid<span class="w"> </span>--control-port<span class="w"> </span><span class="m">5679</span>
+chatglance<span class="w"> </span>runtime<span class="w"> </span>adopt<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--public-origin<span class="w"> </span>https://example.invalid<span class="w"> </span>--control-port<span class="w"> </span><span class="m">5679</span><span class="w"> </span>--apply
+chatglance<span class="w"> </span>runtime<span class="w"> </span>install<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--web-unit<span class="w"> </span>chatarch-glance.service<span class="w"> </span>--refresh-unit<span class="w"> </span>chatarch-glance-refresh-pages.service<span class="w"> </span>--refresh-timer<span class="w"> </span>chatarch-glance-refresh-pages.timer<span class="w"> </span>--page<span class="w"> </span>servers<span class="w"> </span>--page<span class="w"> </span>account-limits<span class="w"> </span>--page<span class="w"> </span>projects<span class="w"> </span>--interval<span class="w"> </span>30min<span class="w"> </span>--adopt-units
+chatglance<span class="w"> </span>runtime<span class="w"> </span>import-env<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--file<span class="w"> </span>config/legacy.env<span class="w"> </span>--retire
+<span class="c1"># 审查 key 和 provider 冲突后为 import-env 添加 --retire --apply。</span>
+<span class="c1"># 审查旧单元 drop-in 后添加 --retire-dropins；审查计划后再添加 --apply。</span>
+</code></pre></div>
+<p>adopt 保留<strong>完全相同签名 key 和所有 bcrypt hash</strong>，因此既有登录会话保持有效。全部账号进入敏感 typed <code>CHATGLANCE_LOGIN_ACCOUNTS</code>，安全索引变量注入子进程；Go 校验通过后才把 auth/port 替换为 <code>${ENV_NAME}</code>。保留页面/组件语义，生成快照字节不变；YAML 格式和注释可能规范化。冲突默认失败，仅 <code>--replace-provider</code> 明确授权覆盖；其他 provider 策略不丢失。输入变更中止发布。dry-run 只报计数/键名；备份含原密钥，必须如 provider 一样保密，绝不能发布。</p>
+<p><code>runtime import-env --file config/NAME.env</code> 或 <code>private/NAME.env</code> 只读取选定、runtime 相对路径下的<strong>字面 env 赋值</strong>，不执行 shell。仅导入 ChatGlance typed schema 字段及旧 <code>PROFILES</code> 到 <code>CHATGLANCE_ACCOUNT_LIMITS_PROFILES</code>；<code>MODELS</code> 和其他未知键只报告<strong>键名</strong>，不隐式迁移。冲突需要 <code>--replace-provider</code>。<code>--retire --apply</code> 私有备份源文件、写 active provider，typed 读回成功后才删除旧文件；确认逐账号策略/登录配置后才通过 <code>runtime install --retire-dropins --adopt-units --apply</code> 撤销旧 EnvironmentFile 覆盖。绝不把 unit drop-in 当脚本执行；回滚编号可恢复 provider/源文件字节。</p>
+<p>采用原服务名，避免 portable 与原服务重复运行。显式 <code>--scheduled</code> 才允许既有逐账号策略执行；首次默认关闭，重装省略选项时保持原页面/cadence/scheduled。选 account-limits 不等于授权消费。原生刷新共享锁、校验和发布后，只在内容变化时对所属 web 服务重启一次；不强制 <code>--no-restart</code>，不增加 scheduler/无条件第二次重启。install/update/maintenance 在 collector active、activating、reloading 时拒绝冲突。maintenance 仅显式开启。</p>
+<h2 id="_5">控制、维护、更新与回滚</h2>
+<p>控制需要完整登录、私有 account-limits 页面、HTTPS <code>CHATGLANCE_PUBLIC_ORIGIN</code> 和回环控制端口。审查后 <code>runtime install --controls --page account-limits --apply</code> 安装，<code>runtime controls</code> 显式前台运行。可选 <code>runtime install --maintenance --apply</code>。不写重复凭据 EnvironmentFile。nginx 示例包含同源 <code>/_chatglance/reset-policy/</code>、登录路由及 <code>/项目</code> 到 <code>/projects</code> 旧路径重定向；操作者设置域名/TLS/上游端口，CLI 不安装或 reload nginx。</p>
+<div class="highlight"><pre><span></span><code>chatglance<span class="w"> </span>runtime<span class="w"> </span>check<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--live
+chatglance<span class="w"> </span>runtime<span class="w"> </span>restart<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span>
+chatglance<span class="w"> </span>runtime<span class="w"> </span>stop<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--apply
+chatglance<span class="w"> </span>runtime<span class="w"> </span>update<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--archive<span class="w"> </span>reviewed-next.tar.gz<span class="w"> </span>--sha256<span class="w"> </span>EXPECTED_SHA256<span class="w"> </span>--binary-version<span class="w"> </span>chatarch-v0.2.0+40_LOWERCASE_HEX<span class="w"> </span>--apply<span class="w"> </span>--restart
+chatglance<span class="w"> </span>runtime<span class="w"> </span>rollback<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--backup<span class="w"> </span>BACKUP_ID
+chatglance<span class="w"> </span>runtime<span class="w"> </span>rollback<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--backup<span class="w"> </span>BACKUP_ID<span class="w"> </span>--apply
+</code></pre></div>
+<p>start/stop/restart/update/rollback 默认仅计划；操作对象限制在所有权清单。check 对非托管 runtime 或生效 fragment/drop-in/environment/启动命令不匹配直接失败；区分 Python 安装、实际二进制版本/摘要、Go 配置和可选在线 PID；输出仅摘要/计数/存在性，不输出原 systemd 环境、登录材料或账号标识。update 必须提供校验产物，配置验证后才替换 binary/provenance，可选所属 web restart；失败则还原旧 binary，尝试正常重启此前运行的 web 并读回状态/PID；恢复失败明确报错。install 部分 enable/start 失败会撤销新动作，恢复文件/reload 并检查旧活跃单元。手动 rollback 预先检查全部目标和备份摘要，拒绝外部修改/未知文件；恢复文件并 reload，但<strong>不撤销 enable/start，也不自动重启旧进程</strong>，审查后显式 restart。</p>
+<h2 id="_6">全部打包公共资产清单</h2>
+<p>以下每项都在 <code>src/chatglance/resources/</code>，随源码提交跟踪，wheel/sdist 包含；<code>assets.json</code> 是机器可读清单。单元不包含敏感值。</p>
+<table>
+<thead>
+<tr>
+<th>仓库资源</th>
+<th>打包/运行作用</th>
+<th>私有输入</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>glance.yml</code></td>
+<td><code>config/glance.yml</code> 起始模板</td>
+<td>登录 ENV 引用、审查页面/端口</td>
+</tr>
+<tr>
+<td><code>server-inventory.yml</code></td>
+<td>空主机清单</td>
+<td>SSH 别名与排除策略</td>
+</tr>
+<tr>
+<td><code>site-services.yml</code></td>
+<td>空站点清单</td>
+<td>审查站点</td>
+</tr>
+<tr>
+<td><code>reverse-proxy.example.conf</code></td>
+<td>nginx 审查示例</td>
+<td>域名/TLS/回环端口</td>
+</tr>
+<tr>
+<td><code>start.sh</code></td>
+<td>薄前台启动 wrapper</td>
+<td>ChatEnv home</td>
+</tr>
+<tr>
+<td><code>install.sh</code></td>
+<td>薄 init wrapper，非服务激活</td>
+<td>ChatEnv home</td>
+</tr>
+<tr>
+<td><code>refresh.sh</code></td>
+<td>薄原生刷新 wrapper</td>
+<td>选定页面</td>
+</tr>
+<tr>
+<td><code>web.service</code></td>
+<td>已安装包 env bridge 启动 Go</td>
+<td>typed 登录配置</td>
+</tr>
+<tr>
+<td><code>refresh.service</code></td>
+<td>所属原生刷新</td>
+<td>清单与 provider 策略</td>
+</tr>
+<tr>
+<td><code>refresh.timer</code></td>
+<td>页面刷新 cadence</td>
+<td>审查 schedule</td>
+</tr>
+<tr>
+<td><code>controls.service</code></td>
+<td>可选认证开关服务</td>
+<td>Go 登录/provider 账号</td>
+</tr>
+<tr>
+<td><code>maintenance.service</code></td>
+<td>可选原生维护</td>
+<td>运行配置</td>
+</tr>
+<tr>
+<td><code>maintenance.timer</code></td>
+<td>可选维护 cadence</td>
+<td>审查 schedule</td>
+</tr>
+<tr>
+<td><code>assets.json</code></td>
+<td>完整资源清单</td>
+<td>无</td>
+</tr>
+</tbody>
+</table>
+<p>可复用 API：<code>chatglance.managed.install_runtime</code>、<code>adopt_runtime</code>、<code>runtime_status</code>、<code>service_action</code>、<code>update_binary</code>、<code>rollback_runtime</code>、<code>refresh_managed</code>、<code>maintain_managed</code>。旧 <code>render-portable</code> / <code>install-systemd</code> 保持兼容；新管理部署使用上述所有权流程。<a href="../cli/">CLI 参考</a> 与仓库 <code>docs/cli-tree.md</code> 对真实 <code>chatglance --tree</code> / <code>--tree-brief</code> 测试，参数以它们为准。</p>
+<p>源码专用旧开发入口（Git 跟踪、包含在 sdist，<strong>不是 wheel 生产入口</strong>）：</p>
+<table>
+<thead>
+<tr>
+<th>仓库路径</th>
+<th>源码/运行作用</th>
+<th>私有输入</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scripts/chatglance-from-source</code></td>
+<td>checkout 开发入口</td>
+<td>开发路径</td>
+</tr>
+<tr>
+<td><code>scripts/collect-codex-account-limits.py</code></td>
+<td>旧薄采集 wrapper</td>
+<td>既有 ChatCRS provider</td>
+</tr>
+<tr>
+<td><code>scripts/refresh-live-pages.sh</code></td>
+<td>旧开发刷新入口</td>
+<td>runtime home</td>
+</tr>
+<tr>
+<td><code>scripts/refresh-manual.sh</code></td>
+<td>旧手动刷新入口</td>
+<td>runtime home</td>
+</tr>
+<tr>
+<td><code>scripts/refresh-projects-page.sh</code></td>
+<td>旧项目页面入口</td>
+<td>私有项目清单</td>
+</tr>
+<tr>
+<td><code>scripts/refresh-server-status.sh</code></td>
+<td>旧服务器页面入口</td>
+<td>私有 SSH 清单</td>
+</tr>
+<tr>
+<td><code>scripts/refresh-sites-page.sh</code></td>
+<td>旧站点入口</td>
+<td>私有站点清单</td>
+</tr>
+<tr>
+<td><code>scripts/refresh-account-limits-page.sh</code></td>
+<td>旧账号入口</td>
+<td>既有 typed provider</td>
+</tr>
+<tr>
+<td><code>examples/server-inventory.example.yml</code></td>
+<td>通用源码主机示例</td>
+<td>真实别名只在 runtime</td>
+</tr>
+<tr>
+<td><code>examples/site-services.example.yml</code></td>
+<td>通用源码站点示例</td>
+<td>真实站点只在 runtime</td>
+</tr>
+</tbody>
+</table>
+<p><code>assets.json</code> 同时列出 wheel 的 14 项资源（包括自身）及这 10 项源码专用资产。<code>src/chatglance/</code> 的安装包 Python 模块负责生产全部业务逻辑。<code>controls.service</code> 使用 <code>TasksMax=128</code>，不继承过小的旧 worker 限额。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.indexes", "content.code.copy", "search.suggest"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u590d\u5236", "clipboard.copy": "\u590d\u5236", "search.result.more.one": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.more.other": "\u5728\u8be5\u9875\u4e0a\u8fd8\u6709 # \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.none": "\u6ca1\u6709\u627e\u5230\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.one": "\u627e\u5230 1 \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.other": "# \u4e2a\u7b26\u5408\u6761\u4ef6\u7684\u7ed3\u679c", "search.result.placeholder": "\u952e\u5165\u4ee5\u5f00\u59cb\u641c\u7d22", "search.result.term.missing": "\u7f3a\u5c11", "select.version": "\u9009\u62e9\u5f53\u524d\u7248\u672c"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -480,6 +480,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portable runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -551,7 +578,7 @@
 <h1 id="projects-and-single-origin-optional-login">Projects and single-origin optional login</h1>
 <p>The full project inventory is <strong>private server-side input</strong>. Only source rows whose <code>private</code> field is literally boolean <code>false</code> may appear to guests. <code>true</code>, absent, and malformed flags must not. Public row URLs still pass an explicit field allowlist and external HTTPS checks. Never rely on CSS/JS to hide private rows.</p>
 <h2 id="two-server-side-layouts-at-the-same-path">Two server-side layouts at the same path</h2>
-<p>The maintained <a href="https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0">ChatArch/glance chatarch-v0.1.0</a> release supplies <code>public: true</code> and <code>authenticated-columns</code>: with a valid session, Glance <strong>replaces</strong> ordinary <code>columns</code> server-side. Guests read only ordinary columns; other pages remain auth-required by default. Official Glance v0.8.5 lacks this capability. Download the Linux amd64 asset and verify its <code>SHA256SUMS</code>; upgrading only the Python package is insufficient.</p>
+<p>The maintained ChatArch/glance 0.2.0 binary (compatible maintained 0.1.0 without new Go features) supplies <code>public: true</code> and <code>authenticated-columns</code>: with a valid session, Glance <strong>replaces</strong> ordinary <code>columns</code> server-side. Guests read only ordinary columns; other pages remain auth-required by default. Official Glance v0.8.5 lacks this capability. Require a reviewed local archive, explicit SHA256 and exact maintained <code>--version</code>; upgrading only Python is insufficient.</p>
 <table>
 <thead>
 <tr>

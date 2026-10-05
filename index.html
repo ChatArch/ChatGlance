@@ -419,6 +419,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    自包含运行
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -485,7 +512,7 @@
 </div>
 <div class="admonition warning">
 <p class="admonition-title">依赖的 Glance 能力</p>
-<p>官方 Glance v0.8.5 <strong>没有</strong>这里所需的 <code>public</code> 页面和 <code>authenticated-columns</code> 服务端会话选择。使用维护版 <a href="https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0">chatarch-v0.1.0</a> 的 Linux amd64 二进制，并校验发布页中的 <code>SHA256SUMS</code>。安装 Python 包不会自动替换现役 Glance；切换前仍需验证配置、匿名访问、登录和登出。</p>
+<p>官方 Glance v0.8.5 <strong>没有</strong>这里所需的 <code>public</code> 页面和 <code>authenticated-columns</code> 服务端会话选择。使用单独审查的 ChatArch/glance 维护版二进制、显式归档 SHA256 与精确 <code>--version</code>（优先 0.2.0，不依赖新 Go 特性时可用维护版 0.1.0）；不能假设发布页一定有校验文件。安装 Python 包不会自动替换运行中的 Go 服务；切换前验证配置、匿名访问、登录和登出。</p>
 </div>
 <p>按 <a href="quickstart/">快速开始</a> 选择操作路径；服务部署和回滚边界见 <a href="operations/">刷新与运行</a>。</p>
 

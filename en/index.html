@@ -419,6 +419,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portable runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -485,7 +512,7 @@
 </div>
 <div class="admonition warning">
 <p class="admonition-title">Required Glance capability</p>
-<p>Official Glance v0.8.5 <strong>does not</strong> implement the <code>public</code> pages and server-side <code>authenticated-columns</code> selection described here. Use the Linux amd64 binary from <a href="https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0">chatarch-v0.1.0</a> and verify its <code>SHA256SUMS</code>. Installing the Python package does not replace a running Glance binary; validate configuration, guest access, login and logout before cutover.</p>
+<p>Official Glance v0.8.5 <strong>does not</strong> implement the <code>public</code> pages and server-side <code>authenticated-columns</code> selection described here. Use a separately reviewed maintained ChatArch/glance binary with explicit archive SHA256 and exact <code>--version</code> (0.2.0 preferred; compatible 0.1.0 when no new Go feature is needed). Do not assume a release checksum file exists. Installing Python does not replace a running server; validate configuration, guest access, login and logout before cutover.</p>
 </div>
 <p>Choose a workflow in <a href="quickstart/">Quickstart</a>; deployment and rollback boundaries are covered in <a href="operations/">Refresh and operations</a>.</p>
 

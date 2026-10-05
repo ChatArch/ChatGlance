@@ -343,6 +343,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#portable-local-starting-point-unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Portable local starting point (unreleased)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#1-install-in-an-isolated-environment-and-inspect-the-cli" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -491,6 +502,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portable runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -516,6 +554,17 @@
       Table of contents
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#portable-local-starting-point-unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Portable local starting point (unreleased)
+      
+    </span>
+  </a>
+  
+</li>
       
         <li class="md-nav__item">
   <a href="#1-install-in-an-isolated-environment-and-inspect-the-cli" class="md-nav__link">
@@ -571,6 +620,9 @@
 
 
 <h1 id="quickstart-validate-before-deploying">Quickstart: validate before deploying</h1>
+<h2 id="portable-local-starting-point-unreleased">Portable local starting point (unreleased)</h2>
+<p>After installing a wheel containing this feature, run <code>chatglance runtime paths</code>, then <code>chatglance runtime init</code>; review its loopback home page and empty inventories/snapshots. Install a deliberately selected maintained Go-fork binary with <code>chatglance runtime install-binary --archive reviewed.tar.gz --sha256 EXPECTED_64_HEX --binary-version chatarch-vX.Y.Z+40_LOWERCASE_HEX</code> (replace the version with the exact observed output), then render review-only units with <code>chatglance runtime render-portable --output-dir ./review-units</code>. <code>runtime serve</code> is an explicit operator action. The five separate layers are source, wheel, fork binary, runtime configuration/data and OS entry points. The maintained fork owns optional login; generic upstream binaries do not. See the complete <a href="../deployment/">portable deployment guide</a>.</p>
+<p>Initialization makes no external calls, starts no service, and never redeems account cards; loopback is the default. For opt-in login, provision typed ChatEnv <code>CHATGLANCE_LOGIN_USER</code>, <code>CHATGLANCE_LOGIN_SECRET</code> and bcrypt <code>CHATGLANCE_LOGIN_PASSWORD_HASH</code> before <code>runtime init --with-auth</code>. YAML contains only Go <code>${ENV}</code> references, resolved from process environment first, then active ChatEnv for the child. <code>CHATGLANCE_WEB_PORT</code>, optional <code>CHATGLANCE_PUBLIC_ORIGIN</code> / <code>CHATGLANCE_CONTROL_PORT</code>, project owner, and refresh cadence/pages are non-secret settings. Keep CRS and GitHub on their shared profile/resolver rather than a new token store; migrate existing sites without exporting secret files. Explicit <code>render-portable --page projects</code> creates non-account schedules, while <code>--controls</code> additionally needs configured login and a reviewed HTTPS origin. The proxy example preserves same-origin login and redirects old project paths. Nothing publishes or deploys automatically.</p>
 <p>Glance's <code>glance.yml</code>, widgets, and HTML/CSS define the site. ChatGlance helps generate pages, validate config, and maintain snapshots. Do not treat these examples as a production deployment script.</p>
 <h2 id="1-install-in-an-isolated-environment-and-inspect-the-cli">1. Install in an isolated environment and inspect the CLI</h2>
 <p>Use <code>python -m pip install -e .</code> from a source checkout, or <code>python -m pip install ChatGlance</code> after checking the version actually published to PyPI. <strong>The optional-login CLI requires 0.1.18 source or a released artifact containing it</strong>; it is not part of published 0.1.17.</p>
