@@ -13,6 +13,7 @@ import re
 import shlex
 import socket
 import subprocess
+from urllib.parse import quote
 from typing import Any, Iterable, cast
 
 import yaml
@@ -944,7 +945,7 @@ def _getdevices_table(rows_data: list[dict[str, str]]) -> str:
     return "<table><thead><tr><th>硬盘设备</th><th>类型</th><th>容量</th><th>使用时间</th><th>逻辑卷</th><th>挂载目录</th></tr></thead><tbody>" + body + "</tbody></table>"
 
 
-def _server_card(server: dict[str, Any]) -> str:
+def _server_card(server: dict[str, Any], index: int = 0) -> str:
     cpu = cast(dict[str, Any], server.get("cpu")) if isinstance(server.get("cpu"), dict) else {}
     memory = cast(dict[str, Any], server.get("memory")) if isinstance(server.get("memory"), dict) else {}
     disks = cast(list[dict[str, Any]], server.get("disks")) if isinstance(server.get("disks"), list) else []
@@ -954,11 +955,21 @@ def _server_card(server: dict[str, Any]) -> str:
     primary_disk = next((disk for disk in disks if disk.get("mountpoint") == "/"), disks[0] if disks else {})
     error_html = f'<div class="server-error">{html_text(server.get("error"))}</div>' if server.get("error") else ""
     note_html = f'<div class="server-note">备注：{html_text(server.get("note"))}</div>' if server.get("note") else ""
+    alias = str(server.get("alias") or "")
+    popover_id = f"server-note-{index}"
+    title = html_text(server.get('display_name') or alias)
+    note_control = (f'<button type="button" class="server-title" popovertarget="{popover_id}" aria-label="编辑 {title} 的备注">{title}</button>'
+                    if alias else f'<div class="server-title">{title}</div>')
+    note_popover = (f'<div id="{popover_id}" class="server-note-popover" popover>'
+                    f'<div class="server-note-popover-head"><strong>{title} · 备注</strong>'
+                    f'<button type="button" popovertarget="{popover_id}" popovertargetaction="hide">关闭</button></div>'
+                    f'<iframe title="编辑 {title} 的备注" loading="lazy" src="/_chatglance/reset-policy/pages/?page=servers&amp;view=note&amp;alias={html.escape(quote(alias, safe=""), quote=True)}"></iframe></div>'
+                    if alias else "")
     return f"""
 <div class="server-card status-{html_text(server.get('status'), 'unknown')}">
   <div class="server-card-head">
     <div>
-      <div class="server-title">{html_text(server.get('display_name') or server.get('alias'))}</div>
+      {note_control}
       <div class="server-subtitle">{html_text(server.get('alias'))} · {html_text(server.get('connection_kind'))} · {html_text(server.get('collected_at'))}</div>
     </div>
     <span class="server-pill">{html_text(_status_label(text_value(server.get('status'), 'unknown')))}</span>
@@ -979,6 +990,7 @@ def _server_card(server: dict[str, Any]) -> str:
     <div class="detail-section"><h4>lsblk devices</h4>{_device_table(devices)}</div>
     <div class="detail-section"><h4>系统</h4><p>hostname={html_text(server.get('hostname'))} · user={html_text(server.get('user'))} · kernel={html_text(server.get('kernel'))}<br>Last Reboot={html_text(server.get('last_reboot'))} · uptime_seconds={html_text(server.get('uptime_seconds'))}</p></div>
   </details>
+  {note_popover}
 </div>
 """
 
@@ -987,14 +999,22 @@ def render_servers_html(data: dict[str, Any]) -> str:
     servers = [item for item in data.get("servers", []) if isinstance(item, dict)]
     generated_at = html_text(data.get("generated_at"))
     online = sum(1 for item in servers if item.get("status") == "online")
-    cards = "\n".join(_server_card(item) for item in servers)
+    cards = "\n".join(_server_card(item, index) for index, item in enumerate(servers))
     return f"""
 <style>
-.server-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); }}
+.server-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }}
+.server-summary iframe {{ width: 28px; height: 28px; flex: 0 0 28px; border: 0; background: transparent; }}
 .server-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0.75rem; }}
 .server-card {{ border: 1px solid var(--color-separator); border-radius: 14px; padding: 0.8rem; background: var(--color-widget-background); }}
 .server-card-head {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.65rem; }}
 .server-title {{ font-weight: 700; font-size: 1.08rem; }}
+button.server-title {{ appearance: none; border: 0; padding: 0; background: none; color: inherit; font-family: inherit; font-weight: 700; font-size: 1.08rem; cursor: pointer; text-align: left; }}
+button.server-title:hover, button.server-title:focus-visible {{ color: var(--color-primary); text-decoration: underline; }}
+.server-note-popover {{ width: min(32rem, calc(100vw - 1rem)); max-height: min(80vh, 26rem); overflow: auto; margin: auto; padding: 1rem; border: 1px solid var(--color-separator); border-radius: 1rem; background: var(--color-widget-background); color: var(--color-text); box-shadow: 0 24px 80px rgba(0,0,0,.45); }}
+.server-note-popover::backdrop {{ background: rgba(0,0,0,.58); }}
+.server-note-popover-head {{ display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }}
+.server-note-popover-head button {{ border: 1px solid var(--color-separator); border-radius: 0.4rem; background: transparent; color: inherit; padding: 0.35rem 0.65rem; cursor: pointer; }}
+.server-note-popover iframe {{ display: block; width: 100%; height: 180px; border: 0; }}
 .server-subtitle {{ color: var(--color-text-subdue); font-size: 0.78rem; margin-top: 0.15rem; }}
 .server-pill {{ border: 1px solid var(--color-separator); border-radius: 999px; padding: 0.12rem 0.5rem; font-size: 0.78rem; white-space: nowrap; }}
 .status-online .server-pill {{ color: var(--color-positive); }}
@@ -1012,7 +1032,7 @@ def render_servers_html(data: dict[str, Any]) -> str:
 .detail-section table {{ width: 100%; border-collapse: collapse; font-size: 0.82rem; }}
 .detail-section th, .detail-section td {{ border-bottom: 1px solid var(--color-separator); padding: 0.28rem 0.35rem; text-align: left; vertical-align: top; }}
 </style>
-<div class="server-summary">最新采集：{generated_at} · 服务器 {len(servers)} 台 · 在线 {online} 台 · 数据来自静态 JSON 快照</div>
+<div class="server-summary"><span>最新采集：{generated_at} · 服务器 {len(servers)} 台 · 在线 {online} 台 · 数据来自静态 JSON 快照</span><iframe title="服务器手动刷新" loading="lazy" src="/_chatglance/reset-policy/pages/?page=servers&amp;view=icon"></iframe></div>
 <div class="server-grid">
 {cards or '<p>暂无服务器状态数据。</p>'}
 </div>
@@ -1034,7 +1054,6 @@ def build_servers_page(
             {
                 "size": "full",
                 "widgets": [
-                    {"type": "html", "title": "服务器刷新与备注", "source": '<iframe title="服务器手动刷新与备注" loading="lazy" style="width:100%;height:250px;border:0" src="/_chatglance/reset-policy/pages/?page=servers"></iframe>'},
                     {
                         "type": "html",
                         "title": widget_title,

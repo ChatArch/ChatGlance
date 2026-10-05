@@ -22,9 +22,51 @@ def test_rendered_pages_have_private_control_and_canonical_slug():
     private = build_projects_page(inventory)
     public = build_projects_page(inventory, audience="public")
     assert private["slug"] == public["slug"] == "projects"
-    assert "/_chatglance/reset-policy/pages/?page=projects" in str(private)
+    overview = private["columns"][0]["widgets"]
+    assert len(overview) == 1 and overview[0]["type"] == "bookmarks" and overview[0]["title"] == "概览"
+    assert overview[0]["header-controls-url"] == "/_chatglance/reset-policy/pages/?page=projects&view=icon"
+    assert "header-controls-url" not in public["columns"][0]["widgets"][0]
     assert "/_chatglance/reset-policy/pages/" not in str(public)
-    assert "/_chatglance/reset-policy/pages/?page=servers" in str(build_servers_page({"servers": []}))
+    servers_page = build_servers_page({"servers": []})
+    assert len(servers_page["columns"][0]["widgets"]) == 1
+    assert "view=icon" in servers_page["columns"][0]["widgets"][0]["source"]
+    assert "服务器刷新与备注" not in str(servers_page)
+
+
+def test_compact_page_views_validate_alias_and_do_not_write(tmp_path):
+    root = tmp_path / "glance"
+    (root / "config").mkdir(parents=True)
+    (root / "config/server-inventory.yml").write_text('inventory:\n  aliases: ["a&b", other]\n')
+    app = page_control.PageControlApp(root, "https://example.invalid")
+    icon = page_control.render_page(app, "projects", "cookie", view="icon")
+    assert icon.count('id="refresh-button"') == 1
+    assert 'type="button"' in icon and 'role="status"' in icon and '<svg' in icon
+    assert '<textarea' not in icon and '<select' not in icon and '<p ' not in icon
+    with pytest.raises(page_control.PageControlError):
+        page_control.render_page(app, "servers", "cookie", view="note", alias="missing")
+    for page, view, alias in [("projects", "note", "a&b"), ("servers", "note", None),
+                              ("servers", "icon", "a&b"), ("servers", "invalid", None)]:
+        with pytest.raises(page_control.PageControlError):
+            page_control.render_page(app, page, "cookie", alias=alias, view=view)
+    page_control.save_note(root, "a&b", '<img src=x onerror="unsafe">', "0")
+    note = page_control.render_page(app, "servers", "cookie", alias="a&b", view="note")
+    assert 'value="a&amp;b"' in note and 'value="1"' in note
+    assert '&lt;img src=x onerror=&quot;unsafe&quot;&gt;' in note and '<img src=x' not in note
+    assert '<select' not in note and 'id="refresh-button"' not in note
+    assert not (root / "data").exists()
+
+
+def test_server_names_open_only_matching_notes():
+    source = servers.render_servers_html({"servers": [
+        {"alias": "alpha+1", "display_name": "Alpha"},
+        {"alias": "beta&2", "display_name": "Beta"},
+    ]})
+    assert source.count('class="server-title" popovertarget=') == 2
+    assert source.count('class="server-note-popover" popover') == 2
+    assert source.count('view=note&amp;alias=alpha%2B1') == 1
+    assert source.count('view=note&amp;alias=beta%262') == 1
+    assert 'popovertarget="server-note-0"' in source and 'popovertarget="server-note-1"' in source
+    assert '展开详情' in source and '<select' not in source
 
 
 def test_notes_cas_and_overlay(tmp_path):
@@ -225,7 +267,8 @@ def test_scheduler_lock_reports_busy_without_queuing(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("kind,terminal", [("refresh", "success"), ("refresh", "partial"),
-                                          ("refresh", "error"), ("note", "saved")])
+                                          ("refresh", "error"), ("refresh", "busy"),
+                                          ("refresh", "immediate-busy"), ("note", "saved")])
 def test_control_script_updates_status_and_refreshes_owner(tmp_path, kind, terminal):
     if not shutil.which("node"):
         pytest.skip("node is not available")
@@ -234,15 +277,19 @@ const vm = require('node:vm');
 const events = [];
 const buttons = {};
 const status = {set textContent(value) { events.push(value); }};
+const refreshButton = {disabled: false, getAttribute() { return '项目手动刷新：空闲'; },
+  setAttribute(_name, value) { events.push(value); },
+  addEventListener(_name, callback) { buttons['refresh-button'] = callback; }};
 const form = {action: '/pages/' + KIND, values: KIND === 'refresh'
   ? {page: 'projects', csrf: 'synthetic'}
   : {alias: 'fixture-host', note: 'saved', csrf: 'synthetic'}};
 const document = {getElementById(id) {
-  if (id === 'refresh-button' || id === 'note-button') return {
+  if (id === 'refresh-button') return refreshButton;
+  if (id === 'note-button') return {
     addEventListener(_name, callback) { buttons[id] = callback; }, disabled: false
   };
   if (id === 'refresh' || id === 'note') return form;
-  if (id === 'refresh-status') return status;
+  if (id === 'refresh-status' || id === 'note-status') return status;
   return null;
 }};
 const location = {origin: 'https://example.invalid', href: 'https://example.invalid/pages/',
@@ -251,10 +298,10 @@ const parent = {location: {href: 'https://example.invalid/' + (KIND === 'note' ?
   reload() { events.push('parent-reload'); }}};
 const fetch = async url => ({ok: true, json: async () =>
   String(url).includes('status') ? {state: TERMINAL, observed_at: '2026-10-04T11:00:00Z'}
-  : {state: KIND === 'note' ? 'saved' : 'running'}});
+  : {state: KIND === 'note' ? 'saved' : TERMINAL === 'immediate-busy' ? 'busy' : 'running'}});
 class FormData { constructor() { return Object.entries(form.values); } }
 vm.runInNewContext(SOURCE, {document, location, window: {parent}, parent, fetch,
-  FormData, URL, URLSearchParams, alert: message => events.push(message),
+  FormData, URL, URLSearchParams,
   setTimeout: callback => Promise.resolve().then(callback)});
 buttons[KIND === 'note' ? 'note-button' : 'refresh-button']();
 setTimeout(() => console.log(JSON.stringify(events)), 50);
@@ -267,6 +314,9 @@ setTimeout(() => console.log(JSON.stringify(events)), 50);
     events = json.loads(result.stdout)
     if kind == "refresh":
         assert events[0].startswith("正在刷新"), events
-        if terminal in {"success", "partial"}:
-            assert any("2026-10-04T11:00:00Z" in value for value in events)
-    assert events[-1] == ("iframe-reload" if terminal == "error" else "parent-reload"), events
+        if terminal in {"error", "busy", "immediate-busy"}:
+            assert any(("刷新失败" if terminal == "error" else "已有刷新任务") in value for value in events)
+        else:
+            assert any("成功" in value for value in events)
+    assert ("parent-reload" in events) == (terminal not in {"error", "busy", "immediate-busy"})
+    assert "iframe-reload" not in events

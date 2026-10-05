@@ -879,10 +879,7 @@ def build_projects_page(
         ],
     }
     if audience == "private":
-        page["columns"][0]["widgets"].insert(0, {
-            "type": "html", "title": "项目刷新",
-            "source": '<iframe title="项目手动刷新" loading="lazy" style="width:100%;height:100px;border:0" src="/_chatglance/reset-policy/pages/?page=projects"></iframe>',
-        })
+        page["columns"][0]["widgets"][0]["header-controls-url"] = "/_chatglance/reset-policy/pages/?page=projects&view=icon"
     return page
 
 

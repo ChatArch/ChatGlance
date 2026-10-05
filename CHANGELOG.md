@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Integrate private project/server refresh as one compact icon in the existing overview/header row; edit server notes from each card's name instead of separate control widgets. Public project controls remain absent.
+
 ## 0.2.1 - 2026-10-06
 
 - Normalize systemd's omitted empty `EnvironmentFiles` and timer `ExecStart` properties, so real installed CLI adoption/checking works without weakening fragment, drop-in or executable identity checks.

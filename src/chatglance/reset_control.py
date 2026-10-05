@@ -399,12 +399,12 @@ def make_control_server(
                     if target.path == "/pages/control.js" and not target.query:
                         self.respond(200, CONTROL_JS, content_type="text/javascript; charset=utf-8", csp="default-src 'none'")
                         return
-                    query = parse_qs(target.query, max_num_fields=2)
+                    query = parse_qs(target.query, max_num_fields=3)
                     if target.path == "/pages/status" and set(query) == {"page"} and len(query["page"]) == 1:
                         self.respond(200, json.dumps(page_app.status(query["page"][0])), content_type="application/json")
                         return
-                    if target.path == "/pages/" and set(query) in ({"page"}, {"page", "alias"}) and all(len(value) == 1 for value in query.values()):
-                        self.respond(200, render_page(page_app, query["page"][0], cookie, query.get("alias", [None])[0]), csp="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'self'; base-uri 'none'")
+                    if target.path == "/pages/" and set(query) in ({"page", "view"}, {"page", "view", "alias"}) and all(len(value) == 1 for value in query.values()):
+                        self.respond(200, render_page(page_app, query["page"][0], cookie, query.get("alias", [None])[0], view=query["view"][0]), csp="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'self'; base-uri 'none'")
                         return
                     raise ControlError("页面不存在", 404)
                 if target.path != "/":
