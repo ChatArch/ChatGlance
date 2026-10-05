@@ -1,0 +1,11 @@
+# Local-only starter page. Review proxy and authentication before exposure.
+server:
+  host: 127.0.0.1
+  port: ${CHATGLANCE_WEB_PORT}
+pages:
+  - name: Home
+    columns:
+      - size: full
+        widgets:
+          - type: clock
+            hour-format: 24h

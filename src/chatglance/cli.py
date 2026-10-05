@@ -185,7 +185,7 @@ def render_public_access(
 @click.option("--profiles", help="Explicit account profiles; otherwise use ChatEnv or the current snapshot.")
 @click.option("--actual-cli-tree/--no-actual-cli-tree", default=None, help="Install/probe current package CLI trees; default on for scheduled, off for manual.")
 @click.option("--allow-offline-regression/--no-allow-offline-regression", default=None, help="Publish offline server probes; default on for scheduled, off for manual.")
-@click.option("--projects-owner", envvar="CHATGLANCE_PROJECTS_OWNER", help="GitHub organization; otherwise reuse the snapshot owner or ChatArch.")
+@click.option("--projects-owner", envvar="CHATGLANCE_PROJECTS_OWNER", help="GitHub organization; otherwise use typed ChatEnv, snapshot owner or ChatArch.")
 @click.option("--project-workers", type=click.IntRange(min=1), default=4, envvar="CHATGLANCE_PROJECTS_WORKERS", show_default=True, help="Concurrent project metadata workers.")
 @click.option("--uvx-bin", default="uvx", envvar="CHATGLANCE_UVX_BIN", show_default=True, help="uvx executable for optional released-package CLI tree probes.")
 @click.option("--cli-tree-timeout", type=click.IntRange(min=1), default=90, envvar="CHATGLANCE_CLI_TREE_TIMEOUT", show_default=True, help="Per-entrypoint CLI tree timeout in seconds.")
@@ -229,7 +229,7 @@ def projects() -> None:
 
 
 @projects.command("collect")
-@click.option("--owner", default="ChatArch", show_default=True, help="GitHub organization or owner to inventory.")
+@click.option("--owner", envvar="CHATGLANCE_PROJECTS_OWNER", help="GitHub organization or owner; defaults to typed ChatEnv, then ChatArch.")
 @click.option("--repo-list-json", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Existing ChatGH repo-list JSON to enrich instead of calling ChatGH.")
 @click.option("--baseline-data", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Prior project inventory JSON whose reviewed categories should be preserved.")
 @click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Inventory JSON path to write.")
@@ -240,7 +240,7 @@ def projects() -> None:
 @click.option("--actual-cli-tree/--no-actual-cli-tree", default=False, show_default=True, help="Install latest PyPI packages with uvx and classify from each entrypoint's actual CLI tree.")
 @click.option("--cli-tree-timeout", default=90, show_default=True, type=int, help="Per-entrypoint uvx/CLI tree timeout in seconds.")
 def collect_projects(
-    owner: str,
+    owner: str | None,
     repo_list_json: Path | None,
     baseline_data: Path | None,
     output_path: Path,
@@ -252,6 +252,9 @@ def collect_projects(
     cli_tree_timeout: int,
 ) -> None:
     """Write refreshed project inventory JSON from read-only GitHub metadata."""
+
+    from chatglance.portable import portable_settings
+    owner = owner or portable_settings()["owner"] or "ChatArch"
 
     inventory = refresh_project_inventory(
         output_path=output_path,
@@ -671,6 +674,98 @@ def update_account_limits_config(data_path: Path, config_path: Path, output_path
 @main.group()
 def runtime() -> None:
     """Maintain a durable Glance service runtime."""
+
+
+@runtime.command("paths")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
+def portable_paths(runtime_home: Path | None) -> None:
+    """Print effective portable runtime paths (never secret values)."""
+    from chatglance.portable import runtime_home as resolve
+    root = resolve(runtime_home)
+    click.echo(json.dumps({"home": str(root), "config": str(root / "config/glance.yml"), "binary": str(root / "bin/glance")}))
+
+
+@runtime.command("init")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
+@click.option("--with-auth", is_flag=True, help="Require typed login credentials and create environment-only auth references.")
+def portable_init(runtime_home: Path | None, with_auth: bool) -> None:
+    """Create a loopback runtime, empty snapshots and non-secret examples."""
+    from chatglance.portable import initialize
+    try:
+        created = initialize(runtime_home, with_auth=with_auth)
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from None
+    click.echo(f"created={len(created)} (existing files retained; no services activated)")
+
+
+@runtime.command("install-binary")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
+@click.option("--archive", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True)
+@click.option("--sha256", required=True, help="Expected SHA256 of a reviewed Go fork archive.")
+@click.option("--binary-version", required=True, help="Reviewed Go fork version or immutable revision.")
+def portable_binary(runtime_home: Path | None, archive: Path, sha256: str, binary_version: str) -> None:
+    """Install a verified, reviewed local Go-fork tar archive without replacement."""
+    from chatglance.portable import install_verified_binary
+    try:
+        path = install_verified_binary(archive, sha256, runtime_home, version=binary_version)
+    except (ValueError, OSError, __import__("tarfile").TarError) as exc:
+        raise click.ClickException(f"verified binary installation failed ({type(exc).__name__})") from None
+    click.echo(f"installed {path}")
+
+
+@runtime.command("serve")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
+def portable_serve(runtime_home: Path | None) -> None:
+    """Start installed Go binary with typed ChatEnv secrets in child env."""
+    from chatglance.portable import serve
+    try:
+        serve(runtime_home)
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(f"startup unavailable ({type(exc).__name__})") from None
+
+
+@runtime.command("controls")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
+def portable_controls(runtime_home: Path | None) -> None:
+    """Run explicitly provisioned authenticated loopback controls."""
+    from chatglance.portable import authenticated_environment, runtime_home as resolve
+    from chatglance.reset_control import serve_controls
+    from urllib.parse import urlsplit
+    try:
+        environment = authenticated_environment()
+        origin = environment.get("CHATGLANCE_PUBLIC_ORIGIN", "")
+        parsed = urlsplit(origin)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+            raise ValueError("reviewed HTTPS public origin required")
+        port = int(environment.get("CHATGLANCE_CONTROL_PORT", "5679"))
+        if not 1 <= port <= 65535:
+            raise ValueError("invalid control port")
+        serve_controls(runtime_home=resolve(runtime_home), public_origin=origin, port=port)
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(f"controls unavailable ({type(exc).__name__})") from None
+
+
+@runtime.command("render-portable")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
+@click.option("--python-bin", type=click.Path(path_type=Path, dir_okay=False), help="Installed Python interpreter; defaults to current interpreter.")
+@click.option("--page", "pages", multiple=True, type=click.Choice(["projects", "servers", "sites"]))
+@click.option("--interval", help="Explicit schedule; defaults to typed ChatEnv or 30min.")
+@click.option("--controls", is_flag=True, help="Include optional authenticated controls unit.")
+@click.option("--output-dir", type=click.Path(path_type=Path, file_okay=False), help="Review directory; never systemd registration by default.")
+def portable_units(runtime_home: Path | None, python_bin: Path | None, pages: tuple[str, ...], interval: str | None, controls: bool, output_dir: Path | None) -> None:
+    """Render review-only startup and optional refresh/control units."""
+    from chatglance.portable import runtime_home as resolve
+    from chatglance.systemd import render_portable_units, write_portable_units
+    try:
+        units = render_portable_units(runtime_home=resolve(runtime_home), python_bin=python_bin, pages=pages or None, interval=interval, controls=controls)
+        if output_dir is None:
+            for name, body in units.items():
+                click.echo(f"# {name}\n{body}")
+        else:
+            for path in write_portable_units(output_dir, units):
+                click.echo(f"wrote {path}")
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from None
 
 
 @runtime.command("maintain")

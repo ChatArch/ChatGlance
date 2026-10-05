@@ -34,9 +34,15 @@ chatglance
 chatglance
 ├── refresh
 ├── runtime
+│   ├── controls
+│   ├── init
+│   ├── install-binary
 │   ├── install-systemd
 │   ├── maintain
+│   ├── paths
+│   ├── render-portable
 │   ├── render-systemd
+│   ├── serve
 │   ├── start
 │   └── status
 ├── home
@@ -45,7 +51,7 @@ chatglance
     └── root-only
 ```
 
-`refresh` updates configured pages from existing runtime inventories; manual mode never redeems reset cards. `runtime maintain` may rewrite the designated runtime config; `install-systemd` and `start` change user-level units and require separate review. `render-systemd` can print templates only. See [Refresh and operations](operations.md).
+`refresh` updates configured pages from existing runtime inventories; manual mode never redeems reset cards. `runtime init` creates loopback configuration and empty snapshots only; `install-binary` requires a local archive and SHA256. `render-portable` prints or writes review units without registering them; `serve` and `controls` require explicit execution. `runtime maintain` may rewrite runtime config; legacy `install-systemd` and `start` change user-level units and require separate review. See [Refresh and operations](operations.md).
 
 ## Account limits and reset controls
 

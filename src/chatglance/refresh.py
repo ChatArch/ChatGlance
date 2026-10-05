@@ -198,7 +198,8 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
         return PageUpdate(key, data, build_servers_page(overlay_notes(root, data), **page_options_from_inventory_config(inventory)))
     from .project_inventory import RefreshOptions, refresh_project_inventory
     from .projects import build_projects_page
-    owner = collection.projects_owner or (previous.get("source") or {}).get("owner") or "ChatArch"
+    from .portable import portable_settings
+    owner = collection.projects_owner or portable_settings()["owner"] or (previous.get("source") or {}).get("owner") or "ChatArch"
     overrides = root / "config/project-category-overrides.json"
     baseline = overrides if overrides.exists() else previous_path if previous_path.exists() else None
     data = refresh_project_inventory(output_path=stage / "projects.json", baseline_data=baseline, options=RefreshOptions(owner=owner, workers=collection.project_workers, collect_actual_cli_trees=actual_cli_tree, uvx_bin=collection.uvx_bin, cli_tree_timeout=collection.cli_tree_timeout))

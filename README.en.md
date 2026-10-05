@@ -64,6 +64,20 @@ An explicit CRS profile containing a dedicated management Key and fixed account-
 
 ## Quick start
 
+### Portable, from scratch (unreleased; install a wheel or source build containing this feature)
+
+Five layers: shareable source, installed ChatGlance wheel, verified ChatArch/glance Go-fork binary, runtime configuration/snapshots under the effective ChatArch home, and optional OS entry units. Optional login belongs to the maintained Go fork, not an arbitrary upstream executable. No checkout dependency, external collection, card redemption, service registration or public exposure occurs during initialization; the default binds loopback only.
+
+```bash
+chatglance runtime paths
+chatglance runtime init
+chatglance runtime install-binary --archive reviewed-glance.tar.gz --sha256 EXPECTED_64_HEX --binary-version chatarch-vX.Y.Z+40_LOWERCASE_HEX
+chatglance runtime render-portable --output-dir ./review-units
+# Only after review: chatglance runtime serve
+```
+
+`runtime init --runtime-home DIR` honors `CHATARCH_HOME`, preserves existing files and refuses to silently upgrade an existing unauthenticated config on `--with-auth`. Login requires typed ChatEnv `CHATGLANCE_LOGIN_USER` (email accepted), `CHATGLANCE_LOGIN_SECRET` (**strict base64 decoding to exactly 64 bytes**) and bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH`. Process environment wins over active typed ChatEnv; values enter only the Go child environment, never YAML, scripts, units or argv. `CHATGLANCE_PROJECTS_OWNER`, `CHATGLANCE_REFRESH_PAGES` and `CHATGLANCE_REFRESH_INTERVAL` supply actual owner/non-account timer defaults; explicit CLI options override them. Controls require `CHATGLANCE_PUBLIC_ORIGIN`, `CHATGLANCE_CONTROL_PORT` and a private `/account-limits` page. CRS and GitHub keep their existing shared resolvers. See the [self-contained deployment guide](docs/site/deployment.en.md) for the full tree, proxy, manual activation, and migration boundaries.
+
 For a new machine that should host a similar but still customizable Glance site, start with the [quickstart](docs/site/quickstart.en.md): `glance.yml` / widgets / HTML/CSS remain the primary frontend configuration surface, while `chatglance` only manages collection, rendering, validation, backup, and replacement.
 
 ```bash

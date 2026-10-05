@@ -25,7 +25,8 @@ def test_release_metadata_and_changelog():
     for requirement in ("mkdocs>=1.6,<2", "mkdocs-material>=9.5,<10", "mkdocs-static-i18n>=1.2,<2", "mike>=2,<3"):
         assert requirement in docs_deps
     changelog = (ROOT / "CHANGELOG.md").read_text()
-    assert changelog.startswith("# Changelog\n\n## 0.1.20 - 2026-10-05\n")
+    assert changelog.startswith("# Changelog\n\n## Unreleased\n")
+    assert "## 0.1.20 - 2026-10-05\n" in changelog
     assert "## 0.1.19 - 2026-10-01\n" in changelog
     assert "\n## 0.1.18 - 2026-09-24\n" in changelog
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Package loopback runtime templates, safe empty snapshots, review-only portable service units and thin package-owned lifecycle scripts.
+- Add verified local Go-fork archive installation, provenance metadata and process-only typed ChatEnv login bridge; no automatic deployment or account actions.
+- Require canonical 64-byte Go login keys, observed maintained-fork binary versions, opt-in provider-backed non-account schedules and own-service conditional restarts; provide bilingual deployment instructions and usable reviewed proxy example.
+
 ## 0.1.20 - 2026-10-05
 
 - Derive default SVG destination labels from each service public URL; omit credentials, query strings and fragments.

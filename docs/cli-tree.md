@@ -31,9 +31,15 @@ chatglance
 │   └── update-config [--data DATA-PATH] [--config CONFIG-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME]  # Write a config copy with the generated project page replaced.
 ├── refresh [PAGES...] [--runtime-home RUNTIME-HOME] [--glance-bin GLANCE-BIN] [--service-name SERVICE-NAME] [--no-restart] [--scheduled] [--profiles PROFILES] [--actual-cli-tree] [--allow-offline-regression] [--projects-owner PROJECTS-OWNER] [--project-workers PROJECT-WORKERS] [--uvx-bin UVX-BIN] [--cli-tree-timeout CLI-TREE-TIMEOUT] [--server-inventory SERVER-INVENTORY] [--sites-inventory SITES-INVENTORY] [--gatus-db GATUS-DB] [--account-timeout ACCOUNT-TIMEOUT] [--reset-timeout RESET-TIMEOUT] [--no-public-reset] [--reset-base-url RESET-BASE-URL] [--json-output]  # Refresh configured pages natively; manual mode never redeems reset cards.
 ├── runtime  # Maintain a durable Glance service runtime.
+│   ├── controls [--runtime-home RUNTIME-HOME]  # Run explicitly provisioned authenticated loopback controls.
+│   ├── init [--runtime-home RUNTIME-HOME] [--with-auth]  # Create a loopback runtime, empty snapshots and non-secret examples.
+│   ├── install-binary [--runtime-home RUNTIME-HOME] [--archive ARCHIVE] [--sha256 SHA256] [--binary-version BINARY-VERSION]  # Install a verified, reviewed local Go-fork tar archive without replacement.
 │   ├── install-systemd [--runtime-home RUNTIME-HOME] [--chatglance-bin CHATGLANCE-BIN] [--output-dir OUTPUT-DIR] [--service-name SERVICE-NAME] [--maintenance-service-name MAINTENANCE-SERVICE-NAME] [--timer-name TIMER-NAME] [--interval INTERVAL] [--verify] [--enable] [--start]  # Install, verify, enable, and optionally start user-level systemd units.
 │   ├── maintain [--runtime-home RUNTIME-HOME] [--config CONFIG-PATH] [--data DATA-PATH] [--backup-dir BACKUP-DIR] [--page-name PAGE-NAME] [--validate] [--glance-bin GLANCE-BIN] [--restart-service RESTART-SERVICE]  # Update runtime config atomically and optionally restart a service.
+│   ├── paths [--runtime-home RUNTIME-HOME]  # Print effective portable runtime paths (never secret values).
+│   ├── render-portable [--runtime-home RUNTIME-HOME] [--python-bin PYTHON-BIN] [--page PAGES] [--interval INTERVAL] [--controls] [--output-dir OUTPUT-DIR]  # Render review-only startup and optional refresh/control units.
 │   ├── render-systemd [--runtime-home RUNTIME-HOME] [--chatglance-bin CHATGLANCE-BIN] [--service-name SERVICE-NAME] [--maintenance-service-name MAINTENANCE-SERVICE-NAME] [--timer-name TIMER-NAME] [--interval INTERVAL] [--output-dir OUTPUT-DIR]  # Print user units or write them to an output directory.
+│   ├── serve [--runtime-home RUNTIME-HOME]  # Start installed Go binary with typed ChatEnv secrets in child env.
 │   ├── start [--service-name SERVICE-NAME] [--timer-name TIMER-NAME] [--timer]  # Start the current Glance page through systemd user units.
 │   └── status [--service-name SERVICE-NAME] [--timer-name TIMER-NAME]  # Show safe systemd user status for the Glance service and timer.
 ├── servers  # Collect and render the `服务器` Glance page.
@@ -78,9 +84,15 @@ chatglance
 │   └── update-config  # Write a config copy with the generated project page replaced.
 ├── refresh  # Refresh configured pages natively; manual mode never redeems reset cards.
 ├── runtime  # Maintain a durable Glance service runtime.
+│   ├── controls  # Run explicitly provisioned authenticated loopback controls.
+│   ├── init  # Create a loopback runtime, empty snapshots and non-secret examples.
+│   ├── install-binary  # Install a verified, reviewed local Go-fork tar archive without replacement.
 │   ├── install-systemd  # Install, verify, enable, and optionally start user-level systemd units.
 │   ├── maintain  # Update runtime config atomically and optionally restart a service.
+│   ├── paths  # Print effective portable runtime paths (never secret values).
+│   ├── render-portable  # Render review-only startup and optional refresh/control units.
 │   ├── render-systemd  # Print user units or write them to an output directory.
+│   ├── serve  # Start installed Go binary with typed ChatEnv secrets in child env.
 │   ├── start  # Start the current Glance page through systemd user units.
 │   └── status  # Show safe systemd user status for the Glance service and timer.
 ├── servers  # Collect and render the `服务器` Glance page.

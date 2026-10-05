@@ -64,6 +64,20 @@
 
 ## 快速开始
 
+### 从零生成可携带运行态（尚未发布；需安装包含本功能的源码或 wheel）
+
+五层边界：本仓库源码、安装的 ChatGlance wheel、经过校验的 ChatArch/glance Go fork 二进制、ChatArch home 下的运行配置/快照、最后是可选的 OS 薄入口。Go fork 维护可选登录能力；上游原版不保证支持。所有运行入口均来自已安装包，不引用 checkout。示例只绑定 `127.0.0.1`，不注册服务、不采集外部数据、不消费卡，也不自动发布或部署。
+
+```bash
+chatglance runtime paths
+chatglance runtime init
+chatglance runtime install-binary --archive reviewed-glance.tar.gz --sha256 EXPECTED_64_HEX --binary-version chatarch-vX.Y.Z+40_LOWERCASE_HEX
+chatglance runtime render-portable --output-dir ./review-units
+# 只有完成离线审核后才手动运行：chatglance runtime serve
+```
+
+`runtime init --runtime-home DIR` 遵循 `CHATARCH_HOME` 并保留已有文件；重复运行 `--with-auth` 遇到旧无登录配置时拒绝，绝不隐式升级。登录需要 typed ChatEnv 的 `CHATGLANCE_LOGIN_USER`（可为 email）、`CHATGLANCE_LOGIN_SECRET`（**严格 base64 解码后 64 bytes**）及 bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH`。进程环境优先于 active typed ChatEnv；值只进入 Go 子进程环境，不写入 YAML、unit、脚本或 argv。`CHATGLANCE_PROJECTS_OWNER`、`CHATGLANCE_REFRESH_PAGES`、`CHATGLANCE_REFRESH_INTERVAL` 实际提供 owner/非账户定时默认值，显式 CLI 参数覆盖；不自动用卡。`CHATGLANCE_PUBLIC_ORIGIN`、`CHATGLANCE_CONTROL_PORT` 用于可选 controls（需私有 `/account-limits`）；CRS 与 GitHub 继续共享各自既有 resolver。完整安装、目录树、反向代理、审核后手工激活和迁移边界见 [自包含运行指南](docs/site/deployment.md)。
+
 新机器配置类似当前站点时，先看 [快速开始](docs/site/quickstart.md)：它把 `glance.yml` / widgets / HTML/CSS 作为主要前端配置入口，`chatglance` 只负责采集、渲染、校验、备份和替换这些管理动作。
 
 ```bash

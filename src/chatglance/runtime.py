@@ -78,12 +78,18 @@ def _timestamp() -> str:
 def validate_glance_config(glance_bin: str | Path, config_path: str | Path) -> None:
     """Validate a config file with the upstream Glance binary."""
 
+    from .portable import authenticated_environment, bridge_environment
+
+    text = Path(config_path).read_text(encoding="utf-8")
+    environment = (authenticated_environment() if "${CHATGLANCE_LOGIN_SECRET}" in text
+                   else bridge_environment()) if "${CHATGLANCE_" in text else None
     subprocess.run(
         [str(glance_bin), "-config", str(config_path), "config:validate"],
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        **({"env": environment} if environment is not None else {}),
     )
 
 

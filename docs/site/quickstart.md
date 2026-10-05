@@ -1,5 +1,11 @@
 # 快速开始：先验证候选
 
+## 可携带的本地起点（此功能尚未发布）
+
+在安装含此功能的 wheel 后，运行 `chatglance runtime paths`、`chatglance runtime init`；审查 `config/glance.yml` 的 loopback 首页、空 inventory 与空快照。随后从可信 Go fork 工件执行 `chatglance runtime install-binary --archive reviewed.tar.gz --sha256 EXPECTED_64_HEX --binary-version chatarch-vX.Y.Z+40_LOWERCASE_HEX`（版本必须替换为实际精确输出），使用 `chatglance runtime render-portable --output-dir ./review-units` 仅生成待审单元。`runtime serve` 必须由运维显式运行；不自动安装/启动服务。源码、wheel、Go 二进制、运行配置数据、OS 入口是五层独立边界；fork 承担可选登录，原版不保证支持。完整配置与激活步骤见 [自包含运行](deployment.md)。
+
+默认不联网、不采集、不开公网、不执行用卡。登录须先在 typed ChatEnv 提供 `CHATGLANCE_LOGIN_USER`、`CHATGLANCE_LOGIN_SECRET` 和 bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH`，再执行 `runtime init --with-auth`；YAML 只保存 Go `${ENV}` 引用，子进程环境优先采用进程值，再查 active ChatEnv。`CHATGLANCE_WEB_PORT`、可选的 `CHATGLANCE_PUBLIC_ORIGIN` / `CHATGLANCE_CONTROL_PORT`、项目 owner 与刷新频率/页面是非密钥设置。CRS 和 GitHub 保持共享 profile/resolver，不新建 token store；旧站迁移不导出密钥。仅显式 `render-portable --page projects` 等生成非账户定时任务；controls 需 `--controls` 且先配置登录和 HTTPS origin。示例反代保留登录及旧项目重定向；无自动发布或部署。
+
 Glance 的 `glance.yml`、widgets 与 HTML/CSS 决定站点外观；ChatGlance 辅助生成页面、检验配置并维护快照。不要把示例配置当作生产部署脚本。
 
 ## 1. 在隔离环境安装并确认命令

@@ -36,6 +36,7 @@ plugins:
             项目与访问: Projects and access
             刷新与运行: Refresh and operations
             架构与能力: Architecture and capabilities
+            自包含运行: Portable runtime
 markdown_extensions:
   - attr_list
   - md_in_html
@@ -52,3 +53,4 @@ nav:
   - 项目与访问: projects.md
   - 刷新与运行: operations.md
   - 架构与能力: architecture.md
+  - 自包含运行: deployment.md

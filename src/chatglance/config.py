@@ -13,6 +13,16 @@ class ChatGlanceConfig(BaseEnvConfig):
     _aliases = ["chatglance", "glance"]
     _storage_dir = "ChatGlance"
 
+    CHATGLANCE_LOGIN_SECRET = EnvField("CHATGLANCE_LOGIN_SECRET", desc="Go login session signing secret.", is_sensitive=True)
+    CHATGLANCE_LOGIN_PASSWORD_HASH = EnvField("CHATGLANCE_LOGIN_PASSWORD_HASH", desc="Go login bcrypt password hash (never plaintext).", is_sensitive=True)
+    CHATGLANCE_LOGIN_USER = EnvField("CHATGLANCE_LOGIN_USER", desc="Explicit Go login username.")
+    CHATGLANCE_PUBLIC_ORIGIN = EnvField("CHATGLANCE_PUBLIC_ORIGIN", desc="Reviewed public origin for optional authenticated controls.")
+    CHATGLANCE_WEB_PORT = EnvField("CHATGLANCE_WEB_PORT", default="8080", desc="Loopback Go web port.")
+    CHATGLANCE_CONTROL_PORT = EnvField("CHATGLANCE_CONTROL_PORT", default="5679", desc="Optional loopback controls port.")
+    CHATGLANCE_PROJECTS_OWNER = EnvField("CHATGLANCE_PROJECTS_OWNER", default="", desc="Optional project inventory owner.")
+    CHATGLANCE_REFRESH_PAGES = EnvField("CHATGLANCE_REFRESH_PAGES", default="", desc="Explicit non-consuming scheduled page names.")
+    CHATGLANCE_REFRESH_INTERVAL = EnvField("CHATGLANCE_REFRESH_INTERVAL", default="30min", desc="Scheduled refresh interval.")
+
     CHATGLANCE_GITHUB_TOKEN = EnvField(
         "CHATGLANCE_GITHUB_TOKEN",
         desc="GitHub token used for private repository metadata reads.",

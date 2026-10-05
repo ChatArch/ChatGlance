@@ -34,9 +34,15 @@ chatglance
 chatglance
 ├── refresh
 ├── runtime
+│   ├── controls
+│   ├── init
+│   ├── install-binary
 │   ├── install-systemd
 │   ├── maintain
+│   ├── paths
+│   ├── render-portable
 │   ├── render-systemd
+│   ├── serve
 │   ├── start
 │   └── status
 ├── home
@@ -45,7 +51,7 @@ chatglance
     └── root-only
 ```
 
-`refresh` 使用运行时现有清单刷新已配置页面；手动模式不会兑换重置卡。`runtime maintain` 可以改写指定 runtime 配置；`install-systemd`、`start` 会操作 user-level 服务/定时器，需要额外审核。`render-systemd` 可只打印模板。详情见 [刷新与运行](operations.md)。
+`refresh` 使用运行时现有清单刷新已配置页面；手动模式不会兑换重置卡。`runtime init` 仅创建 loopback 配置和空快照；`install-binary` 要求本地归档及 SHA256。`render-portable` 只打印或写入审核目录，不注册服务；`serve` 和 `controls` 需要显式执行。`runtime maintain` 可以改写指定 runtime 配置；旧的 `install-systemd`、`start` 会操作 user-level 服务/定时器，需要额外审核。详情见 [刷新与运行](operations.md)。
 
 ## 订阅与重置控制
 
