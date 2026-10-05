@@ -178,6 +178,10 @@ def unit_states(names) -> dict[str, dict[str, str]]:
         if completed.returncode or len(completed.stdout) > 65536 or "ActiveState=" not in completed.stdout:
             raise ValueError("unable to establish owned unit state")
         result[name] = dict(line.split("=", 1) for line in completed.stdout.splitlines() if "=" in line)
+        # systemctl omits empty list properties, and timers have no ExecStart.
+        # Keep fragment/drop-in ownership checks strict; normalize only these lists.
+        for key in ("EnvironmentFiles", "ExecStart"):
+            result[name].setdefault(key, "")
     return result
 
 
