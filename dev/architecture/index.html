@@ -16,6 +16,8 @@
         <link rel="prev" href="../operations/">
       
       
+        <link rel="next" href="../deployment/">
+      
       
         
           <link rel="alternate" href="./" hreflang="zh">
@@ -489,6 +491,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    自包含运行
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -610,7 +639,7 @@
 </tbody>
 </table>
 <h2 id="_3">同址依赖不可替代</h2>
-<p>官方 Glance v0.8.5 <strong>不提供</strong> <code>public: true</code> 与 <code>authenticated-columns</code> 配对功能。维护版 <a href="https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0">ChatArch/glance chatarch-v0.1.0</a> 已提供这两项能力与 Linux amd64 资产。部署前校验 <code>SHA256SUMS</code>，通过 <code>config:validate</code>，并执行浏览器/API 双身份回读；Python 包与 Glance 服务端二进制分别安装和验收。</p>
+<p>官方 Glance v0.8.5 <strong>不提供</strong> <code>public: true</code> 与 <code>authenticated-columns</code> 配对功能。维护版 ChatArch/glance 0.2.0 已提供两项能力，不依赖新 Go 功能时兼容维护版 0.1.0。部署前提供审查过的归档显式 SHA256 和精确版本，运行 <code>config:validate</code> 并执行浏览器/API 双身份回读；Python 包与 Go 二进制分别安装和验收，不能假设存在 checksum 文件。</p>
 <p>私有的 Glance YAML 可能含 <code>auth</code>，完整 inventory 可含 Private 仓库；它们属于运行时输入，不能提交到源码、文档站、公开 assets、错误消息或公开响应。共享 head、branding、assets 必须单独审计。离线 detached public 候选命令继续存在，但不等同于同域会话选择。详细边界见 <a href="../projects/">项目与访问</a>。</p>
 <h2 id="_4">文档与发布是不同流水线</h2>
 <p>源码测试、已安装 wheel 的 CLI 检查、MkDocs 严格构建、PR <code>/dev/</code> 预览和 main 根站更新是分开的证据。文档站不接受凭据或个人运行时信息；后续仍须验证 Pages 源分支、About 链接、预览评论 URL 及最终域名外部可访问性。包标签/PyPI 和实际 Glance 服务升级由发布者另行控制。</p>

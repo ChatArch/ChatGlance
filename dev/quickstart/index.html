@@ -343,6 +343,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        可携带的本地起点（此功能尚未发布）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#1" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -491,6 +502,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    自包含运行
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -516,6 +554,17 @@
       目录
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        可携带的本地起点（此功能尚未发布）
+      
+    </span>
+  </a>
+  
+</li>
       
         <li class="md-nav__item">
   <a href="#1" class="md-nav__link">
@@ -571,6 +620,9 @@
 
 
 <h1 id="_1">快速开始：先验证候选</h1>
+<h2 id="_2">可携带的本地起点（此功能尚未发布）</h2>
+<p>在安装含此功能的 wheel 后，运行 <code>chatglance runtime paths</code>、<code>chatglance runtime init</code>；审查 <code>config/glance.yml</code> 的 loopback 首页、空 inventory 与空快照。随后从可信 Go fork 工件执行 <code>chatglance runtime install-binary --archive reviewed.tar.gz --sha256 EXPECTED_64_HEX --binary-version chatarch-vX.Y.Z+40_LOWERCASE_HEX</code>（版本必须替换为实际精确输出），使用 <code>chatglance runtime render-portable --output-dir ./review-units</code> 仅生成待审单元。<code>runtime serve</code> 必须由运维显式运行；不自动安装/启动服务。源码、wheel、Go 二进制、运行配置数据、OS 入口是五层独立边界；fork 承担可选登录，原版不保证支持。完整配置与激活步骤见 <a href="../deployment/">自包含运行</a>。</p>
+<p>默认不联网、不采集、不开公网、不执行用卡。登录须先在 typed ChatEnv 提供 <code>CHATGLANCE_LOGIN_USER</code>、<code>CHATGLANCE_LOGIN_SECRET</code> 和 bcrypt <code>CHATGLANCE_LOGIN_PASSWORD_HASH</code>，再执行 <code>runtime init --with-auth</code>；YAML 只保存 Go <code>${ENV}</code> 引用，子进程环境优先采用进程值，再查 active ChatEnv。<code>CHATGLANCE_WEB_PORT</code>、可选的 <code>CHATGLANCE_PUBLIC_ORIGIN</code> / <code>CHATGLANCE_CONTROL_PORT</code>、项目 owner 与刷新频率/页面是非密钥设置。CRS 和 GitHub 保持共享 profile/resolver，不新建 token store；旧站迁移不导出密钥。仅显式 <code>render-portable --page projects</code> 等生成非账户定时任务；controls 需 <code>--controls</code> 且先配置登录和 HTTPS origin。示例反代保留登录及旧项目重定向；无自动发布或部署。</p>
 <p>Glance 的 <code>glance.yml</code>、widgets 与 HTML/CSS 决定站点外观；ChatGlance 辅助生成页面、检验配置并维护快照。不要把示例配置当作生产部署脚本。</p>
 <h2 id="1">1. 在隔离环境安装并确认命令</h2>
 <p>当前源码 checkout 可用 <code>python -m pip install -e .</code> 安装；PyPI 安装 <code>python -m pip install ChatGlance</code> 需核对实际发布版本。<strong>可选登录 CLI 需要包含该功能的 0.1.18 源码/发行包</strong>，不是已发布 0.1.17 的行为。</p>

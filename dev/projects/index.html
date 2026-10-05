@@ -480,6 +480,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    自包含运行
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -551,7 +578,7 @@
 <h1 id="_1">项目页与同址可选登录</h1>
 <p>项目页的全量 inventory 是<strong>服务端私有输入</strong>。只有源行的 <code>private</code> 值是字面布尔 <code>false</code> 才能投影为访客项目；<code>true</code> 和缺失/畸形都不能进入访客视图。公开仓库的 URL 也要经过允许字段和外部 HTTPS 校验，不能仅按 CSS/JS 隐藏私有行。</p>
 <h2 id="_2">同一页面的两个服务端布局</h2>
-<p>维护版 <a href="https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0">ChatArch/glance chatarch-v0.1.0</a> 提供 <code>public: true</code> 与 <code>authenticated-columns</code>：有效会话时服务端以认证列<strong>替换</strong>普通 <code>columns</code>。访客只读普通列；其它页面默认仍需认证。官方 Glance v0.8.5 无此能力；从维护版发布页下载 Linux amd64 资产并用附带的 <code>SHA256SUMS</code> 校验，不能只升级 Python 包。</p>
+<p>维护版 ChatArch/glance 0.2.0（不依赖新 Go 特性时兼容维护版 0.1.0）提供 <code>public: true</code> 与 <code>authenticated-columns</code>：有效会话时服务端以认证列<strong>替换</strong>普通 <code>columns</code>。访客只读普通列；其它页面默认仍需认证。官方 Glance v0.8.5 无此能力；必须使用审查过的本地归档、显式 SHA256 与精确维护版 <code>--version</code> 校验，不能只升级 Python 包。</p>
 <table>
 <thead>
 <tr>

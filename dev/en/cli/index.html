@@ -491,6 +491,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portable runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -598,18 +625,35 @@
 <div class="highlight"><pre><span></span><code>chatglance
 ├── refresh
 ├── runtime
+│   ├── controls
+│   ├── adopt
+│   ├── check
+│   ├── init
+│   ├── install
+│   ├── import-env
+│   ├── install-binary
 │   ├── install-systemd
 │   ├── maintain
+│   ├── maintain-managed
+│   ├── paths
+│   ├── render-portable
 │   ├── render-systemd
+│   ├── refresh-managed
+│   ├── restart
+│   ├── rollback
+│   ├── serve
 │   ├── start
-│   └── status
+│   ├── status
+│   ├── stop
+│   └── update
 ├── home
 │   └── remove-widget
 └── disks
     └── root-only
 </code></pre></div>
-<p><code>refresh</code> updates configured pages from existing runtime inventories; manual mode never redeems reset cards. <code>runtime maintain</code> may rewrite the designated runtime config; <code>install-systemd</code> and <code>start</code> change user-level units and require separate review. <code>render-systemd</code> can print templates only. See <a href="../operations/">Refresh and operations</a>.</p>
+<p><code>refresh</code> updates configured pages from existing runtime inventories; manual mode never redeems reset cards. <code>runtime init</code> creates loopback configuration and empty snapshots only; <code>install-binary</code> requires a local archive and SHA256. <code>render-portable</code> prints or writes review units without registering them; <code>serve</code> and <code>controls</code> require explicit execution. <code>runtime maintain</code> may rewrite runtime config; legacy <code>install-systemd</code> and <code>start</code> change user-level units and require separate review. See <a href="../operations/">Refresh and operations</a>.</p>
 <h2 id="account-limits-and-reset-controls">Account limits and reset controls</h2>
+<p>Managed <code>install</code>, <code>adopt</code>, <code>update</code>, <code>rollback</code>, <code>stop</code> and <code>restart</code> default to dry-run; <code>--apply</code>/<code>--yes</code> authorizes writes/actions. <code>start</code>/<code>status</code> select managed behavior with <code>--runtime-home</code>, preserving legacy behavior otherwise. <code>check</code> reports validated binary/config ownership; <code>refresh-managed</code> and <code>maintain-managed</code> are real installed native unit entrypoints, not review-only renderers. See <a href="../deployment/">managed deployment</a> for complete adoption/rollback and private-input contracts.</p>
 <div class="highlight"><pre><span></span><code>chatglance
 └── account-limits
     ├── collect

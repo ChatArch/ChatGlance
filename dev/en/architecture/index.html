@@ -16,6 +16,8 @@
         <link rel="prev" href="../operations/">
       
       
+        <link rel="next" href="../deployment/">
+      
       
         
           <link rel="alternate" href="../../architecture/" hreflang="zh">
@@ -489,6 +491,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portable runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -610,7 +639,7 @@ Candidate glance.yml / page fragments ── Glance config:validate ──► op
 </tbody>
 </table>
 <h2 id="the-single-origin-dependency-is-essential">The single-origin dependency is essential</h2>
-<p>Official Glance v0.8.5 <strong>does not provide</strong> paired <code>public: true</code> and <code>authenticated-columns</code>. The maintained <a href="https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0">ChatArch/glance chatarch-v0.1.0</a> release includes both capabilities and a Linux amd64 asset. Verify <code>SHA256SUMS</code>, run <code>config:validate</code>, and check browser/API behavior in both identities before deployment. The Python package and Glance server binary have separate installation and acceptance boundaries.</p>
+<p>Official Glance v0.8.5 <strong>does not provide</strong> paired <code>public: true</code> and <code>authenticated-columns</code>. Maintained ChatArch/glance 0.2.0 includes both capabilities; compatible maintained 0.1.0 remains usable without new Go features. Require an explicitly reviewed archive SHA256 and exact version, run <code>config:validate</code>, and check browser/API behavior in both identities before deployment. The Python package and Go binary have separate installation and acceptance boundaries; do not assume a checksums file exists.</p>
 <p>Private Glance YAML can contain <code>auth</code>; the full inventory can contain Private repositories. They belong to server-side runtime input, never source, docs, public assets, errors, or guest responses. Shared head, branding, and assets need separate review. A detached public offline candidate command still exists but cannot substitute same-origin session selection. See <a href="../projects/">Projects and access</a>.</p>
 <h2 id="docs-and-releases-have-separate-pipelines">Docs and releases have separate pipelines</h2>
 <p>Source tests, installed-wheel CLI checks, strict MkDocs builds, PR <code>/dev/</code> previews, and main-root deploys are different evidence. The docs site receives no credentials or personal runtime details. Pages branch configuration, the repository About link, preview comment URL, and external domain reachability must still be checked after publication. Package tagging/PyPI and the Glance binary switch belong to a separate operator process.</p>
