@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-10-06
+
+- Normalize systemd's omitted empty `EnvironmentFiles` and timer `ExecStart` properties, so real installed CLI adoption/checking works without weakening fragment, drop-in or executable identity checks.
+- Verify both service/timer readback and missing-fragment rejection with regression tests.
+
 ## 0.2.0 - 2026-10-06
 - Managed ownership now checks effective systemd fragments/drop-ins/commands, explicitly retires backed-up overlays, imports selected literal legacy env files into the typed provider, restores partial activation, and verifies binary restart recovery.
 
