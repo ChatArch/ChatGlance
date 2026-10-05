@@ -37,7 +37,7 @@ An explicit CRS profile containing a dedicated management Key and fixed account-
 - `docs/site-architecture.md`: boundary between ChatGlance as a Python package, the Glance runtime, generated config, and runtime data refresh scripts.
 - `docs/projects.md`: project-page display contract, PyPI-only version rule, entrypoint-only display rule, actual CLI-tree classification evidence, and refresh review checklist.
 - `docs/infra.md`: configuration mechanism, external data-generation chain, refresh workflow, and cron/timer template for the Infra/`服务器` page.
-- `docs/deployment/current-site.md`: native CLI and user service/timer deployment contract; concrete topology, secrets and live evidence remain outside the repository.
+- `docs/site/deployment.en.md`: public portable deployment guide; machine-specific topology, secrets and live evidence remain outside the repository.
 - `examples/server-inventory.example.yml` / `examples/site-services.example.yml`: sanitized inventory config templates. Real inventories belong in the runtime config directory.
 - `chatglance refresh [PAGES]...`: installed-package collection, validation and publication without a source checkout or host-local business scripts.
 - `chatglance refresh --scheduled`: explicit scheduled execution for the existing timer, preserving per-account policies and the shared lock.

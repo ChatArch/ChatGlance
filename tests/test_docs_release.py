@@ -55,7 +55,7 @@ def test_site_config_bilingual_and_matched_pages():
     assert chinese == english and {"index.md", "quickstart.md", "cli.md", "projects.md", "operations.md", "architecture.md"} <= chinese
     for page in SITE.glob("*.md"):
         text = page.read_text(encoding="utf-8")
-        assert not re.search(r"/home/[^\s`]+|\brexpc\b|glance-public", text)
+        assert not re.search(r"/home/[^\s`]+|__PRIVATE_HOST_SENTINEL__", text)
     for page in ("index.md", "index.en.md", "projects.md", "projects.en.md"):
         content = (SITE / page).read_text(encoding="utf-8")
         assert "ChatArch/glance" in content or page.startswith("index")

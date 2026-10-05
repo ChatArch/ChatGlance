@@ -135,15 +135,7 @@ page:
 inventory:
   default_candidates: false
   exclude: []
-  hosts:
-    - alias: "infra-cube-1"
-      label: "cube-1"
-      group: "cube"
-      connection_kind: "内网连接"
-    - alias: "infra-public-1"
-      label: "public-1"
-      group: "public"
-      connection_kind: "公网连接"
+  hosts: []  # 仅在私有 runtime inventory 中添加审核过的 SSH alias
 
 collection:
   timeout: 18
@@ -152,7 +144,7 @@ collection:
 
 字段边界：
 
-- `alias` 是控制机本地 SSH config 里的别名。
+- `alias` 是控制机本地 SSH config 里的别名；机器级排除策略在私有运行态 `inventory.exclude` / `inventory.excludes` 显式配置。默认 `default_candidates: false` 不会自动扫描 SSH alias，启用后也应审查候选与排除清单。
 - `label` / `display_name` 只影响前端显示。
 - `group` 只影响展示分组/排序语义。
 - `connection_kind` 是展示文案，不应该携带凭据。

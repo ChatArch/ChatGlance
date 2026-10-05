@@ -37,7 +37,7 @@
 - `docs/site-architecture.md`：ChatGlance 作为 Python 包、Glance runtime、生成配置和 runtime 数据脚本之间的边界。
 - `docs/projects.md`：`项目` 页展示内容、PyPI-only 版本规则、entrypoint-only 展示规则、actual CLI tree 分类证据和刷新验收清单。
 - `docs/infra.md`：Infra/`服务器` 页的配置机制、外部数据生成链路、刷新方式和 cron/timer 模板。
-- `docs/deployment/current-site.md`：原生 CLI 与 user service/timer 的部署约定；具体拓扑、密钥和现场验收保留在外部运行态。
+- `docs/site/deployment.md`：公共可携带部署指南；机器特有拓扑、密钥与现场验收保留在仓库外。
 - `examples/server-inventory.example.yml` / `examples/site-services.example.yml`：可提交的脱敏 inventory 配置示例；真实 inventory 放在 runtime config 目录。
 - `chatglance refresh [PAGES]...`：安装包内置的采集、候选校验与发布入口，不依赖源码 checkout 或机器本地业务脚本。
 - `chatglance refresh --scheduled`：供现有 timer 调用的显式计划运行方式；保留每账号自动策略和统一锁。

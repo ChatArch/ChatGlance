@@ -13,7 +13,7 @@ from test_projects import sample_inventory
 def test_build_maintained_config_applies_project_page_and_disk_patch():
     config = {
         "pages": [
-            {"name": "ChatArch", "columns": [{"size": "small", "widgets": [{"type": "server-stats", "servers": [{"type": "local", "name": "rexpc"}]}]}]},
+            {"name": "ChatArch", "columns": [{"size": "small", "widgets": [{"type": "server-stats", "servers": [{"type": "local", "name": "workstation-local"}]}]}]},
             {"name": "ChatArch Projects"},
         ]
     }

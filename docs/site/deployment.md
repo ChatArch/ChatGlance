@@ -31,6 +31,8 @@ chatglance runtime render-portable --page projects --interval 30min --output-dir
 
 将示意版本替换为可执行文件 `--version` 的**精确输出**（`chatarch-v主.次.修+40位小写哈希`）。本地 SHA256 已审核的 tar 仅含一个普通 `glance` 文件；安装器限时执行验证暂存文件的 `--version`，比较后记录归档/二进制 SHA256；错误不替换未知文件，不下载 latest。`chatglance refresh` 使用同一 typed 环境交给 Go `config:validate`；生产前另验真实 binary 和匿名/登录会话。初始配置只有时钟首页；先审查清单、配置所需页面再刷新，空 hosts 不会连接 SSH。旧 `runtime maintain` 可选，不强制维护 timer。
 
+机器专属的别名排除策略仅放在私有运行态 `config/server-inventory.yml` 的 `inventory.exclude` 或 `inventory.excludes`；源码只排除通用 `local` / `localhost`。`default_candidates: false` 是默认值，启用自动候选前请审核本机 SSH alias、排除清单及目标；示例 `hosts: []` 永远不是实际连接目标。
+
 ## 显式运行及激活边界
 
 `chatglance runtime serve` 显式前台启动 Go，登录密钥只进入子进程环境：进程 env 优先，其次 active typed ChatEnv。`chatglance refresh projects --runtime-home DIR --service-name chatglance-portable.service` 用 native 共享锁校验并发布，**仅在内容改变时**重启指定自身服务。`render-portable` 不传页面/间隔时读取 typed `CHATGLANCE_REFRESH_PAGES`（空格/逗号分隔）及 `CHATGLANCE_REFRESH_INTERVAL`；默认不生成 timer。只允许 projects/servers/sites，不自动扫描账户或消费卡。`CHATGLANCE_PROJECTS_OWNER` 配置 owner，显式 `--projects-owner` / `--owner` 可覆盖。

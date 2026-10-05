@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Remove owner-specific SSH alias/subnet policy and private deployment notes from transferable source; use reviewed runtime `inventory.exclude` / `inventory.excludes` and generic non-connecting examples.
 - Package loopback runtime templates, safe empty snapshots, review-only portable service units and thin package-owned lifecycle scripts.
 - Add verified local Go-fork archive installation, provenance metadata and process-only typed ChatEnv login bridge; no automatic deployment or account actions.
 - Require canonical 64-byte Go login keys, observed maintained-fork binary versions, opt-in provider-backed non-account schedules and own-service conditional restarts; provide bilingual deployment instructions and usable reviewed proxy example.

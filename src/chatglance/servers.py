@@ -95,21 +95,9 @@ fi
 EXCLUDED_ALIASES = {
     "local",
     "localhost",
-    "rexpc",
-    "rex.mini",
-    "mini.frp",
-    "zhihong.oray",
-    "rexwzh.oray",
-    "cubebot.oray",
-    "zhihong.lean4web",
-    "azure.cn",
-    "essay.newaliyun",
-    "root.ctyun",
-    "rex.ctyun",
-    "zhihong.tencent",
 }
 
-PUBLIC_ALIAS_MARKERS = ("tencent", "aliyun", "ctyun", "azure", "newazure", "newaliyun", "tencent.am")
+PUBLIC_ALIAS_MARKERS = ("tencent", "aliyun", "ctyun", "azure", "newazure", "newaliyun")
 
 
 BEIJING_TZ = timezone(timedelta(hours=8))
@@ -178,7 +166,7 @@ def aliases_from_inventory_config(config: dict[str, Any], *, ssh_aliases: Iterab
     exclude.update(_as_alias_list(inventory.get("excludes"), field="inventory.excludes"))
     selected: list[str] = []
     for alias in aliases:
-        if alias in exclude or "lean4web" in alias:
+        if alias in exclude:
             continue
         if alias not in selected:
             selected.append(alias)
@@ -572,16 +560,12 @@ def is_private_ip(value: str) -> bool:
         ip = ipaddress.ip_address(value)
     except ValueError:
         return False
-    return ip.is_private or ip.is_link_local or ip.is_loopback or value.startswith("100.10.")
+    return ip.is_private or ip.is_link_local or ip.is_loopback
 
 
 def primary_ip(ips: Iterable[str], *, prefer_private: bool) -> str:
     values = list(ips)
     if prefer_private:
-        for prefix in ("192.168.98.", "172.23.", "172.31.", "10.", "192.168.", "172.", "100.10."):
-            for ip in values:
-                if ip.startswith(prefix):
-                    return ip
         for ip in values:
             if is_private_ip(ip):
                 return ip
@@ -696,8 +680,6 @@ def resolve_global_ip(hostname: str) -> str:
 
 
 def alias_group(alias: str) -> str:
-    if alias.endswith(".cube"):
-        return "cube"
     if any(marker in alias for marker in PUBLIC_ALIAS_MARKERS):
         return "public"
     return "other"
@@ -705,7 +687,7 @@ def alias_group(alias: str) -> str:
 
 def connection_kind(alias: str, target: dict[str, str]) -> str:
     host = target.get("hostname", "")
-    if alias.endswith(".cube") or is_private_ip(host):
+    if is_private_ip(host):
         return "内网连接"
     return "公网连接"
 
@@ -728,23 +710,16 @@ def ssh_config_aliases(path: str | Path | None = None) -> list[str]:
 def default_candidate_aliases(aliases: Iterable[str] | None = None) -> list[str]:
     values = list(aliases or ssh_config_aliases())
     selected: list[str] = []
-    public_exact = {
-        "rex.aliyun",
-        "rex.newazure",
-        "elion.newaliyun",
-    }
     for alias in values:
-        if alias in EXCLUDED_ALIASES or "lean4web" in alias:
+        if alias in EXCLUDED_ALIASES or any(char in alias for char in "*?"):
             continue
-        if alias.endswith(".cube") or alias in public_exact:
+        if alias.endswith(tuple("." + marker for marker in PUBLIC_ALIAS_MARKERS)):
             selected.append(alias)
     return selected
 
 
 def _alias_preference(alias: str, target: dict[str, str]) -> tuple[int, str]:
-    if alias.endswith(".cube"):
-        score = 0
-    elif alias.startswith("root."):
+    if alias.startswith("root."):
         score = 4
     else:
         score = 2
