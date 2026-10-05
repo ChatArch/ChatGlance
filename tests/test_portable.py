@@ -259,12 +259,28 @@ def test_wheel_includes_installed_resources(tmp_path):
     shutil.copytree(__import__("pathlib").Path(__file__).resolve().parents[1] / "src", source / "src")
     shutil.copy2(__import__("pathlib").Path(__file__).resolve().parents[1] / "pyproject.toml", source / "pyproject.toml")
     shutil.copy2(__import__("pathlib").Path(__file__).resolve().parents[1] / "README.md", source / "README.md")
+    shutil.copy2(__import__("pathlib").Path(__file__).resolve().parents[1] / "MANIFEST.in", source / "MANIFEST.in")
+    project_root = __import__("pathlib").Path(__file__).resolve().parents[1]
+    shutil.copytree(project_root / "scripts", source / "scripts")
+    shutil.copytree(project_root / "examples", source / "examples")
     build = subprocess.run(
-        [sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", str(tmp_path / "dist")],
+        [sys.executable, "-m", "build", "--wheel", "--sdist", "--no-isolation", "--outdir", str(tmp_path / "dist")],
         cwd=source, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True,
     )
     assert build.returncode == 0
     with zipfile.ZipFile(next((tmp_path / "dist").glob("*.whl"))) as wheel:
         names = set(wheel.namelist())
-        for name in ("glance.yml", "server-inventory.yml", "site-services.yml", "reverse-proxy.example.conf", "start.sh", "install.sh", "refresh.sh"):
+        manifest = json.loads((source / "src/chatglance/resources/assets.json").read_text())
+        resources = {item["path"] for item in manifest["assets"]} | {"assets.json"}
+        source_assets = {item["path"] for item in manifest["source_assets"]}
+        assert resources == {path.name for path in (source / "src/chatglance/resources").iterdir() if path.is_file()}
+        assert source_assets == {str(path.relative_to(source)) for folder in ("scripts", "examples")
+                                 for path in (source / folder).iterdir() if path.is_file()}
+        for name in resources:
             assert "chatglance/resources/" + name in names
+    with tarfile.open(next((tmp_path / "dist").glob("*.tar.gz"))) as archive:
+        members = archive.getnames()
+        for name in resources:
+            assert any(member.endswith("/src/chatglance/resources/" + name) for member in members)
+        for name in source_assets:
+            assert any(member.endswith("/" + name) for member in members)

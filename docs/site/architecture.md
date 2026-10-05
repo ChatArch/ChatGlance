@@ -22,7 +22,7 @@ ChatGlance 是 Python 包与 CLI，Glance 是读取 YAML 并处理认证/页面/
 
 ## 同址依赖不可替代
 
-官方 Glance v0.8.5 **不提供** `public: true` 与 `authenticated-columns` 配对功能。维护版 [ChatArch/glance chatarch-v0.1.0](https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0) 已提供这两项能力与 Linux amd64 资产。部署前校验 `SHA256SUMS`，通过 `config:validate`，并执行浏览器/API 双身份回读；Python 包与 Glance 服务端二进制分别安装和验收。
+官方 Glance v0.8.5 **不提供** `public: true` 与 `authenticated-columns` 配对功能。维护版 ChatArch/glance 0.2.0 已提供两项能力，不依赖新 Go 功能时兼容维护版 0.1.0。部署前提供审查过的归档显式 SHA256 和精确版本，运行 `config:validate` 并执行浏览器/API 双身份回读；Python 包与 Go 二进制分别安装和验收，不能假设存在 checksum 文件。
 
 私有的 Glance YAML 可能含 `auth`，完整 inventory 可含 Private 仓库；它们属于运行时输入，不能提交到源码、文档站、公开 assets、错误消息或公开响应。共享 head、branding、assets 必须单独审计。离线 detached public 候选命令继续存在，但不等同于同域会话选择。详细边界见 [项目与访问](projects.md)。
 

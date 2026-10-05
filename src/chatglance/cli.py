@@ -728,11 +728,12 @@ def portable_serve(runtime_home: Path | None) -> None:
 @click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
 def portable_controls(runtime_home: Path | None) -> None:
     """Run explicitly provisioned authenticated loopback controls."""
-    from chatglance.portable import authenticated_environment, runtime_home as resolve
+    from chatglance.portable import runtime_home as resolve
+    from chatglance.managed import runtime_environment, effective_home
     from chatglance.reset_control import serve_controls
     from urllib.parse import urlsplit
     try:
-        environment = authenticated_environment()
+        environment = runtime_environment(resolve(runtime_home), auth=True)
         origin = environment.get("CHATGLANCE_PUBLIC_ORIGIN", "")
         parsed = urlsplit(origin)
         if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
@@ -740,7 +741,8 @@ def portable_controls(runtime_home: Path | None) -> None:
         port = int(environment.get("CHATGLANCE_CONTROL_PORT", "5679"))
         if not 1 <= port <= 65535:
             raise ValueError("invalid control port")
-        serve_controls(runtime_home=resolve(runtime_home), public_origin=origin, port=port)
+        with effective_home(resolve(runtime_home)):
+            serve_controls(runtime_home=resolve(runtime_home), public_origin=origin, port=port)
     except (ValueError, OSError) as exc:
         raise click.ClickException(f"controls unavailable ({type(exc).__name__})") from None
 
@@ -899,12 +901,19 @@ def install_systemd(
 
 
 @runtime.command("start")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), help="Use manifest-owned lifecycle instead of legacy unit flags.")
+@click.option("--apply", "--yes", is_flag=True, help="Apply the managed action; managed default is a plan.")
 @click.option("--service-name", default="chatarch-glance.service", show_default=True, help="Main Glance user service name.")
 @click.option("--timer-name", default="chatarch-glance-maintenance.timer", show_default=True, help="Maintenance timer name.")
 @click.option("--timer/--no-timer", default=True, show_default=True, help="Start the maintenance timer together with the main service.")
-def start_runtime(service_name: str, timer_name: str, timer: bool) -> None:
+def start_runtime(service_name: str, timer_name: str, timer: bool, runtime_home: Path | None, apply: bool) -> None:
     """Start the current Glance page through systemd user units."""
 
+    if runtime_home is not None:
+        from chatglance.managed import service_action
+        from chatglance.managed_cli import _emit
+        _emit(service_action, runtime_home, "start", apply=apply)
+        return
     units = [service_name]
     if timer:
         units.append(timer_name)
@@ -916,16 +925,29 @@ def start_runtime(service_name: str, timer_name: str, timer: bool) -> None:
 
 
 @runtime.command("status")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), help="Report manifest-owned package/binary/config/unit evidence.")
+@click.option("--live", is_flag=True, help="Include owned unit states and PIDs in managed mode.")
+@click.option("--validate", is_flag=True, help="Run bounded Go config validation in managed mode.")
 @click.option("--service-name", default="chatarch-glance.service", show_default=True, help="Main Glance user service name.")
 @click.option("--timer-name", default="chatarch-glance-maintenance.timer", show_default=True, help="Maintenance timer name.")
-def status_runtime(service_name: str, timer_name: str) -> None:
+def status_runtime(service_name: str, timer_name: str, runtime_home: Path | None, live: bool, validate: bool) -> None:
     """Show safe systemd user status for the Glance service and timer."""
 
+    if runtime_home is not None:
+        from chatglance.managed import runtime_status
+        from chatglance.managed_cli import _emit
+        _emit(runtime_status, runtime_home, live=live, validate=validate)
+        return
     try:
         status = show_user_units(service_name, timer_name)
     except subprocess.CalledProcessError as exc:
         _raise_systemd_error(exc)
     click.echo(json.dumps(status, ensure_ascii=False, indent=2))
+
+
+from chatglance.managed_cli import register as register_managed_runtime
+
+register_managed_runtime(runtime)
 
 
 if __name__ == "__main__":

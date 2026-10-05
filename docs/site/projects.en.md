@@ -4,7 +4,7 @@ The full project inventory is **private server-side input**. Only source rows wh
 
 ## Two server-side layouts at the same path
 
-The maintained [ChatArch/glance chatarch-v0.1.0](https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0) release supplies `public: true` and `authenticated-columns`: with a valid session, Glance **replaces** ordinary `columns` server-side. Guests read only ordinary columns; other pages remain auth-required by default. Official Glance v0.8.5 lacks this capability. Download the Linux amd64 asset and verify its `SHA256SUMS`; upgrading only the Python package is insufficient.
+The maintained ChatArch/glance 0.2.0 binary (compatible maintained 0.1.0 without new Go features) supplies `public: true` and `authenticated-columns`: with a valid session, Glance **replaces** ordinary `columns` server-side. Guests read only ordinary columns; other pages remain auth-required by default. Official Glance v0.8.5 lacks this capability. Require a reviewed local archive, explicit SHA256 and exact maintained `--version`; upgrading only Python is insufficient.
 
 | Same `/projects` page | Guest `columns` | Valid session `authenticated-columns` |
 |---|---|---|

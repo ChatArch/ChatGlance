@@ -4,7 +4,7 @@
 
 ## 同一页面的两个服务端布局
 
-维护版 [ChatArch/glance chatarch-v0.1.0](https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0) 提供 `public: true` 与 `authenticated-columns`：有效会话时服务端以认证列**替换**普通 `columns`。访客只读普通列；其它页面默认仍需认证。官方 Glance v0.8.5 无此能力；从维护版发布页下载 Linux amd64 资产并用附带的 `SHA256SUMS` 校验，不能只升级 Python 包。
+维护版 ChatArch/glance 0.2.0（不依赖新 Go 特性时兼容维护版 0.1.0）提供 `public: true` 与 `authenticated-columns`：有效会话时服务端以认证列**替换**普通 `columns`。访客只读普通列；其它页面默认仍需认证。官方 Glance v0.8.5 无此能力；必须使用审查过的本地归档、显式 SHA256 与精确维护版 `--version` 校验，不能只升级 Python 包。
 
 | 同一 `/projects` 页面 | 访客 `columns` | 有效会话 `authenticated-columns` |
 |---|---|---|

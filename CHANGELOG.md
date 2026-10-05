@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-10-06
+- Managed ownership now checks effective systemd fragments/drop-ins/commands, explicitly retires backed-up overlays, imports selected literal legacy env files into the typed provider, restores partial activation, and verifies binary restart recovery.
+
+- Add dry-run-first CLI-owned installation, adoption, checking, service lifecycle, verified binary updates and private rollback, reusing native shared refresh ownership.
+- Package tracked web/refresh/control/optional-maintenance templates and a complete public asset manifest; preserve reviewed unit names, cadence and explicit scheduled policies.
+- Migrate multiple Go login users into sensitive typed ChatEnv account fields without changing signing key, bcrypt hashes, pages or snapshots; publish only environment references.
 - Remove owner-specific SSH alias/subnet policy and private deployment notes from transferable source; use reviewed runtime `inventory.exclude` / `inventory.excludes` and generic non-connecting examples.
 - Package loopback runtime templates, safe empty snapshots, review-only portable service units and thin package-owned lifecycle scripts.
 - Add verified local Go-fork archive installation, provenance metadata and process-only typed ChatEnv login bridge; no automatic deployment or account actions.

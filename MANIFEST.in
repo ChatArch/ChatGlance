@@ -10,3 +10,6 @@ include mkdocs.yml
 recursive-include docs/site *.md
 recursive-include examples *.yml
 recursive-include scripts *.sh
+recursive-include scripts *.py
+include scripts/chatglance-from-source
+recursive-include src/chatglance/resources *.yml *.conf *.sh *.service *.timer *.json

@@ -1,0 +1,12 @@
+[Unit]
+Description=ChatGlance managed Go web
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=@@COMMAND@@ runtime serve --runtime-home @@RUNTIME@@
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

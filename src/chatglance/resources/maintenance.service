@@ -1,0 +1,6 @@
+[Unit]
+Description=ChatGlance optional managed maintenance
+
+[Service]
+Type=oneshot
+ExecStart=@@COMMAND@@ runtime maintain-managed --runtime-home @@RUNTIME@@

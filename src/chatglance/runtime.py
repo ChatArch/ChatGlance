@@ -81,8 +81,16 @@ def validate_glance_config(glance_bin: str | Path, config_path: str | Path) -> N
     from .portable import authenticated_environment, bridge_environment
 
     text = Path(config_path).read_text(encoding="utf-8")
-    environment = (authenticated_environment() if "${CHATGLANCE_LOGIN_SECRET}" in text
-                   else bridge_environment()) if "${CHATGLANCE_" in text else None
+    if "CHATGLANCE_AUTH_USER_" in text:
+        from .managed import runtime_environment
+        ancestors = Path(config_path).absolute().parents
+        root = next((parent for parent in ancestors if (parent / "private/managed.json").is_file()), None)
+        root = root or (Path(config_path).parent.parent if Path(config_path).parent.name == "config" else None)
+        root = root or Path(glance_bin).absolute().parent.parent
+        environment = runtime_environment(root)
+    else:
+        environment = (authenticated_environment() if "${CHATGLANCE_LOGIN_SECRET}" in text
+                       else bridge_environment()) if "${CHATGLANCE_" in text else None
     subprocess.run(
         [str(glance_bin), "-config", str(config_path), "config:validate"],
         check=True,

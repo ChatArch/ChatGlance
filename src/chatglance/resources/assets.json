@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "source_assets": [
+    {"path": "scripts/chatglance-from-source", "role": "development-only source entry"},
+    {"path": "scripts/collect-codex-account-limits.py", "role": "legacy thin collector wrapper"},
+    {"path": "scripts/refresh-live-pages.sh", "role": "legacy development wrapper"},
+    {"path": "scripts/refresh-manual.sh", "role": "legacy development wrapper"},
+    {"path": "scripts/refresh-projects-page.sh", "role": "legacy development wrapper"},
+    {"path": "scripts/refresh-server-status.sh", "role": "legacy development wrapper"},
+    {"path": "scripts/refresh-sites-page.sh", "role": "legacy development wrapper"},
+    {"path": "scripts/refresh-account-limits-page.sh", "role": "legacy development wrapper"},
+    {"path": "examples/server-inventory.example.yml", "role": "generic source-only SSH inventory example"},
+    {"path": "examples/site-services.example.yml", "role": "generic source-only site example"}
+  ],
+  "assets": [
+    {"path": "glance.yml", "role": "loopback config", "runtime": "config/glance.yml"},
+    {"path": "server-inventory.yml", "role": "empty reviewed hosts", "runtime": "config/server-inventory.yml"},
+    {"path": "site-services.yml", "role": "empty reviewed sites", "runtime": "config/site-services.yml"},
+    {"path": "reverse-proxy.example.conf", "role": "proxy example", "runtime": "config/reverse-proxy.example.conf"},
+    {"path": "start.sh", "role": "thin CLI wrapper", "runtime": "scripts/start.sh"},
+    {"path": "install.sh", "role": "thin CLI wrapper", "runtime": "scripts/install.sh"},
+    {"path": "refresh.sh", "role": "thin CLI wrapper", "runtime": "scripts/refresh.sh"},
+    {"path": "web.service", "role": "managed web unit"},
+    {"path": "refresh.service", "role": "managed refresh unit"},
+    {"path": "refresh.timer", "role": "managed refresh timer"},
+    {"path": "controls.service", "role": "optional authenticated controls unit"},
+    {"path": "maintenance.service", "role": "optional maintenance unit"},
+    {"path": "maintenance.timer", "role": "optional maintenance timer"}
+  ]
+}

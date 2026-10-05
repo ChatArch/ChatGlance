@@ -31,6 +31,6 @@ ChatGlance **generates configuration and supports operations** for Glance dashbo
 </div>
 
 !!! warning "Required Glance capability"
-    Official Glance v0.8.5 **does not** implement the `public` pages and server-side `authenticated-columns` selection described here. Use the Linux amd64 binary from [chatarch-v0.1.0](https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0) and verify its `SHA256SUMS`. Installing the Python package does not replace a running Glance binary; validate configuration, guest access, login and logout before cutover.
+    Official Glance v0.8.5 **does not** implement the `public` pages and server-side `authenticated-columns` selection described here. Use a separately reviewed maintained ChatArch/glance binary with explicit archive SHA256 and exact `--version` (0.2.0 preferred; compatible 0.1.0 when no new Go feature is needed). Do not assume a release checksum file exists. Installing Python does not replace a running server; validate configuration, guest access, login and logout before cutover.
 
 Choose a workflow in [Quickstart](quickstart.md); deployment and rollback boundaries are covered in [Refresh and operations](operations.md).

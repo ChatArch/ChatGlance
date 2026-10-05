@@ -179,6 +179,7 @@ def install_verified_binary(archive: str | Path, sha256: str, home: str | Path |
 
 BRIDGE_KEYS = (
     "CHATGLANCE_LOGIN_SECRET", "CHATGLANCE_LOGIN_PASSWORD_HASH", "CHATGLANCE_LOGIN_USER",
+    "CHATGLANCE_LOGIN_ACCOUNTS",
     "CHATGLANCE_PUBLIC_ORIGIN", "CHATGLANCE_WEB_PORT", "CHATGLANCE_CONTROL_PORT",
     "CHATGLANCE_PROJECTS_OWNER", "CHATGLANCE_REFRESH_PAGES", "CHATGLANCE_REFRESH_INTERVAL",
     "CHATGLANCE_ACCOUNT_LIMITS_CONTROL_PATH",
@@ -248,7 +249,11 @@ def serve(home: str | Path | None = None) -> None:
     if binary.is_symlink() or not binary.is_file() or config.is_symlink() or not config.is_file():
         raise ValueError("runtime binary/config missing or unsafe")
     content = config.read_text(encoding="utf-8")
-    environment = authenticated_environment() if "CHATGLANCE_LOGIN_SECRET" in content else bridge_environment()
+    if "CHATGLANCE_AUTH_USER_" in content or (root / "private/managed.json").exists():
+        from .managed import runtime_environment
+        environment = runtime_environment(root, auth="CHATGLANCE_LOGIN_SECRET" in content)
+    else:
+        environment = authenticated_environment() if "CHATGLANCE_LOGIN_SECRET" in content else bridge_environment()
     try:
         port = int(environment["CHATGLANCE_WEB_PORT"])
     except ValueError as exc:

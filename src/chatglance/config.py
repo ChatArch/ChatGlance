@@ -15,7 +15,8 @@ class ChatGlanceConfig(BaseEnvConfig):
 
     CHATGLANCE_LOGIN_SECRET = EnvField("CHATGLANCE_LOGIN_SECRET", desc="Go login session signing secret.", is_sensitive=True)
     CHATGLANCE_LOGIN_PASSWORD_HASH = EnvField("CHATGLANCE_LOGIN_PASSWORD_HASH", desc="Go login bcrypt password hash (never plaintext).", is_sensitive=True)
-    CHATGLANCE_LOGIN_USER = EnvField("CHATGLANCE_LOGIN_USER", desc="Explicit Go login username.")
+    CHATGLANCE_LOGIN_USER = EnvField("CHATGLANCE_LOGIN_USER", desc="Explicit Go login username.", is_sensitive=True)
+    CHATGLANCE_LOGIN_ACCOUNTS = EnvField("CHATGLANCE_LOGIN_ACCOUNTS", default="{}", desc="Private indexed Go login account/hash map; never printed.", is_sensitive=True)
     CHATGLANCE_PUBLIC_ORIGIN = EnvField("CHATGLANCE_PUBLIC_ORIGIN", desc="Reviewed public origin for optional authenticated controls.")
     CHATGLANCE_WEB_PORT = EnvField("CHATGLANCE_WEB_PORT", default="8080", desc="Loopback Go web port.")
     CHATGLANCE_CONTROL_PORT = EnvField("CHATGLANCE_CONTROL_PORT", default="5679", desc="Optional loopback controls port.")
@@ -53,6 +54,7 @@ class ChatGlanceConfig(BaseEnvConfig):
     CHATGLANCE_ACCOUNT_LIMITS_CRS_ACCOUNTS = EnvField(
         "CHATGLANCE_ACCOUNT_LIMITS_CRS_ACCOUNTS", default="{}",
         desc="JSON mapping selected display/policy labels to exact CRS account IDs; no OAuth values.",
+        is_sensitive=True,
     )
 
     CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES = EnvField(

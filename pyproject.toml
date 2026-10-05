@@ -50,4 +50,4 @@ where = ["src"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-chatglance = ["resources/*.yml", "resources/*.conf", "resources/*.sh"]
+chatglance = ["resources/*.yml", "resources/*.conf", "resources/*.sh", "resources/*.service", "resources/*.timer", "resources/*.json"]

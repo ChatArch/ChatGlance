@@ -31,17 +31,27 @@ chatglance
 │   └── update-config [--data DATA-PATH] [--config CONFIG-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME]  # Write a config copy with the generated project page replaced.
 ├── refresh [PAGES...] [--runtime-home RUNTIME-HOME] [--glance-bin GLANCE-BIN] [--service-name SERVICE-NAME] [--no-restart] [--scheduled] [--profiles PROFILES] [--actual-cli-tree] [--allow-offline-regression] [--projects-owner PROJECTS-OWNER] [--project-workers PROJECT-WORKERS] [--uvx-bin UVX-BIN] [--cli-tree-timeout CLI-TREE-TIMEOUT] [--server-inventory SERVER-INVENTORY] [--sites-inventory SITES-INVENTORY] [--gatus-db GATUS-DB] [--account-timeout ACCOUNT-TIMEOUT] [--reset-timeout RESET-TIMEOUT] [--no-public-reset] [--reset-base-url RESET-BASE-URL] [--json-output]  # Refresh configured pages natively; manual mode never redeems reset cards.
 ├── runtime  # Maintain a durable Glance service runtime.
+│   ├── adopt [--runtime-home RUNTIME-HOME] [--public-origin PUBLIC-ORIGIN] [--control-port CONTROL-PORT] [--replace-provider] [--apply]  # Import existing login accounts into typed ChatEnv without losing pages.
+│   ├── check [--runtime-home RUNTIME-HOME] [--live]  # Validate Go config and report installed-code, binary and owned-file evidence.
 │   ├── controls [--runtime-home RUNTIME-HOME]  # Run explicitly provisioned authenticated loopback controls.
+│   ├── import-env [--runtime-home RUNTIME-HOME] [--file SOURCE] [--replace-provider] [--retire] [--apply]  # Import supported literal legacy settings into typed ChatEnv.
 │   ├── init [--runtime-home RUNTIME-HOME] [--with-auth]  # Create a loopback runtime, empty snapshots and non-secret examples.
+│   ├── install [--runtime-home RUNTIME-HOME] [--unit-dir UNIT-DIR] [--python-bin PYTHON-BIN] [--page PAGES] [--interval INTERVAL] [--scheduled] [--controls] [--maintenance] [--web-unit WEB-UNIT] [--refresh-unit REFRESH-UNIT] [--refresh-timer REFRESH-TIMER] [--controls-unit CONTROLS-UNIT] [--maintenance-unit MAINTENANCE-UNIT] [--maintenance-timer MAINTENANCE-TIMER] [--adopt-units] [--retire-dropins] [--apply] [--enable] [--start]  # Plan or atomically install the managed user-service bundle.
 │   ├── install-binary [--runtime-home RUNTIME-HOME] [--archive ARCHIVE] [--sha256 SHA256] [--binary-version BINARY-VERSION]  # Install a verified, reviewed local Go-fork tar archive without replacement.
 │   ├── install-systemd [--runtime-home RUNTIME-HOME] [--chatglance-bin CHATGLANCE-BIN] [--output-dir OUTPUT-DIR] [--service-name SERVICE-NAME] [--maintenance-service-name MAINTENANCE-SERVICE-NAME] [--timer-name TIMER-NAME] [--interval INTERVAL] [--verify] [--enable] [--start]  # Install, verify, enable, and optionally start user-level systemd units.
 │   ├── maintain [--runtime-home RUNTIME-HOME] [--config CONFIG-PATH] [--data DATA-PATH] [--backup-dir BACKUP-DIR] [--page-name PAGE-NAME] [--validate] [--glance-bin GLANCE-BIN] [--restart-service RESTART-SERVICE]  # Update runtime config atomically and optionally restart a service.
+│   ├── maintain-managed [--runtime-home RUNTIME-HOME]  # Run opt-in maintenance only while the native collector is idle.
 │   ├── paths [--runtime-home RUNTIME-HOME]  # Print effective portable runtime paths (never secret values).
+│   ├── refresh-managed [--runtime-home RUNTIME-HOME]  # Run the owned schedule through the shared native refresh pipeline.
 │   ├── render-portable [--runtime-home RUNTIME-HOME] [--python-bin PYTHON-BIN] [--page PAGES] [--interval INTERVAL] [--controls] [--output-dir OUTPUT-DIR]  # Render review-only startup and optional refresh/control units.
 │   ├── render-systemd [--runtime-home RUNTIME-HOME] [--chatglance-bin CHATGLANCE-BIN] [--service-name SERVICE-NAME] [--maintenance-service-name MAINTENANCE-SERVICE-NAME] [--timer-name TIMER-NAME] [--interval INTERVAL] [--output-dir OUTPUT-DIR]  # Print user units or write them to an output directory.
+│   ├── restart [--runtime-home RUNTIME-HOME] [--unit UNITS] [--apply]  # Plan or restart only manifest-owned runtime entries.
+│   ├── rollback [--runtime-home RUNTIME-HOME] [--backup BACKUP] [--apply]  # Plan or restore unchanged managed files from a private backup.
 │   ├── serve [--runtime-home RUNTIME-HOME]  # Start installed Go binary with typed ChatEnv secrets in child env.
-│   ├── start [--service-name SERVICE-NAME] [--timer-name TIMER-NAME] [--timer]  # Start the current Glance page through systemd user units.
-│   └── status [--service-name SERVICE-NAME] [--timer-name TIMER-NAME]  # Show safe systemd user status for the Glance service and timer.
+│   ├── start [--runtime-home RUNTIME-HOME] [--apply] [--service-name SERVICE-NAME] [--timer-name TIMER-NAME] [--timer]  # Start the current Glance page through systemd user units.
+│   ├── status [--runtime-home RUNTIME-HOME] [--live] [--validate] [--service-name SERVICE-NAME] [--timer-name TIMER-NAME]  # Show safe systemd user status for the Glance service and timer.
+│   ├── stop [--runtime-home RUNTIME-HOME] [--unit UNITS] [--apply]  # Plan or stop only manifest-owned runtime entries.
+│   └── update [--runtime-home RUNTIME-HOME] [--archive ARCHIVE] [--sha256 SHA256] [--binary-version BINARY-VERSION] [--restart] [--apply]  # Plan or verify and update Go binary with private rollback backups.
 ├── servers  # Collect and render the `服务器` Glance page.
 │   ├── candidates [--config SSH-CONFIG] [--inventory-config INVENTORY-CONFIG]  # Print selected server aliases without probing hosts.
 │   ├── collect [--alias ALIASES] [--inventory-config INVENTORY-CONFIG] [--default-candidates] [--output OUTPUT-PATH] [--timeout TIMEOUT] [--workers WORKERS]  # Write a server-status JSON snapshot from read-only SSH probes.
@@ -84,17 +94,27 @@ chatglance
 │   └── update-config  # Write a config copy with the generated project page replaced.
 ├── refresh  # Refresh configured pages natively; manual mode never redeems reset cards.
 ├── runtime  # Maintain a durable Glance service runtime.
+│   ├── adopt  # Import existing login accounts into typed ChatEnv without losing pages.
+│   ├── check  # Validate Go config and report installed-code, binary and owned-file evidence.
 │   ├── controls  # Run explicitly provisioned authenticated loopback controls.
+│   ├── import-env  # Import supported literal legacy settings into typed ChatEnv.
 │   ├── init  # Create a loopback runtime, empty snapshots and non-secret examples.
+│   ├── install  # Plan or atomically install the managed user-service bundle.
 │   ├── install-binary  # Install a verified, reviewed local Go-fork tar archive without replacement.
 │   ├── install-systemd  # Install, verify, enable, and optionally start user-level systemd units.
 │   ├── maintain  # Update runtime config atomically and optionally restart a service.
+│   ├── maintain-managed  # Run opt-in maintenance only while the native collector is idle.
 │   ├── paths  # Print effective portable runtime paths (never secret values).
+│   ├── refresh-managed  # Run the owned schedule through the shared native refresh pipeline.
 │   ├── render-portable  # Render review-only startup and optional refresh/control units.
 │   ├── render-systemd  # Print user units or write them to an output directory.
+│   ├── restart  # Plan or restart only manifest-owned runtime entries.
+│   ├── rollback  # Plan or restore unchanged managed files from a private backup.
 │   ├── serve  # Start installed Go binary with typed ChatEnv secrets in child env.
 │   ├── start  # Start the current Glance page through systemd user units.
-│   └── status  # Show safe systemd user status for the Glance service and timer.
+│   ├── status  # Show safe systemd user status for the Glance service and timer.
+│   ├── stop  # Plan or stop only manifest-owned runtime entries.
+│   └── update  # Plan or verify and update Go binary with private rollback backups.
 ├── servers  # Collect and render the `服务器` Glance page.
 │   ├── candidates  # Print selected server aliases without probing hosts.
 │   ├── collect  # Write a server-status JSON snapshot from read-only SSH probes.

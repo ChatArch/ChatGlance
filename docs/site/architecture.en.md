@@ -22,7 +22,7 @@ Candidate glance.yml / page fragments ── Glance config:validate ──► op
 
 ## The single-origin dependency is essential
 
-Official Glance v0.8.5 **does not provide** paired `public: true` and `authenticated-columns`. The maintained [ChatArch/glance chatarch-v0.1.0](https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0) release includes both capabilities and a Linux amd64 asset. Verify `SHA256SUMS`, run `config:validate`, and check browser/API behavior in both identities before deployment. The Python package and Glance server binary have separate installation and acceptance boundaries.
+Official Glance v0.8.5 **does not provide** paired `public: true` and `authenticated-columns`. Maintained ChatArch/glance 0.2.0 includes both capabilities; compatible maintained 0.1.0 remains usable without new Go features. Require an explicitly reviewed archive SHA256 and exact version, run `config:validate`, and check browser/API behavior in both identities before deployment. The Python package and Go binary have separate installation and acceptance boundaries; do not assume a checksums file exists.
 
 Private Glance YAML can contain `auth`; the full inventory can contain Private repositories. They belong to server-side runtime input, never source, docs, public assets, errors, or guest responses. Shared head, branding, and assets need separate review. A detached public offline candidate command still exists but cannot substitute same-origin session selection. See [Projects and access](projects.md).
 
