@@ -46,6 +46,13 @@ def glance_authenticator(runtime_home):
         auth = config.get("auth") or {}
         server = config.get("server") or {}
         port = server.get("port", 8080)
+        if port == "${CHATGLANCE_WEB_PORT}":
+            if (Path(runtime_home) / "private/managed.json").is_file():
+                from .managed import runtime_environment
+                port = int(runtime_environment(runtime_home)["CHATGLANCE_WEB_PORT"])
+            else:
+                from .portable import bridge_environment
+                port = int(bridge_environment()["CHATGLANCE_WEB_PORT"])
         if not auth.get("users") or not auth.get("secret-key"):
             raise ValueError
         if server.get("host", "127.0.0.1") not in ("127.0.0.1", "localhost"):

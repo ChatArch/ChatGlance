@@ -1,6 +1,4 @@
-# Private live-deployment records stay in the private repository only.
-# PyPI wheel/sdist artifacts are public, so do not ship exact host/path records.
-recursive-exclude docs/deployment *
+# All deployment documentation in the source distribution must be public.
 include docs/quickstart.md
 include docs/site-services.md
 include docs/site-services.en.md
@@ -12,3 +10,6 @@ include mkdocs.yml
 recursive-include docs/site *.md
 recursive-include examples *.yml
 recursive-include scripts *.sh
+recursive-include scripts *.py
+include scripts/chatglance-from-source
+recursive-include src/chatglance/resources *.yml *.conf *.sh *.service *.timer *.json

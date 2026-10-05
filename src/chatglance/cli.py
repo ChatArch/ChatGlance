@@ -185,7 +185,7 @@ def render_public_access(
 @click.option("--profiles", help="Explicit account profiles; otherwise use ChatEnv or the current snapshot.")
 @click.option("--actual-cli-tree/--no-actual-cli-tree", default=None, help="Install/probe current package CLI trees; default on for scheduled, off for manual.")
 @click.option("--allow-offline-regression/--no-allow-offline-regression", default=None, help="Publish offline server probes; default on for scheduled, off for manual.")
-@click.option("--projects-owner", envvar="CHATGLANCE_PROJECTS_OWNER", help="GitHub organization; otherwise reuse the snapshot owner or ChatArch.")
+@click.option("--projects-owner", envvar="CHATGLANCE_PROJECTS_OWNER", help="GitHub organization; otherwise use typed ChatEnv, snapshot owner or ChatArch.")
 @click.option("--project-workers", type=click.IntRange(min=1), default=4, envvar="CHATGLANCE_PROJECTS_WORKERS", show_default=True, help="Concurrent project metadata workers.")
 @click.option("--uvx-bin", default="uvx", envvar="CHATGLANCE_UVX_BIN", show_default=True, help="uvx executable for optional released-package CLI tree probes.")
 @click.option("--cli-tree-timeout", type=click.IntRange(min=1), default=90, envvar="CHATGLANCE_CLI_TREE_TIMEOUT", show_default=True, help="Per-entrypoint CLI tree timeout in seconds.")
@@ -229,7 +229,7 @@ def projects() -> None:
 
 
 @projects.command("collect")
-@click.option("--owner", default="ChatArch", show_default=True, help="GitHub organization or owner to inventory.")
+@click.option("--owner", envvar="CHATGLANCE_PROJECTS_OWNER", help="GitHub organization or owner; defaults to typed ChatEnv, then ChatArch.")
 @click.option("--repo-list-json", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Existing ChatGH repo-list JSON to enrich instead of calling ChatGH.")
 @click.option("--baseline-data", type=click.Path(path_type=Path, dir_okay=False, exists=True), help="Prior project inventory JSON whose reviewed categories should be preserved.")
 @click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True, help="Inventory JSON path to write.")
@@ -240,7 +240,7 @@ def projects() -> None:
 @click.option("--actual-cli-tree/--no-actual-cli-tree", default=False, show_default=True, help="Install latest PyPI packages with uvx and classify from each entrypoint's actual CLI tree.")
 @click.option("--cli-tree-timeout", default=90, show_default=True, type=int, help="Per-entrypoint uvx/CLI tree timeout in seconds.")
 def collect_projects(
-    owner: str,
+    owner: str | None,
     repo_list_json: Path | None,
     baseline_data: Path | None,
     output_path: Path,
@@ -252,6 +252,9 @@ def collect_projects(
     cli_tree_timeout: int,
 ) -> None:
     """Write refreshed project inventory JSON from read-only GitHub metadata."""
+
+    from chatglance.portable import portable_settings
+    owner = owner or portable_settings()["owner"] or "ChatArch"
 
     inventory = refresh_project_inventory(
         output_path=output_path,
@@ -673,6 +676,100 @@ def runtime() -> None:
     """Maintain a durable Glance service runtime."""
 
 
+@runtime.command("paths")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
+def portable_paths(runtime_home: Path | None) -> None:
+    """Print effective portable runtime paths (never secret values)."""
+    from chatglance.portable import runtime_home as resolve
+    root = resolve(runtime_home)
+    click.echo(json.dumps({"home": str(root), "config": str(root / "config/glance.yml"), "binary": str(root / "bin/glance")}))
+
+
+@runtime.command("init")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
+@click.option("--with-auth", is_flag=True, help="Require typed login credentials and create environment-only auth references.")
+def portable_init(runtime_home: Path | None, with_auth: bool) -> None:
+    """Create a loopback runtime, empty snapshots and non-secret examples."""
+    from chatglance.portable import initialize
+    try:
+        created = initialize(runtime_home, with_auth=with_auth)
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from None
+    click.echo(f"created={len(created)} (existing files retained; no services activated)")
+
+
+@runtime.command("install-binary")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
+@click.option("--archive", type=click.Path(path_type=Path, dir_okay=False, exists=True), required=True)
+@click.option("--sha256", required=True, help="Expected SHA256 of a reviewed Go fork archive.")
+@click.option("--binary-version", required=True, help="Reviewed Go fork version or immutable revision.")
+def portable_binary(runtime_home: Path | None, archive: Path, sha256: str, binary_version: str) -> None:
+    """Install a verified, reviewed local Go-fork tar archive without replacement."""
+    from chatglance.portable import install_verified_binary
+    try:
+        path = install_verified_binary(archive, sha256, runtime_home, version=binary_version)
+    except (ValueError, OSError, __import__("tarfile").TarError) as exc:
+        raise click.ClickException(f"verified binary installation failed ({type(exc).__name__})") from None
+    click.echo(f"installed {path}")
+
+
+@runtime.command("serve")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
+def portable_serve(runtime_home: Path | None) -> None:
+    """Start installed Go binary with typed ChatEnv secrets in child env."""
+    from chatglance.portable import serve
+    try:
+        serve(runtime_home)
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(f"startup unavailable ({type(exc).__name__})") from None
+
+
+@runtime.command("controls")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
+def portable_controls(runtime_home: Path | None) -> None:
+    """Run explicitly provisioned authenticated loopback controls."""
+    from chatglance.portable import runtime_home as resolve
+    from chatglance.managed import runtime_environment, effective_home
+    from chatglance.reset_control import serve_controls
+    from urllib.parse import urlsplit
+    try:
+        environment = runtime_environment(resolve(runtime_home), auth=True)
+        origin = environment.get("CHATGLANCE_PUBLIC_ORIGIN", "")
+        parsed = urlsplit(origin)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+            raise ValueError("reviewed HTTPS public origin required")
+        port = int(environment.get("CHATGLANCE_CONTROL_PORT", "5679"))
+        if not 1 <= port <= 65535:
+            raise ValueError("invalid control port")
+        with effective_home(resolve(runtime_home)):
+            serve_controls(runtime_home=resolve(runtime_home), public_origin=origin, port=port)
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(f"controls unavailable ({type(exc).__name__})") from None
+
+
+@runtime.command("render-portable")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
+@click.option("--python-bin", type=click.Path(path_type=Path, dir_okay=False), help="Installed Python interpreter; defaults to current interpreter.")
+@click.option("--page", "pages", multiple=True, type=click.Choice(["projects", "servers", "sites"]))
+@click.option("--interval", help="Explicit schedule; defaults to typed ChatEnv or 30min.")
+@click.option("--controls", is_flag=True, help="Include optional authenticated controls unit.")
+@click.option("--output-dir", type=click.Path(path_type=Path, file_okay=False), help="Review directory; never systemd registration by default.")
+def portable_units(runtime_home: Path | None, python_bin: Path | None, pages: tuple[str, ...], interval: str | None, controls: bool, output_dir: Path | None) -> None:
+    """Render review-only startup and optional refresh/control units."""
+    from chatglance.portable import runtime_home as resolve
+    from chatglance.systemd import render_portable_units, write_portable_units
+    try:
+        units = render_portable_units(runtime_home=resolve(runtime_home), python_bin=python_bin, pages=pages or None, interval=interval, controls=controls)
+        if output_dir is None:
+            for name, body in units.items():
+                click.echo(f"# {name}\n{body}")
+        else:
+            for path in write_portable_units(output_dir, units):
+                click.echo(f"wrote {path}")
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from None
+
+
 @runtime.command("maintain")
 @click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), default=Path("~/.chatarch/glance"), show_default=True, help="Durable Glance service home.")
 @click.option("--config", "config_path", type=click.Path(path_type=Path, dir_okay=False), default=Path("config/glance.yml"), show_default=True, help="Runtime-relative or absolute Glance YAML config.")
@@ -804,12 +901,19 @@ def install_systemd(
 
 
 @runtime.command("start")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), help="Use manifest-owned lifecycle instead of legacy unit flags.")
+@click.option("--apply", "--yes", is_flag=True, help="Apply the managed action; managed default is a plan.")
 @click.option("--service-name", default="chatarch-glance.service", show_default=True, help="Main Glance user service name.")
 @click.option("--timer-name", default="chatarch-glance-maintenance.timer", show_default=True, help="Maintenance timer name.")
 @click.option("--timer/--no-timer", default=True, show_default=True, help="Start the maintenance timer together with the main service.")
-def start_runtime(service_name: str, timer_name: str, timer: bool) -> None:
+def start_runtime(service_name: str, timer_name: str, timer: bool, runtime_home: Path | None, apply: bool) -> None:
     """Start the current Glance page through systemd user units."""
 
+    if runtime_home is not None:
+        from chatglance.managed import service_action
+        from chatglance.managed_cli import _emit
+        _emit(service_action, runtime_home, "start", apply=apply)
+        return
     units = [service_name]
     if timer:
         units.append(timer_name)
@@ -821,16 +925,29 @@ def start_runtime(service_name: str, timer_name: str, timer: bool) -> None:
 
 
 @runtime.command("status")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), help="Report manifest-owned package/binary/config/unit evidence.")
+@click.option("--live", is_flag=True, help="Include owned unit states and PIDs in managed mode.")
+@click.option("--validate", is_flag=True, help="Run bounded Go config validation in managed mode.")
 @click.option("--service-name", default="chatarch-glance.service", show_default=True, help="Main Glance user service name.")
 @click.option("--timer-name", default="chatarch-glance-maintenance.timer", show_default=True, help="Maintenance timer name.")
-def status_runtime(service_name: str, timer_name: str) -> None:
+def status_runtime(service_name: str, timer_name: str, runtime_home: Path | None, live: bool, validate: bool) -> None:
     """Show safe systemd user status for the Glance service and timer."""
 
+    if runtime_home is not None:
+        from chatglance.managed import runtime_status
+        from chatglance.managed_cli import _emit
+        _emit(runtime_status, runtime_home, live=live, validate=validate)
+        return
     try:
         status = show_user_units(service_name, timer_name)
     except subprocess.CalledProcessError as exc:
         _raise_systemd_error(exc)
     click.echo(json.dumps(status, ensure_ascii=False, indent=2))
+
+
+from chatglance.managed_cli import register as register_managed_runtime
+
+register_managed_runtime(runtime)
 
 
 if __name__ == "__main__":

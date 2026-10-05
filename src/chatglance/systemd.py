@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 import subprocess
 from typing import Iterable
+import re
+import sys
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,80 @@ def _systemd_arg(value: str | Path) -> str:
         text = text.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{text}"'
     return text
+
+
+def _portable_arg(value: str | Path) -> str:
+    text = str(value)
+    if not text or any(char in text for char in "\r\n\0"):
+        raise ValueError("invalid systemd argument")
+    text = text.replace("%", "%%").replace("\\", "\\\\").replace('"', '\\"')
+    return '"' + text + '"'
+
+
+def render_portable_units(
+    *, runtime_home: str | Path, python_bin: str | Path | None = None,
+    pages: tuple[str, ...] | None = None, interval: str | None = None, controls: bool = False,
+) -> dict[str, str]:
+    """Review-only user units; no registration or activation."""
+    root = Path(runtime_home).expanduser().absolute()
+    executable = Path(python_bin or sys.executable).expanduser()
+    if not executable.is_absolute() or not root.is_absolute():
+        raise ValueError("absolute entry paths required")
+    if pages is None or interval is None:
+        from .portable import portable_settings
+        defaults = portable_settings()
+        pages = defaults["pages"] if pages is None else pages
+        interval = defaults["interval"] if interval is None else interval
+    if not re.fullmatch(r"[0-9]+(?:min|h|d)", interval):
+        raise ValueError("invalid timer interval")
+    if any(page not in ("projects", "servers", "sites") for page in pages):
+        raise ValueError("portable timer supports only non-account pages")
+    command = f"{_portable_arg(executable)} -m chatglance.cli"
+    home = _portable_arg(root)
+    units = {
+        "chatglance-portable.service": (
+            "[Unit]\nDescription=Portable Glance loopback server\n\n[Service]\nType=simple\n"
+            f"ExecStart={command} runtime serve --runtime-home {home}\nRestart=on-failure\n\n"
+            "[Install]\nWantedBy=default.target\n"
+        ),
+    }
+    if pages:
+        units["chatglance-portable-refresh.service"] = (
+            "[Unit]\nDescription=Portable Glance non-consuming page refresh\n\n"
+            "[Service]\nType=oneshot\n"
+            f"ExecStart={command} refresh --runtime-home {home} --service-name chatglance-portable.service "
+            + " ".join(pages) + "\n"
+        )
+        units["chatglance-portable-refresh.timer"] = (
+            "[Unit]\nDescription=Portable Glance page refresh schedule\n\n[Timer]\n"
+            f"OnUnitActiveSec={interval}\nUnit=chatglance-portable-refresh.service\n\n"
+            "[Install]\nWantedBy=timers.target\n"
+        )
+    if controls:
+        units["chatglance-portable-controls.service"] = (
+            "[Unit]\nDescription=Optional authenticated Glance controls\n\n"
+            "[Service]\nType=simple\n"
+            f"ExecStart={command} runtime controls --runtime-home {home}\n"
+            "Restart=on-failure\n\n[Install]\nWantedBy=default.target\n"
+        )
+    return units
+
+
+def write_portable_units(output_dir: str | Path, units: dict[str, str]) -> list[Path]:
+    """Write new review units only, refusing symlinks and existing files."""
+    from .portable import _create
+
+    root = Path(output_dir).expanduser().absolute()
+    paths = []
+    for name, content in units.items():
+        if name not in {"chatglance-portable.service", "chatglance-portable-refresh.service",
+                        "chatglance-portable-refresh.timer", "chatglance-portable-controls.service"}:
+            raise ValueError("invalid portable unit name")
+        target = root / name
+        if not _create(target, content.encode()):
+            raise ValueError("unit already exists; review before replacing")
+        paths.append(target)
+    return paths
 
 
 def user_systemd_dir() -> Path:

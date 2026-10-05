@@ -16,7 +16,7 @@
 
 # ChatGlance
 
-`ChatGlance` 是 ChatArch/WZHECNU Glance 网站部署相关源码与运维工具仓库。它沉淀当前站点的页面生成逻辑、配置转换规则、user-level service 模板、验收记录和安全边界；`chatglance` CLI 只是辅助执行这些记录和规则的管理入口。
+`ChatGlance` 是可分享、由安装包拥有业务逻辑的 Glance 页面生成、配置与 user-service 生命周期 CLI。公共源码/模板与私有 runtime 清单及 typed ChatEnv 凭据分离。
 
 它不是 NPM 项目，也不是重新实现 Glance 后端：上游 Glance 仍然是 Go 单二进制 dashboard server；`ChatGlance` 负责把 ChatArch 项目清单、Glance YAML 页面、inline HTML 表格、user-level systemd 单元和部署记录组织成可复用、可审查的源码与文档。
 
@@ -37,7 +37,7 @@
 - `docs/site-architecture.md`：ChatGlance 作为 Python 包、Glance runtime、生成配置和 runtime 数据脚本之间的边界。
 - `docs/projects.md`：`项目` 页展示内容、PyPI-only 版本规则、entrypoint-only 展示规则、actual CLI tree 分类证据和刷新验收清单。
 - `docs/infra.md`：Infra/`服务器` 页的配置机制、外部数据生成链路、刷新方式和 cron/timer 模板。
-- `docs/deployment/current-site.md`：原生 CLI 与 user service/timer 的部署约定；具体拓扑、密钥和现场验收保留在外部运行态。
+- `docs/site/deployment.md`：公共可携带部署指南；机器特有拓扑、密钥与现场验收保留在仓库外。
 - `examples/server-inventory.example.yml` / `examples/site-services.example.yml`：可提交的脱敏 inventory 配置示例；真实 inventory 放在 runtime config 目录。
 - `chatglance refresh [PAGES]...`：安装包内置的采集、候选校验与发布入口，不依赖源码 checkout 或机器本地业务脚本。
 - `chatglance refresh --scheduled`：供现有 timer 调用的显式计划运行方式；保留每账号自动策略和统一锁。
@@ -50,7 +50,7 @@
 - 当前 page tabs 固定为：`最近提交`、`PR-issue`、`分类`、`一览表`。
 - 支持显式 public/private 项目视图：authenticated 默认视图保留全量清单，只把字面 boolean 标记显示为 `Public`/`Private`，缺失或畸形值显示 `Unknown`；anonymous 渲染边界自行从 full inventory 投影，发布的 allowlist artifact 不包含 private 行、source/CLI/Env/evidence 元数据、private 派生计数或可见性标记。
 - 同址可选登录候选：`chatglance access render-single-origin-optional-login --config PRIVATE.yml --inventory FULL.json --output CANDIDATE.yml`，单 Glance 实例同一 `/项目` slug 按会话选择公开/完整列；私有候选文件不可作为 guest asset 发布。详见 [项目与访问](docs/site/projects.md)。
-- 同址可选登录需要 [ChatArch/glance chatarch-v0.1.0](https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0) 的 `public` 与 `authenticated-columns` 能力；该发布提供 Linux amd64 二进制和 `SHA256SUMS`。原版 Glance v0.8.5 不支持这些字段。安装 ChatGlance 不会自动替换 Glance 二进制，升级前需校验 checksum、配置和双身份访问。
+- 同址可选登录需要 ChatArch/glance 维护版：ChatGlance 0.2.0 对应 `chatarch-v0.2.0`，不依赖新 Go 特性时兼容 0.1.0。原版 Glance v0.8.5 不支持这些字段。`runtime install-binary`/`runtime update` 只接受单独审查的本地归档与显式 SHA256/精确维护版版本号；不假设发布页一定有 checksum 文件，也不下载 unchecked latest。启动前校验配置及访客/登录两种身份。
 - `chatglance access render-public` 从显式 full config/inventory 生成 public YAML/JSON 候选；public config 只含静态公开首页和项目页，不继承 `auth`、private server、网站服务、订阅详情、服务器页或原首页 runtime widgets。repository/docs/Web 链接必须是外部 HTTPS URL；两个 mode-`0600` 候选在同一个预先存在的非 symlink 目录内 stage、fsync 并成对原子替换，第二个发布失败时回滚第一个。
 - `PR-issue` 只显示 PR/Issue 非 0 的仓库，并按 `(PR, Issue, 最近提交)` 降序。
 - 生成 config 副本时清理 legacy generated pages：`Projects`、`ChatArch Projects`、`ChatArch Projects List`。
@@ -63,6 +63,22 @@
 - 通过 CLI 安装、启用、启动和回读当前 Glance 页面对应的 user service/timer。
 
 ## 快速开始
+
+### 托管可携带运行态（0.2.0 候选，发布另行执行）
+
+五层边界：本仓库源码、安装的 ChatGlance wheel、经过校验的 ChatArch/glance Go fork 二进制、ChatArch home 下的运行配置/快照、最后是可选的 OS 薄入口。Go fork 维护可选登录能力；上游原版不保证支持。所有运行入口均来自已安装包，不引用 checkout。示例只绑定 `127.0.0.1`，不注册服务、不采集外部数据、不消费卡，也不自动发布或部署。
+
+```bash
+chatglance runtime paths
+chatglance runtime init
+chatglance runtime install-binary --archive reviewed-glance.tar.gz --sha256 EXPECTED_64_HEX --binary-version chatarch-vX.Y.Z+40_LOWERCASE_HEX
+chatglance runtime install --page projects --interval 30min
+# 审查后显式执行：runtime install --page projects --apply
+chatglance runtime check
+# 显式启动：runtime start --runtime-home "$CHATARCH_HOME/glance" --apply
+```
+
+`runtime init --runtime-home DIR` 遵循 `CHATARCH_HOME` 并保留已有文件；重复运行 `--with-auth` 遇到旧无登录配置时拒绝，绝不隐式升级。登录需要 typed ChatEnv 的 `CHATGLANCE_LOGIN_USER`（可为 email）、`CHATGLANCE_LOGIN_SECRET`（**严格 base64 解码后 64 bytes**）及 bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH`。托管登录只信任选定 typed EnvStore profile，忽略继承的登录/索引认证环境；非认证进程配置优先于 typed 默认值。敏感值只进入 Go 子进程环境，不写入 YAML、unit、脚本或 argv。`CHATGLANCE_PROJECTS_OWNER`、`CHATGLANCE_REFRESH_PAGES`、`CHATGLANCE_REFRESH_INTERVAL` 实际提供 owner/页面/定时默认值，显式 CLI 参数覆盖；不自动用卡。`CHATGLANCE_PUBLIC_ORIGIN`、`CHATGLANCE_CONTROL_PORT` 用于可选 controls（需私有 `/account-limits`）；CRS 与 GitHub 继续共享各自既有 resolver。完整安装、目录树、反向代理、托管启停与迁移边界见 [自包含运行指南](docs/site/deployment.md)。
 
 新机器配置类似当前站点时，先看 [快速开始](docs/site/quickstart.md)：它把 `glance.yml` / widgets / HTML/CSS 作为主要前端配置入口，`chatglance` 只负责采集、渲染、校验、备份和替换这些管理动作。
 
@@ -238,7 +254,7 @@ chatglance runtime status
 
 ## 运行态边界
 
-推荐拓扑是 **systemd 直接运行 Glance，chatglance 只做维护**：
+0.2.0 托管拓扑由 systemd 调用安装包 `runtime serve` 环境桥再 exec Go；刷新/控制/维护调用安装包原生 API。采用 `runtime install`、`adopt`、`check`、`update`、`rollback`，见[部署指南](docs/site/deployment.md)。下列直接 Go 拓扑仅保留旧行为兼容，不是托管凭据桥：
 
 - 主服务：`chatarch-glance.service` 直接执行 `~/.chatarch/glance/bin/glance -config ~/.chatarch/glance/config/glance.yml`。
 - 可复用源码、脚本、文档都放在 ChatArch/ChatGlance repo 内，例如 `src/chatglance/`、`scripts/`、`docs/`、`examples/`。
@@ -259,7 +275,7 @@ chatglance runtime status
 
 ## 订阅页额度探测模型
 
-`collect-codex-account-limits.py` 使用 ChatCRS Python API 探测 Codex Responses 额度响应头。可在采集进程环境或刷新 service 的 EnvironmentFile 中配置 `CHATGLANCE_ACCOUNT_LIMITS_MODELS`，值为 profile 名称到可用模型名称的 JSON 对象，例如 `{"example":"supported-codex-model"}`。刷新脚本会继承该变量。
+`CHATGLANCE_ACCOUNT_LIMITS_MODELS` 在 typed ChatGlance provider 或进程环境配置为 profile 名称到可用额度模型的 JSON 映射。托管刷新使用有效 provider home，不在 EnvironmentFile 复制凭据。
 
 仅精确匹配的 profile 覆盖额度探测模型；其他 profile、usage GET、凭据和账号名单不变。未设置、空白对象或空白模型值时保留 ChatCRS 默认模型；无效 JSON/非字符串模型返回采集错误。模型 404 不等于 token 失效，应先检查模型可用性，不要反复轮换凭据。
 

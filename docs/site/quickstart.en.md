@@ -1,5 +1,11 @@
 # Quickstart: validate before deploying
 
+## Portable local starting point (unreleased)
+
+After installing a wheel containing this feature, run `chatglance runtime paths`, then `chatglance runtime init`; review its loopback home page and empty inventories/snapshots. Install a deliberately selected maintained Go-fork binary with `chatglance runtime install-binary --archive reviewed.tar.gz --sha256 EXPECTED_64_HEX --binary-version chatarch-vX.Y.Z+40_LOWERCASE_HEX` (replace the version with the exact observed output), then render review-only units with `chatglance runtime render-portable --output-dir ./review-units`. `runtime serve` is an explicit operator action. The five separate layers are source, wheel, fork binary, runtime configuration/data and OS entry points. The maintained fork owns optional login; generic upstream binaries do not. See the complete [portable deployment guide](deployment.en.md).
+
+Initialization makes no external calls, starts no service, and never redeems account cards; loopback is the default. For opt-in login, provision typed ChatEnv `CHATGLANCE_LOGIN_USER`, `CHATGLANCE_LOGIN_SECRET` and bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH` before `runtime init --with-auth`. YAML contains only Go `${ENV}` references, resolved from process environment first, then active ChatEnv for the child. `CHATGLANCE_WEB_PORT`, optional `CHATGLANCE_PUBLIC_ORIGIN` / `CHATGLANCE_CONTROL_PORT`, project owner, and refresh cadence/pages are non-secret settings. Keep CRS and GitHub on their shared profile/resolver rather than a new token store; migrate existing sites without exporting secret files. Explicit `render-portable --page projects` creates non-account schedules, while `--controls` additionally needs configured login and a reviewed HTTPS origin. The proxy example preserves same-origin login and redirects old project paths. Nothing publishes or deploys automatically.
+
 Glance's `glance.yml`, widgets, and HTML/CSS define the site. ChatGlance helps generate pages, validate config, and maintain snapshots. Do not treat these examples as a production deployment script.
 
 ## 1. Install in an isolated environment and inspect the CLI

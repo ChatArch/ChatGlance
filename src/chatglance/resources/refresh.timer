@@ -1,0 +1,11 @@
+[Unit]
+Description=ChatGlance managed refresh cadence
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=@@INTERVAL@@
+Persistent=true
+Unit=@@REFRESH_UNIT@@
+
+[Install]
+WantedBy=timers.target

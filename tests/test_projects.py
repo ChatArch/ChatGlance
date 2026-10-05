@@ -398,7 +398,7 @@ def test_patch_server_stats_root_only_hides_default_mountpoints():
                         "widgets": [
                             {
                                 "type": "server-stats",
-                                "servers": [{"type": "local", "name": "rexpc"}],
+                                "servers": [{"type": "local", "name": "workstation-local"}],
                             }
                         ],
                     }

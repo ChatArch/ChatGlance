@@ -16,7 +16,7 @@ Documentation site (available after its first deployment): [ChatGlance docs](htt
 
 # ChatGlance
 
-`ChatGlance` is the ChatArch/WZHECNU repository for Glance website deployment source and operations helpers. It preserves the current site's page-generation logic, configuration transformations, user-level service templates, verification notes, and safety boundaries; the `chatglance` CLI is only the helper entrypoint for applying those rules.
+`ChatGlance` is a shareable, installed-package CLI for Glance page generation, configuration and managed user-service lifecycle. Public source/templates stay separate from private runtime inventory and typed ChatEnv credentials.
 
 It is not an npm project and does not reimplement the Glance backend. Upstream Glance remains a Go single-binary dashboard server; `ChatGlance` owns reusable Python code and private deployment records for repository inventory rendering, Glance YAML page generation, inline HTML table generation, selected Disk mountpoint display, and user-level runtime maintenance.
 
@@ -37,7 +37,7 @@ An explicit CRS profile containing a dedicated management Key and fixed account-
 - `docs/site-architecture.md`: boundary between ChatGlance as a Python package, the Glance runtime, generated config, and runtime data refresh scripts.
 - `docs/projects.md`: project-page display contract, PyPI-only version rule, entrypoint-only display rule, actual CLI-tree classification evidence, and refresh review checklist.
 - `docs/infra.md`: configuration mechanism, external data-generation chain, refresh workflow, and cron/timer template for the Infra/`服务器` page.
-- `docs/deployment/current-site.md`: native CLI and user service/timer deployment contract; concrete topology, secrets and live evidence remain outside the repository.
+- `docs/site/deployment.en.md`: public portable deployment guide; machine-specific topology, secrets and live evidence remain outside the repository.
 - `examples/server-inventory.example.yml` / `examples/site-services.example.yml`: sanitized inventory config templates. Real inventories belong in the runtime config directory.
 - `chatglance refresh [PAGES]...`: installed-package collection, validation and publication without a source checkout or host-local business scripts.
 - `chatglance refresh --scheduled`: explicit scheduled execution for the existing timer, preserving per-account policies and the shared lock.
@@ -50,7 +50,7 @@ An explicit CRS profile containing a dedicated management Key and fixed account-
 - Keep the current tabs limited to `最近提交`, `PR-issue`, `分类`, and `一览表`.
 - Support explicit public/private project audiences: the authenticated default keeps the full inventory and labels only literal boolean visibility as `Public`/`Private` (`Unknown` otherwise); the anonymous render boundary projects the full inventory itself and publishes an allowlisted artifact with no private rows, source/CLI/Env/evidence metadata, private-derived counts, or visibility labels.
 - Single-origin optional-login candidate: `chatglance access render-single-origin-optional-login --config PRIVATE.yml --inventory FULL.json --output CANDIDATE.yml` uses one Glance instance and the existing `/项目` slug with server-selected guest/authenticated columns. Keep the private candidate off guest assets; see [projects and access](docs/site/projects.en.md).
-- Single-origin optional login requires the `public` and `authenticated-columns` capabilities in [ChatArch/glance chatarch-v0.1.0](https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0), which provides a Linux amd64 binary and `SHA256SUMS`. Unmodified Glance v0.8.5 does not support these fields. Installing ChatGlance does not replace the Glance binary; verify checksums, configuration and both guest/authenticated routes before a service upgrade.
+- Single-origin optional login requires the maintained ChatArch/glance fork; pair ChatGlance 0.2.0 with maintained `chatarch-v0.2.0` or compatible 0.1.0 where no new Go capability is needed. Unmodified Glance v0.8.5 does not support these fields. `runtime install-binary`/`runtime update` require a separately reviewed local archive and explicit SHA256/exact maintained version; never assume a published checksum file or unchecked latest release. Verify configuration and both guest/authenticated routes before activation.
 - Generate public YAML/JSON candidates with `chatglance access render-public`. The public config contains only a static public home and project page and never inherits `auth`, the private server, sites, account limits, servers, or runtime widgets from the full home. Repository/docs/Web links must be external HTTPS URLs, and the two mode-`0600` candidates are staged, fsynced, and atomically replaced with pair rollback in one pre-existing non-symlink directory.
 - Filter the triage tab to repositories with non-zero PR or Issue counts and sort by `(PR, Issue, recent commit)` descending.
 - Replace generated legacy pages: `Projects`, `ChatArch Projects`, and `ChatArch Projects List`.
@@ -63,6 +63,22 @@ An explicit CRS profile containing a dedicated management Key and fixed account-
 - Install, enable, start, and read back the current Glance page user service/timer from the CLI.
 
 ## Quick start
+
+### Managed portable runtime (0.2.0 candidate; publication is separate)
+
+Five layers: shareable source, installed ChatGlance wheel, verified ChatArch/glance Go-fork binary, runtime configuration/snapshots under the effective ChatArch home, and optional OS entry units. Optional login belongs to the maintained Go fork, not an arbitrary upstream executable. No checkout dependency, external collection, card redemption, service registration or public exposure occurs during initialization; the default binds loopback only.
+
+```bash
+chatglance runtime paths
+chatglance runtime init
+chatglance runtime install-binary --archive reviewed-glance.tar.gz --sha256 EXPECTED_64_HEX --binary-version chatarch-vX.Y.Z+40_LOWERCASE_HEX
+chatglance runtime install --page projects --interval 30min
+# Explicit after review: runtime install --page projects --apply
+chatglance runtime check
+# Explicit start: runtime start --runtime-home "$CHATARCH_HOME/glance" --apply
+```
+
+`runtime init --runtime-home DIR` honors `CHATARCH_HOME`, preserves existing files and refuses to silently upgrade an existing unauthenticated config on `--with-auth`. Login requires typed ChatEnv `CHATGLANCE_LOGIN_USER` (email accepted), `CHATGLANCE_LOGIN_SECRET` (**strict base64 decoding to exactly 64 bytes**) and bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH`. Managed login uses the selected typed EnvStore profile, ignoring inherited login/indexed-auth environment; non-auth process settings override typed defaults. Sensitive values enter only Go child environment, never YAML, scripts, units or argv. `CHATGLANCE_PROJECTS_OWNER`, `CHATGLANCE_REFRESH_PAGES` and `CHATGLANCE_REFRESH_INTERVAL` supply actual owner/page/timer defaults; explicit CLI options override them. Controls require reviewed `CHATGLANCE_PUBLIC_ORIGIN`, `CHATGLANCE_CONTROL_PORT` and a private `/account-limits` page. CRS and GitHub keep their existing shared resolvers. See the [self-contained deployment guide](docs/site/deployment.en.md) for the full tree, proxy, managed activation, and migration boundaries.
 
 For a new machine that should host a similar but still customizable Glance site, start with the [quickstart](docs/site/quickstart.en.md): `glance.yml` / widgets / HTML/CSS remain the primary frontend configuration surface, while `chatglance` only manages collection, rendering, validation, backup, and replacement.
 
@@ -236,7 +252,7 @@ chatglance runtime status
 
 ## Runtime boundary
 
-Recommended topology: **systemd runs Glance directly; chatglance performs maintenance only**.
+Managed 0.2.0 topology: systemd runs the installed `runtime serve` env bridge, which execs Go; refresh/control/maintenance run installed native APIs. Use `runtime install`, `adopt`, `check`, `update` and `rollback` as documented in the [deployment guide](docs/site/deployment.en.md). The following direct-Go topology is retained as legacy compatibility, not the managed credential bridge.
 
 - Main service: `chatarch-glance.service` executes `~/.chatarch/glance/bin/glance -config ~/.chatarch/glance/config/glance.yml` directly.
 - Reusable source, scripts, and docs live inside the ChatArch/ChatGlance repository, for example `src/chatglance/`, `scripts/`, `docs/`, and `examples/`.
@@ -257,7 +273,7 @@ Recommended topology: **systemd runs Glance directly; chatglance performs mainte
 
 ## Subscription quota probe models
 
-Set `CHATGLANCE_ACCOUNT_LIMITS_MODELS` in the collector environment or the refresh service EnvironmentFile to a JSON object mapping exact profile names to available Codex quota probe models, for example `{"example":"supported-codex-model"}`. Refresh scripts inherit this setting.
+Set `CHATGLANCE_ACCOUNT_LIMITS_MODELS` in the typed ChatGlance provider or process environment to a JSON object mapping profile names to available quota probe models. Managed refresh uses the effective provider home; do not duplicate credentials in EnvironmentFile.
 
 Only the matching profile quota probe is affected; other profiles, usage GET, credentials, and profile selection remain unchanged. Unset or blank mappings and blank model strings preserve the ChatCRS default. Invalid JSON or non-string model values return a collection error. A model 404 does not establish token expiry; check model availability before rotating credentials.
 

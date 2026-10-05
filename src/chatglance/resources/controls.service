@@ -1,0 +1,11 @@
+[Unit]
+Description=ChatGlance managed authenticated controls
+
+[Service]
+Type=simple
+ExecStart=@@COMMAND@@ runtime controls --runtime-home @@RUNTIME@@
+Restart=on-failure
+TasksMax=128
+
+[Install]
+WantedBy=default.target

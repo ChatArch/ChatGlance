@@ -30,14 +30,14 @@ def sample_status() -> dict:
         "online": 1,
         "servers": [
             {
-                "alias": "hitk.cube",
-                "display_name": "hitk",
+                "alias": "alpha.cube",
+                "display_name": "alpha",
                 "group": "cube",
                 "connection_kind": "内网连接",
-                "ip": "172.23.148.35",
+                "ip": "10.0.0.35",
                 "status": "online",
-                "hostname": "hitk",
-                "user": "zhihong",
+                "hostname": "alpha",
+                "user": "operator",
                 "kernel": "Linux 6.8 x86_64",
                 "collected_at": "2026-08-11T08:00:01+08:00",
                 "last_reboot": "2026-08-09T20:34:56+08:00",
@@ -84,7 +84,7 @@ def sample_status() -> dict:
 
 def test_render_servers_html_contains_required_card_fields() -> None:
     html = render_servers_html(sample_status())
-    assert "172.23.148.35" in html
+    assert "10.0.0.35" in html
     assert "NULL" in html
     assert "展开详情" in html
     assert "挂载目录容量" in html
@@ -109,21 +109,20 @@ def test_replace_servers_page_appends_third_page_without_touching_existing_pages
     assert config["pages"] == [{"name": "ChatArch", "columns": []}, {"name": "项目", "columns": []}]
 
 
-def test_default_candidate_aliases_excludes_user_excluded_targets() -> None:
+def test_default_candidates_only_use_generic_markers_and_skip_loopback_wildcards() -> None:
     aliases = [
         "local",
-        "rexpc",
-        "zhihong.lean4web",
-        "hitk.cube",
-        "auc.cube",
-        "tencent.am",
-        "azure.cn",
-        "essay.newaliyun",
-        "rex.ctyun",
-        "zhihong.tencent",
+        "localhost",
+        "workstation.example",
+        "alpha.cube",
+        "beta.cube",
+        "*.cube",
+        "team.aliyun",
+        "node.azure",
+        "node.ctyun",
         "random.host",
     ]
-    assert default_candidate_aliases(aliases) == ["hitk.cube", "auc.cube"]
+    assert default_candidate_aliases(aliases) == ["team.aliyun", "node.azure", "node.ctyun"]
 
 
 def test_inventory_config_selects_hosts_and_page_options() -> None:
@@ -132,21 +131,35 @@ def test_inventory_config_selects_hosts_and_page_options() -> None:
         "inventory": {
             "default_candidates": True,
             "aliases": ["manual.host", "local"],
-            "exclude": ["auc.cube"],
+            "exclude": ["beta.cube"],
             "hosts": [
-                {"alias": "hitk.cube", "label": "HITK", "group": "cube"},
+                {"alias": "alpha.cube", "label": "Alpha", "group": "cube"},
                 {"alias": "manual.host", "label": "Manual"},
             ],
         },
         "collection": {"timeout": 30, "workers": 4},
     }
-    ssh_aliases = ["auc.cube", "hitk.cube", "rexpc", "tencent.am"]
-    assert aliases_from_inventory_config(config, ssh_aliases=ssh_aliases) == ["hitk.cube", "manual.host"]
+    ssh_aliases = ["beta.cube", "alpha.cube", "workstation-local", "provider.example"]
+    assert aliases_from_inventory_config(config, ssh_aliases=ssh_aliases) == ["manual.host", "alpha.cube"]
     assert collection_options_from_inventory_config(config) == {"timeout": 30, "workers": 4}
     assert page_options_from_inventory_config(config) == {"page_name": "Infra", "page_slug": "infra", "widget_title": "Infra status"}
     updated = apply_server_inventory_config(sample_status(), config)
-    assert updated["servers"][0]["display_name"] == "HITK"
+    assert updated["servers"][0]["display_name"] == "Alpha"
     assert updated["servers"][0]["group"] == "cube"
+
+
+def test_inventory_exclusions_override_default_and_explicit_hosts() -> None:
+    config = {
+        "inventory": {
+            "default_candidates": True,
+            "aliases": ["team.tencent", "manual.host"],
+            "hosts": [{"alias": "storage.cube"}],
+            "exclude": ["team.aliyun", "manual.host"],
+            "excludes": ["storage.cube", "team.tencent"],
+        }
+    }
+    assert aliases_from_inventory_config(config, ssh_aliases=["team.aliyun", "node.azure"]) == ["node.azure"]
+    assert aliases_from_inventory_config({"inventory": {"default_candidates": False, "hosts": []}}, ssh_aliases=["beta.cube"]) == []
 
 
 def test_inventory_config_can_override_ssh_endpoint() -> None:
@@ -154,20 +167,20 @@ def test_inventory_config_can_override_ssh_endpoint() -> None:
         "inventory": {
             "hosts": [
                 {
-                    "alias": "recall.cube",
-                    "hostname": "172.23.136.179",
+                    "alias": "storage.cube",
+                    "hostname": "10.0.0.179",
                     "port": 3322,
-                    "user": "zhihong",
+                    "user": "operator",
                     "strict_host_key_checking": "accept-new",
                 }
             ]
         }
     }
     assert host_connection_overrides_from_inventory_config(config) == {
-        "recall.cube": {
-            "hostname": "172.23.136.179",
+        "storage.cube": {
+            "hostname": "10.0.0.179",
             "port": "3322",
-            "user": "zhihong",
+            "user": "operator",
             "strict_host_key_checking": "accept-new",
         }
     }
@@ -179,10 +192,10 @@ def test_collect_server_status_uses_inventory_endpoint_override(monkeypatch) -> 
     def fake_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
         commands.append(list(cmd))
         if "-G" in cmd:
-            return SimpleNamespace(returncode=0, stdout="hostname 172.23.148.37\nuser zhihong\nport 3322\n", stderr="")
-        assert "HostName=172.23.136.179" in cmd
+            return SimpleNamespace(returncode=0, stdout="hostname 10.0.0.37\nuser operator\nport 3322\n", stderr="")
+        assert "HostName=10.0.0.179" in cmd
         assert "Port=3322" in cmd
-        assert "User=zhihong" in cmd
+        assert "User=operator" in cmd
         assert "StrictHostKeyChecking=accept-new" in cmd
         assert "IdentitiesOnly=yes" in cmd
         return SimpleNamespace(returncode=0, stdout="probe output", stderr="")
@@ -202,41 +215,41 @@ def test_collect_server_status_uses_inventory_endpoint_override(monkeypatch) -> 
     )
 
     data = servers_module.collect_server_status(
-        ["recall.cube"],
+        ["storage.cube"],
         timeout=18,
         workers=1,
         host_overrides={
-            "recall.cube": {
-                "hostname": "172.23.136.179",
+            "storage.cube": {
+                "hostname": "10.0.0.179",
                 "port": "3322",
-                "user": "zhihong",
+                "user": "operator",
                 "strict_host_key_checking": "accept-new",
             }
         },
     )
 
     assert data["online"] == 1
-    assert any("HostName=172.23.136.179" in command for command in commands)
+    assert any("HostName=10.0.0.179" in command for command in commands)
 
 
 def test_server_status_regressions_detect_online_to_unreachable() -> None:
     previous = {
         "servers": [
-            {"alias": "recall.cube", "status": "online"},
-            {"alias": "auc.cube", "status": "online"},
+            {"alias": "storage.cube", "status": "online"},
+            {"alias": "beta.cube", "status": "online"},
         ]
     }
     current = {
         "servers": [
-            {"alias": "recall.cube", "status": "unreachable"},
-            {"alias": "auc.cube", "status": "online"},
+            {"alias": "storage.cube", "status": "unreachable"},
+            {"alias": "beta.cube", "status": "online"},
         ]
     }
-    assert server_status_regressions(previous, current) == ["recall.cube"]
+    assert server_status_regressions(previous, current) == ["storage.cube"]
 
 
 def test_server_status_regressions_ignores_removed_aliases() -> None:
-    previous = {"servers": [{"alias": "tencent.am", "status": "online"}]}
+    previous = {"servers": [{"alias": "provider.example", "status": "online"}]}
     current = {"servers": []}
     assert server_status_regressions(previous, current) == []
 
@@ -244,10 +257,10 @@ def test_server_status_regressions_ignores_removed_aliases() -> None:
 def test_parse_probe_output_matches_getdevices_readonly_fields() -> None:
     output = """
 @@chatglance:meta@@
-hostname=hitk
-user=zhihong
+hostname=alpha
+user=operator
 kernel=Linux 6.8 x86_64
-ips=192.168.98.21 10.0.0.2
+ips=10.0.0.21 10.0.0.2
 collected_at=2026-08-11T08:00:01+08:00
 last_reboot=2026-08-09T20:34:56+08:00
 uptime_seconds=123456
@@ -276,8 +289,8 @@ device=sda rotational=0 size=1T lvm= mountpoints=/
 01:00.0 VGA compatible controller: NVIDIA Corporation TU104 [GeForce RTX 2070 SUPER]
 01:00.1 Audio device: NVIDIA Corporation TU104 HD Audio Controller
 """
-    server = parse_probe_output("hitk.cube", output, {"hostname": "172.23.148.35", "port": "22", "user": "zhihong"})
-    assert server["ip"] == "172.23.148.35"
+    server = parse_probe_output("alpha.cube", output, {"hostname": "10.0.0.35", "port": "22", "user": "operator"})
+    assert server["ip"] == "10.0.0.35"
     assert len(server["gpus"]) == 1
     assert "Audio" not in server["gpus"][0]["name"]
     assert server["disks"] == [
@@ -347,4 +360,4 @@ def test_cli_servers_render_and_update_config(tmp_path) -> None:
     assert "name: 项目" in rendered
     assert "name: Infra" in rendered
     assert "slug: infra" in rendered
-    assert "172.23.148.35" in rendered
+    assert "10.0.0.35" in rendered

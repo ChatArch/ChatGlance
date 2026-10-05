@@ -34,20 +34,38 @@ chatglance
 chatglance
 ├── refresh
 ├── runtime
+│   ├── controls
+│   ├── adopt
+│   ├── check
+│   ├── init
+│   ├── install
+│   ├── import-env
+│   ├── install-binary
 │   ├── install-systemd
 │   ├── maintain
+│   ├── maintain-managed
+│   ├── paths
+│   ├── render-portable
 │   ├── render-systemd
+│   ├── refresh-managed
+│   ├── restart
+│   ├── rollback
+│   ├── serve
 │   ├── start
-│   └── status
+│   ├── status
+│   ├── stop
+│   └── update
 ├── home
 │   └── remove-widget
 └── disks
     └── root-only
 ```
 
-`refresh` updates configured pages from existing runtime inventories; manual mode never redeems reset cards. `runtime maintain` may rewrite the designated runtime config; `install-systemd` and `start` change user-level units and require separate review. `render-systemd` can print templates only. See [Refresh and operations](operations.md).
+`refresh` updates configured pages from existing runtime inventories; manual mode never redeems reset cards. `runtime init` creates loopback configuration and empty snapshots only; `install-binary` requires a local archive and SHA256. `render-portable` prints or writes review units without registering them; `serve` and `controls` require explicit execution. `runtime maintain` may rewrite runtime config; legacy `install-systemd` and `start` change user-level units and require separate review. See [Refresh and operations](operations.md).
 
 ## Account limits and reset controls
+
+Managed `install`, `adopt`, `update`, `rollback`, `stop` and `restart` default to dry-run; `--apply`/`--yes` authorizes writes/actions. `start`/`status` select managed behavior with `--runtime-home`, preserving legacy behavior otherwise. `check` reports validated binary/config ownership; `refresh-managed` and `maintain-managed` are real installed native unit entrypoints, not review-only renderers. See [managed deployment](deployment.md) for complete adoption/rollback and private-input contracts.
 
 ```text
 chatglance

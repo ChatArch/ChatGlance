@@ -1,0 +1,11 @@
+page:
+  name: 服务器
+  slug: servers
+  widget_title: 服务器状态
+inventory:
+  default_candidates: false
+  aliases: []
+  hosts: []
+collection:
+  timeout: 18
+  workers: 4

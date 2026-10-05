@@ -31,6 +31,6 @@ ChatGlance 是 Glance 仪表盘的**配置生成与运维工具**，不是网站
 </div>
 
 !!! warning "依赖的 Glance 能力"
-    官方 Glance v0.8.5 **没有**这里所需的 `public` 页面和 `authenticated-columns` 服务端会话选择。使用维护版 [chatarch-v0.1.0](https://github.com/ChatArch/glance/releases/tag/chatarch-v0.1.0) 的 Linux amd64 二进制，并校验发布页中的 `SHA256SUMS`。安装 Python 包不会自动替换现役 Glance；切换前仍需验证配置、匿名访问、登录和登出。
+    官方 Glance v0.8.5 **没有**这里所需的 `public` 页面和 `authenticated-columns` 服务端会话选择。使用单独审查的 ChatArch/glance 维护版二进制、显式归档 SHA256 与精确 `--version`（优先 0.2.0，不依赖新 Go 特性时可用维护版 0.1.0）；不能假设发布页一定有校验文件。安装 Python 包不会自动替换运行中的 Go 服务；切换前验证配置、匿名访问、登录和登出。
 
 按 [快速开始](quickstart.md) 选择操作路径；服务部署和回滚边界见 [刷新与运行](operations.md)。

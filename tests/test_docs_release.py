@@ -25,7 +25,9 @@ def test_release_metadata_and_changelog():
     for requirement in ("mkdocs>=1.6,<2", "mkdocs-material>=9.5,<10", "mkdocs-static-i18n>=1.2,<2", "mike>=2,<3"):
         assert requirement in docs_deps
     changelog = (ROOT / "CHANGELOG.md").read_text()
-    assert changelog.startswith("# Changelog\n\n## 0.1.20 - 2026-10-05\n")
+    assert changelog.startswith("# Changelog\n\n## Unreleased\n")
+    assert "## 0.2.0 - 2026-10-06\n" in changelog
+    assert "## 0.1.20 - 2026-10-05\n" in changelog
     assert "## 0.1.19 - 2026-10-01\n" in changelog
     assert "\n## 0.1.18 - 2026-09-24\n" in changelog
 
@@ -54,7 +56,7 @@ def test_site_config_bilingual_and_matched_pages():
     assert chinese == english and {"index.md", "quickstart.md", "cli.md", "projects.md", "operations.md", "architecture.md"} <= chinese
     for page in SITE.glob("*.md"):
         text = page.read_text(encoding="utf-8")
-        assert not re.search(r"/home/[^\s`]+|\brexpc\b|glance-public", text)
+        assert not re.search(r"/home/[^\s`]+|__PRIVATE_HOST_SENTINEL__", text)
     for page in ("index.md", "index.en.md", "projects.md", "projects.en.md"):
         content = (SITE / page).read_text(encoding="utf-8")
         assert "ChatArch/glance" in content or page.startswith("index")

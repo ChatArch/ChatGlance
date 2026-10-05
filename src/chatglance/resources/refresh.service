@@ -1,0 +1,8 @@
+[Unit]
+Description=ChatGlance managed native page refresh
+After=network-online.target
+
+[Service]
+Type=oneshot
+TimeoutStartSec=30min
+ExecStart=@@COMMAND@@ runtime refresh-managed --runtime-home @@RUNTIME@@
