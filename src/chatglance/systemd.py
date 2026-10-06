@@ -92,7 +92,7 @@ def render_portable_units(
         units["chatglance-portable-refresh.service"] = (
             "[Unit]\nDescription=Portable Glance non-consuming page refresh\n\n"
             "[Service]\nType=oneshot\n"
-            f"ExecStart={command} refresh --runtime-home {home} --service-name chatglance-portable.service "
+            f"ExecStart={command} refresh --run-source scheduled --runtime-home {home} --service-name chatglance-portable.service "
             + " ".join(pages) + "\n"
         )
         units["chatglance-portable-refresh.timer"] = (

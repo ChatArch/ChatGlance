@@ -184,7 +184,7 @@ def render_public_access(
 @click.option("--scheduled", is_flag=True, help="Run existing per-account automatic policies; defaults to fresh CLI trees and publishing offline servers. No persistent switch is changed.")
 @click.option("--profiles", help="Explicit account profiles; otherwise use ChatEnv or the current snapshot.")
 @click.option("--actual-cli-tree/--no-actual-cli-tree", default=None, help="Install/probe current package CLI trees; default on for scheduled, off for manual.")
-@click.option("--allow-offline-regression/--no-allow-offline-regression", default=None, help="Publish offline server probes; default on for scheduled, off for manual.")
+@click.option("--allow-offline-regression/--no-allow-offline-regression", default=None, help="Publish truthful offline server probes with fenced last-good fields; default on for manual and scheduled refresh.")
 @click.option("--projects-owner", envvar="CHATGLANCE_PROJECTS_OWNER", help="GitHub organization; otherwise use typed ChatEnv, snapshot owner or ChatArch.")
 @click.option("--project-workers", type=click.IntRange(min=1), default=4, envvar="CHATGLANCE_PROJECTS_WORKERS", show_default=True, help="Concurrent project metadata workers.")
 @click.option("--uvx-bin", default="uvx", envvar="CHATGLANCE_UVX_BIN", show_default=True, help="uvx executable for optional released-package CLI tree probes.")
@@ -196,8 +196,9 @@ def render_public_access(
 @click.option("--reset-timeout", type=click.IntRange(min=1), default=20, show_default=True, help="Public calendar/forecast request timeout in seconds.")
 @click.option("--no-public-reset", is_flag=True, help="Skip the public reset calendar and forecast; required forecast policies fail closed.")
 @click.option("--reset-base-url", help="Explicit non-secret reset backend override; otherwise ChatEnv setting or the account's backend base.")
+@click.option("--run-source", type=click.Choice(["native", "manual", "scheduled"]), hidden=True, help="Internal trusted entrypoint provenance; does not grant scheduled account actions.")
 @click.option("--json-output", is_flag=True, help="Emit a structured refresh result; partial failures exit 1.")
-def refresh(pages, runtime_home, glance_bin, service_name, no_restart, scheduled, profiles, actual_cli_tree, allow_offline_regression, json_output, **collection_options) -> None:
+def refresh(pages, runtime_home, glance_bin, service_name, no_restart, scheduled, profiles, actual_cli_tree, allow_offline_regression, run_source, json_output, **collection_options) -> None:
     """Refresh configured pages natively; manual mode never redeems reset cards."""
     from chatglance.codex_collector import parse_profiles
     from chatglance.refresh import CollectionOptions, RefreshError, refresh_runtime
@@ -207,7 +208,7 @@ def refresh(pages, runtime_home, glance_bin, service_name, no_restart, scheduled
             runtime_home, pages, glance_bin=glance_bin, restart=not no_restart,
             service_name=service_name, profiles=parse_profiles(profiles) if profiles else None,
             actual_cli_tree=actual_cli_tree, allow_offline_regression=allow_offline_regression,
-            scheduled=scheduled, collection=CollectionOptions(**collection_options),
+            scheduled=scheduled, source=run_source, collection=CollectionOptions(**collection_options),
         )
     except RefreshError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -674,6 +675,64 @@ def update_account_limits_config(data_path: Path, config_path: Path, output_path
 @main.group()
 def runtime() -> None:
     """Maintain a durable Glance service runtime."""
+
+
+@runtime.group("history")
+def runtime_history() -> None:
+    """Inspect and prune package-owned refresh run history."""
+
+
+def _history_home(runtime_home: Path | None) -> Path:
+    if runtime_home is not None:
+        return runtime_home.expanduser()
+    from chatglance.refresh import default_runtime_home
+    return default_runtime_home()
+
+
+@runtime_history.command("list")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), envvar="CHATGLANCE_RUNTIME_HOME")
+@click.option("--limit", type=click.IntRange(min=1, max=10000), default=100, show_default=True)
+def list_runtime_history(runtime_home: Path | None, limit: int) -> None:
+    """List newest refresh runs without changing journal state."""
+    from chatglance.refresh_history import RefreshHistoryError, list_refresh_runs
+    try:
+        rows = list_refresh_runs(_history_home(runtime_home), limit=limit)
+    except (OSError, ValueError, RefreshHistoryError) as exc:
+        raise click.ClickException(str(exc)) from None
+    click.echo(json.dumps(rows, ensure_ascii=False, indent=2))
+
+
+@runtime_history.command("show")
+@click.argument("run_id")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), envvar="CHATGLANCE_RUNTIME_HOME")
+def show_runtime_history(run_id: str, runtime_home: Path | None) -> None:
+    """Show one refresh run by its path-safe run ID, read-only."""
+    from chatglance.refresh_history import RefreshHistoryError, show_refresh_run
+    try:
+        row = show_refresh_run(_history_home(runtime_home), run_id)
+    except (OSError, ValueError, RefreshHistoryError) as exc:
+        raise click.ClickException(str(exc)) from None
+    click.echo(json.dumps(row, ensure_ascii=False, indent=2))
+
+
+@runtime_history.command("prune")
+@click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), envvar="CHATGLANCE_RUNTIME_HOME")
+@click.option("--retention-days", type=click.IntRange(min=1), help="Override typed retention for this operation.")
+@click.option("--max-bytes", type=click.IntRange(min=1), help="Override typed aggregate byte limit for this operation.")
+@click.option("--apply", is_flag=True, help="Delete confirmed-owned candidates; default is a preview.")
+def prune_runtime_history(runtime_home: Path | None, retention_days: int | None, max_bytes: int | None, apply: bool) -> None:
+    """Preview age/size pruning, or apply it explicitly."""
+    from chatglance.refresh_history import RefreshHistoryError, prune_refresh_history
+    try:
+        result = prune_refresh_history(
+            _history_home(runtime_home),
+            retention_days=retention_days,
+            max_bytes=max_bytes,
+            apply=apply,
+        )
+    except (OSError, ValueError, RefreshHistoryError) as exc:
+        raise click.ClickException(str(exc)) from None
+    click.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 @runtime.command("paths")

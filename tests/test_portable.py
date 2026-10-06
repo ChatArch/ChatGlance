@@ -136,6 +136,7 @@ def test_binary_publish_rolls_back_metadata_on_link_failure(tmp_path, monkeypatc
 def test_portable_units_are_opt_in_and_escape_paths(tmp_path):
     units = render_portable_units(runtime_home=tmp_path / "a % b", python_bin=tmp_path / "python", pages=("projects", "servers"))
     assert "chatglance-portable-refresh.timer" in units
+    assert "refresh --run-source scheduled" in units["chatglance-portable-refresh.service"]
     assert "--service-name chatglance-portable.service projects servers" in units["chatglance-portable-refresh.service"]
     assert "--no-restart" not in units["chatglance-portable-refresh.service"]
     assert "account-limits" not in str(units)

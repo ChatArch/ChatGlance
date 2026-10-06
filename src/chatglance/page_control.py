@@ -183,7 +183,28 @@ class PageControlApp:
                     if isinstance(saved.get(key), dict):
                         self.jobs[key] = saved[key]
                         if self.jobs[key].get("state") == "running":
-                            self.jobs[key]["state"] = "interrupted"
+                            run_id = self.jobs[key].get("run_id")
+                            try:
+                                from .refresh_history import show_refresh_run
+                                record = show_refresh_run(self.root, run_id)
+                                effective = record.get("effective_status")
+                                if effective != "running":
+                                    state = {
+                                        "success": "success",
+                                        "partial": "partial",
+                                        "busy": "busy",
+                                        "failed": "error",
+                                        "interrupted": "interrupted",
+                                    }.get(effective, "interrupted")
+                                    page = next((row for row in record.get("pages", []) if row.get("page") == key), {})
+                                    self.jobs[key] = {
+                                        "state": state,
+                                        "run_id": run_id,
+                                        "observed_at": page.get("generated_at"),
+                                        "finished_at": record.get("finished_at"),
+                                    }
+                            except Exception:
+                                self.jobs[key]["state"] = "interrupted"
             except (OSError, ValueError, AttributeError):
                 pass
 
@@ -218,50 +239,67 @@ class PageControlApp:
 
     def start(self, values, cookie, origin):
         from .refresh import RefreshError, _refresh_lock
+        from .refresh_history import RefreshHistoryError, new_run_id, record_rejected_run
         if set(values) != {"page", "action", "csrf"} or values.get("action") != "refresh":
             raise PageControlError("操作参数不完整")
         page = values["page"]
         if page not in self.jobs:
             raise PageControlError("页面不存在", 404)
         self.verify(values, cookie, origin)
+        run_id = new_run_id()
+
+        def rejected_busy():
+            try:
+                record_rejected_run(self.root, "browser", [page], error_type="busy", run_id=run_id)
+            except RefreshHistoryError as error:
+                raise PageControlError("刷新历史不可用", 503) from error
+            return {"state": "busy", "run_id": run_id}
+
         with self.lock:
             if self.active:
                 if self.jobs[page]["state"] != "running":
-                    self.jobs[page] = {"state": "busy", "finished_at": datetime.now(timezone.utc).isoformat()}
+                    self.jobs[page] = {"state": "busy", "run_id": run_id, "finished_at": datetime.now(timezone.utc).isoformat()}
                     self._save()
-                return {"state": "busy"}
+                return rejected_busy()
             try:
                 with _refresh_lock(self.root):
                     pass
             except RefreshError as error:
                 if "another refresh is running" in str(error):
-                    self.jobs[page] = {"state": "busy", "finished_at": datetime.now(timezone.utc).isoformat()}
+                    self.jobs[page] = {"state": "busy", "run_id": run_id, "finished_at": datetime.now(timezone.utc).isoformat()}
                     self._save()
-                    return {"state": "busy"}
+                    return rejected_busy()
                 raise
             self.active = True
-            self.jobs[page] = {"state": "running", "started_at": datetime.now(timezone.utc).isoformat()}
+            self.jobs[page] = {"state": "running", "run_id": run_id, "started_at": datetime.now(timezone.utc).isoformat()}
             try:
                 self._save()
-                threading.Thread(target=self._run, args=(page,), daemon=True).start()
+                threading.Thread(target=self._run, args=(page, run_id), daemon=True).start()
             except Exception:
                 self.active = False
-                self.jobs[page] = {"state": "error"}
+                self.jobs[page] = {"state": "error", "run_id": run_id}
                 self._save()
+                try:
+                    from .refresh_history import record_rejected_run
+                    record_rejected_run(self.root, "browser", [page], error_type="internal_error", run_id=run_id)
+                except Exception:
+                    pass
                 raise
             return dict(self.jobs[page])
 
-    def _run(self, page):
+    def _run(self, page, run_id):
         from .refresh import RefreshError, refresh_runtime
         try:
-            result = refresh_runtime(runtime_home=self.root, pages=[page], scheduled=False, actual_cli_tree=False)
+            result = refresh_runtime(runtime_home=self.root, pages=[page], scheduled=False, actual_cli_tree=False,
+                                     source="browser", run_id=run_id,
+                                     allow_offline_regression=True if page == "servers" else None)
             row = result["pages"][0]
             state = "success" if result["ok"] else "partial" if row["status"] == "partial" else "error"
-            status = {"state": state, "observed_at": row.get("generated_at")}
+            status = {"state": state, "run_id": result.get("run_id", run_id), "observed_at": row.get("generated_at")}
         except RefreshError as error:
-            status = {"state": "busy" if "another refresh is running" in str(error) else "error"}
+            status = {"state": "busy" if "another refresh is running" in str(error) else "error", "run_id": run_id}
         except Exception:
-            status = {"state": "error"}
+            status = {"state": "error", "run_id": run_id}
         with self.lock:
             status["finished_at"] = datetime.now(timezone.utc).isoformat()
             self.jobs[page] = status

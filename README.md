@@ -37,6 +37,7 @@
 - `docs/site-architecture.md`：ChatGlance 作为 Python 包、Glance runtime、生成配置和 runtime 数据脚本之间的边界。
 - `docs/projects.md`：`项目` 页展示内容、PyPI-only 版本规则、entrypoint-only 展示规则、actual CLI tree 分类证据和刷新验收清单。
 - `docs/infra.md`：Infra/`服务器` 页的配置机制、外部数据生成链路、刷新方式和 cron/timer 模板。
+- `docs/refresh-history.md`：逐服务器身份围栏、last-good/current 时间语义、统一刷新 journal schema、轮转与 API/CLI。
 - `docs/site/deployment.md`：公共可携带部署指南；机器特有拓扑、密钥与现场验收保留在仓库外。
 - `examples/server-inventory.example.yml` / `examples/site-services.example.yml`：可提交的脱敏 inventory 配置示例；真实 inventory 放在 runtime config 目录。
 - `chatglance refresh [PAGES]...`：安装包内置的采集、候选校验与发布入口，不依赖源码 checkout 或机器本地业务脚本。
@@ -57,6 +58,8 @@
 - 为 Glance `server-stats` 写入“只显示有意义磁盘”的 Disk 配置：当前 live 策略始终保留 `/`，只有当 `/home` 是独立挂载点时才加 `/home`；每个可见 mountpoint 都显式写入 `hide: false`，避免 Disk 显示 `n/a`，同时继续隐藏 snap/loop/tmp/overlay。
 - 从 Infra inventory YAML 选择 SSH alias，执行只读采集，生成静态 `server-status.json`，再渲染 Glance `服务器`/Infra page。
 - `服务器` 页的收起卡片显示 IP/CPU/内存/硬盘/状态；GPU、挂载目录、filtered `lsblk`、安全 `getdevices` 摘要、`Last Reboot` 放在展开详情中。
+- inventory 中可选的显式 `server_id`（缺省时由 alias 与受审 target/user/port 确定性派生）共同围栏逐机 last-good；当前离线状态不变，原卡片以可换行、可读时间标注历史硬件值、最后成功与本次尝试。换目标、新机、坏缓存或已移除成员不会凭 alias 复用。
+- 手动、定时和浏览器刷新统一写入 runtime 私有 run journal；`runtime history list/show/prune` 提供只读查询及默认 preview 的 age/byte 轮转，不记录异常原文、凭据或整份账号快照。
 - 从 reviewed `site-services.yml` 生成 `网站服务` 页卡片：每个服务一张封面图、简介、健康状态、Uptime 详情和 public 跳转按钮；local host 只用于探测/运维配置，不展示在人类页面里。
 - 维护 durable runtime：一次性 `runtime maintain` 可原子更新 live config、备份、校验；服务生命周期动作不放在默认 docs 示例里。
 - 渲染并安装 user-level systemd units：主服务仍直接启动 upstream Glance Go binary；维护任务是独立 oneshot/timer，不是 Python wrapper。
@@ -78,7 +81,7 @@ chatglance runtime check
 # 显式启动：runtime start --runtime-home "$CHATARCH_HOME/glance" --apply
 ```
 
-`runtime init --runtime-home DIR` 遵循 `CHATARCH_HOME` 并保留已有文件；重复运行 `--with-auth` 遇到旧无登录配置时拒绝，绝不隐式升级。登录需要 typed ChatEnv 的 `CHATGLANCE_LOGIN_USER`（可为 email）、`CHATGLANCE_LOGIN_SECRET`（**严格 base64 解码后 64 bytes**）及 bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH`。托管登录只信任选定 typed EnvStore profile，忽略继承的登录/索引认证环境；非认证进程配置优先于 typed 默认值。敏感值只进入 Go 子进程环境，不写入 YAML、unit、脚本或 argv。`CHATGLANCE_PROJECTS_OWNER`、`CHATGLANCE_REFRESH_PAGES`、`CHATGLANCE_REFRESH_INTERVAL` 实际提供 owner/页面/定时默认值，显式 CLI 参数覆盖；不自动用卡。`CHATGLANCE_PUBLIC_ORIGIN`、`CHATGLANCE_CONTROL_PORT` 用于可选 controls（需私有 `/account-limits`）；CRS 与 GitHub 继续共享各自既有 resolver。完整安装、目录树、反向代理、托管启停与迁移边界见 [自包含运行指南](docs/site/deployment.md)。
+`runtime init --runtime-home DIR` 遵循 `CHATARCH_HOME` 并保留已有文件；重复运行 `--with-auth` 遇到旧无登录配置时拒绝，绝不隐式升级。登录需要 typed ChatEnv 的 `CHATGLANCE_LOGIN_USER`（可为 email）、`CHATGLANCE_LOGIN_SECRET`（**严格 base64 解码后 64 bytes**）及 bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH`。托管登录只信任选定 typed EnvStore profile，忽略继承的登录/索引认证环境；非认证进程配置优先于 typed 默认值。敏感值只进入 Go 子进程环境，不写入 YAML、unit、脚本或 argv。`CHATGLANCE_PROJECTS_OWNER`、`CHATGLANCE_REFRESH_PAGES`、`CHATGLANCE_REFRESH_INTERVAL` 实际提供 owner/页面/定时默认值；`CHATGLANCE_REFRESH_HISTORY_RETENTION_DAYS=30` 与 `CHATGLANCE_REFRESH_HISTORY_MAX_BYTES=268435456` 是非敏感、受校验的 history 默认值。显式 CLI 参数覆盖；不自动用卡。`CHATGLANCE_PUBLIC_ORIGIN`、`CHATGLANCE_CONTROL_PORT` 用于可选 controls（需私有 `/account-limits`）；CRS 与 GitHub 继续共享各自既有 resolver。完整安装、目录树、反向代理、托管启停与迁移边界见 [自包含运行指南](docs/site/deployment.md)。
 
 新机器配置类似当前站点时，先看 [快速开始](docs/site/quickstart.md)：它把 `glance.yml` / widgets / HTML/CSS 作为主要前端配置入口，`chatglance` 只负责采集、渲染、校验、备份和替换这些管理动作。
 
@@ -111,7 +114,7 @@ chatglance refresh projects sites
 - 使用已有 inventory、ChatEnv/当前快照中的账号列表和 GitHub 凭据。不会重新初始化服务、发现新网站或兑换重置卡。
 - 手动刷新与定时器共享锁；先采集、生成候选并校验，再备份替换，保留原页面顺序和非生成内容；最多重启一次已有 Glance 用户服务。
 - 失败页面保留原产物，成功页继续更新。部分失败/缓存降级返回非零退出码，不把旧值报告成新鲜成功。
-- `--no-restart` 只更新产物；`--json-output` 输出机器可读结果。已在线服务器变为不可达默认不覆盖旧快照，确认要展示新离线状态时使用 `--allow-offline-regression`。
+- `--no-restart` 只更新产物；`--json-output` 输出含同一 `run_id` 的机器可读结果。服务器离线默认发布真实当前状态，并只在身份一致时保留标旧的 last-good 硬件；需要旧式整页阻止时显式使用 `--no-allow-offline-regression`。
 - 项目页默认复用**相同发行版本、包名和命令入口**的 CLI 树证据，避免每次手动刷新都安装所有包；`--actual-cli-tree` 才重新探测当前发行包。
 
 手动与定时刷新都直接调用安装包 CLI。迁移后停用机器本地和源码目录下的旧业务脚本入口；外部仅保留 ChatEnv/密钥、inventory、数据与薄 systemd 配置。手动刷新不改变既有自动重置策略，也不消费卡片；CRS 托管模式由服务端续期上游 OAuth；旧本地 Codex 模式仍由 ChatCRS 的标准 ChatEnv 流程处理。
@@ -262,6 +265,7 @@ chatglance runtime status
 - 可复用源码、脚本、文档都放在 ChatArch/ChatGlance repo 内，例如 `src/chatglance/`、`scripts/`、`docs/`、`examples/`。
 - 内容数据：repository inventory JSON、缓存和生成快照放在 ChatArch-owned runtime：`~/.chatarch/glance/data/` 或 `~/.chatarch/glance/cache/`。
 - Infra/site inventory：真实 `server-inventory.yml` 和 `site-services.yml` 是 runtime config；生成的 `chatarch-projects.json`、`projects-page.yml`、`server-status.json`、`server-page.yml`、`site-services.json`、`site-services-page.yml` 是 runtime 静态快照，不是源码。
+- 私有刷新状态：`private/server-last-good.json` 不参与普通轮转；`private/refresh-history/{runs,snapshots}` 仅存 allowlisted run 元数据并按 30 天与 256 MiB 双界限轮转。
 - live config：`~/.chatarch/glance/config/glance.yml`；更新前写备份到 `~/.chatarch/glance/config/backups/`。
 - 维护：`chatglance runtime maintain` 是 oneshot，可由 `chatarch-glance-maintenance.timer` 周期触发。
 - 安装/启动：`chatglance runtime install-systemd --start` 与 `chatglance runtime start` 只使用 user-level systemd，不写 `/etc/systemd`。

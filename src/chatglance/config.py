@@ -23,6 +23,16 @@ class ChatGlanceConfig(BaseEnvConfig):
     CHATGLANCE_PROJECTS_OWNER = EnvField("CHATGLANCE_PROJECTS_OWNER", default="", desc="Optional project inventory owner.")
     CHATGLANCE_REFRESH_PAGES = EnvField("CHATGLANCE_REFRESH_PAGES", default="", desc="Explicit non-consuming scheduled page names.")
     CHATGLANCE_REFRESH_INTERVAL = EnvField("CHATGLANCE_REFRESH_INTERVAL", default="30min", desc="Scheduled refresh interval.")
+    CHATGLANCE_REFRESH_HISTORY_RETENTION_DAYS = EnvField(
+        "CHATGLANCE_REFRESH_HISTORY_RETENTION_DAYS",
+        default="30",
+        desc="Owned refresh-run history retention in whole days.",
+    )
+    CHATGLANCE_REFRESH_HISTORY_MAX_BYTES = EnvField(
+        "CHATGLANCE_REFRESH_HISTORY_MAX_BYTES",
+        default=str(256 * 1024 * 1024),
+        desc="Maximum aggregate bytes for owned refresh journals and metadata snapshots.",
+    )
 
     CHATGLANCE_GITHUB_TOKEN = EnvField(
         "CHATGLANCE_GITHUB_TOKEN",
@@ -102,6 +112,40 @@ def collection_settings(*, home=None) -> dict:
             "control_path": resolve("CHATGLANCE_ACCOUNT_LIMITS_CONTROL_PATH", "") or ""}
 
 
+def history_settings(*, home=None) -> dict[str, int]:
+    """Resolve and validate bounded non-secret refresh-history settings."""
+
+    import os
+    from chatenv import EnvStore, get_paths
+
+    try:
+        values = EnvStore(get_paths(home).envs_dir).load_active(ChatGlanceConfig)
+    except (ValueError, OSError):
+        values = {}
+
+    def bounded(key: str, default: str, minimum: int, maximum: int) -> int:
+        raw = os.environ[key] if key in os.environ else values.get(key, default)
+        if isinstance(raw, bool):
+            raise ValueError(f"{key} must be a whole number")
+        try:
+            value = int(str(raw).strip())
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{key} must be a whole number") from exc
+        if str(raw).strip() != str(value) or not minimum <= value <= maximum:
+            raise ValueError(f"{key} must be between {minimum} and {maximum}")
+        return value
+
+    return {
+        "retention_days": bounded("CHATGLANCE_REFRESH_HISTORY_RETENTION_DAYS", "30", 1, 3650),
+        "max_bytes": bounded(
+            "CHATGLANCE_REFRESH_HISTORY_MAX_BYTES",
+            str(256 * 1024 * 1024),
+            1024 * 1024,
+            16 * 1024 * 1024 * 1024,
+        ),
+    }
+
+
 def site_settings(*, home=None) -> dict[str, str]:
     """Resolve site defaults from process env, then the active ChatEnv profile."""
     import os
@@ -138,4 +182,4 @@ def validate_site_settings(settings: dict[str, str]) -> None:
             raise ValueError("CHATGLANCE_SITES_UPTIME_BASE_URL must be an HTTP(S) base URL without credentials, query or fragment")
 
 
-__all__ = ["ChatGlanceConfig", "collection_settings", "site_settings", "validate_site_settings"]
+__all__ = ["ChatGlanceConfig", "collection_settings", "history_settings", "site_settings", "validate_site_settings"]

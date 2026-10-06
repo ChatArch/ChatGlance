@@ -14,6 +14,8 @@
 | 项目与服务器 | `chatglance refresh projects servers` |
 | 只更新文件，不重启服务 | `chatglance refresh --no-restart` |
 | 自动化读取结果 | `chatglance refresh --json-output` |
+| 查看运行流水 | `chatglance runtime history list` |
+| 预览/执行轮转 | `chatglance runtime history prune` / `... --apply` |
 
 默认实例目录是有效 ChatArch home 下的 `glance/`，可以指定 `--runtime-home <runtime-home>`。
 需要已有的 `config/glance.yml` 和 `bin/glance`；也可用 `--glance-bin <executable>` 指定校验程序。命令不会自动安装服务器或重新初始化账号。
@@ -35,8 +37,9 @@
 - 保留原页面顺序、账号配置和非生成内容；检测到校验期间有人改动配置则中止，避免覆盖。
 - 同址可选登录配置的项目刷新由 config 中的 `public: true` 与 `authenticated-columns` 配对识别；重新生成匿名 allowlist 与已登录完整列，不把 full inventory 覆写到访客列。缺失配对时拒绝部分模式；`runtime maintain`、`projects update-config` 采用同一生成边界。
 - 只有文件变化时才最多重启一次既有 Glance 用户服务；默认名称 `chatarch-glance.service`，可用 `--service-name` 指定。`--no-restart` 交给外层管理生命周期。
-- 所有页面新鲜成功时返回 0；部分失败或缓存降级返回 1，同时输出实际结果。`--json-output` 的 `ok`、`pages`、`changed`、`restarted` 和 `backup_dir` 可供自动化读取。
-- 服务器出现在线→不可达变化时，手动刷新默认保留旧快照并报告失败；确认要发布当前离线状态时使用 `--allow-offline-regression`。
+- 所有页面新鲜成功时返回 0；部分失败或缓存降级返回 1，同时输出实际结果。`--json-output` 的 `run_id`、`source`、`ok`、`pages`、`changed`、`published`、`restarted` 和 `backup_dir` 可供自动化读取。
+- 服务器出现在线→不可达变化时，手动、定时和浏览器刷新发布真实离线状态；可选显式 `server_id`（缺省时由 alias 与受审 target/user/port 派生）及连接身份完全匹配时，原卡片保留并标旧最后成功硬件值，同时以可读、带时区的独立行显示最后成功与本次尝试时间。从未成功或身份变化时明确显示无历史数据。原生 CLI 仅需旧式整页阻止时使用 `--no-allow-offline-regression`。
+- 每次 manual/scheduled/browser 尝试（含 busy、全失败、校验/发布/重启错误）写入 `private/refresh-history`。记录只含 allowlist 元数据；不保存异常原文、stdout/stderr、配置或账号快照。typed 默认保留 30 天、总量 256 MiB，并自动清理确认归属且未受保护的旧 bundle；CLI `prune` 默认只预览。
 - 手动刷新始终按只读监控方式调用订阅采集，**不会兑换重置卡，也不会修改既有自动重置策略**。自动用卡不另设重置调度：它只在`--scheduled`的同一次订阅刷新中，使用刚读取的数据完成判断并最多消费一次。
 
 ## Python 接口与脚本
@@ -46,6 +49,13 @@ from chatglance.refresh import refresh_runtime
 
 result = refresh_runtime(pages=["sites", "account-limits"], restart=False)
 assert result["reset_execution"] is False
+assert result["run_id"]
 ```
+
+只读/轮转 API 为 `chatglance.refresh_history.list_refresh_runs`、
+`show_refresh_run`、`prune_refresh_history`。逐服务器缓存准备 API 为
+`chatglance.server_cache.prepare_server_refresh`；它只返回待事务发布的
+plan，不单独提交 last-good。完整 schema、legacy bootstrap 和保护规则见
+[刷新历史与 last-good](refresh-history.md)。
 
 可选脚本 `scripts/refresh-manual.sh` 只把参数转交给公开 CLI。部署专属的代理环境和账号配置保留在 runtime/ChatEnv，不写进通用脚本或仓库。定时器的原策略不因增加手动入口而改变。

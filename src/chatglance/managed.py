@@ -744,7 +744,13 @@ def refresh_managed(root):
         raise ValueError("no managed refresh pages were selected")
     from .refresh import refresh_runtime
     with effective_home(root):
-        return refresh_runtime(root, manifest["pages"], service_name=manifest["names"]["web"], scheduled=manifest["scheduled"])
+        return refresh_runtime(
+            root,
+            manifest["pages"],
+            service_name=manifest["names"]["web"],
+            scheduled=manifest["scheduled"],
+            source="scheduled",
+        )
 
 
 def maintain_managed(root):

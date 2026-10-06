@@ -12,6 +12,21 @@ chatglance refresh --json-output --no-restart
 
 `refresh` collects and publishes only managed pages already present in the Glance config and reports success/partial failure per page. It validates a candidate with the selected Glance binary's `config:validate` before backup and replacement; failed pages keep old files, with a shared nonblocking lock. `--no-restart` leaves the service running as-is. These commands are **illustrative**: missing runtime, credentials, or validator cause failure; they do not set up an environment for you.
 
+Every native, scheduled, or browser attempt has one `run_id`; its safe journal
+lives under runtime `private/refresh-history`. Use `chatglance runtime history
+list` / `show RUN_ID` read-only. `history prune` previews by default and only
+`--apply` removes confirmed-owned, unprotected records. Typed defaults are 30
+days and 256 MiB. Records contain no exception text, Token/Cookie values,
+configuration, or whole account snapshots.
+
+Current server state is separate from the last successful observation. Offline
+stays offline; `server_id` is optional and otherwise derived from alias plus the
+reviewed target/user/port. When the complete identity matches,
+the native card retains marked historical CPU/memory/GPU/disk/system fields and
+shows last success plus this attempt. A new or changed identity says no history.
+Last-good and the visible snapshot share one validation/publication transaction;
+user notes are overlaid only while rendering.
+
 Manual calls without `--scheduled` never redeem reset cards; account pages only display snapshots. Existing scheduling must use explicit `--scheduled` with per-account policy, not infer authority from a rendered toggle. When refreshing projects in optional-login mode, guest columns are rebuilt from the Public allowlist and authenticated columns retain full rows. A broken layout is rejected rather than overwritten with private guest content.
 
 ## Manual check and use

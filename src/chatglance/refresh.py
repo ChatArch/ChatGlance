@@ -39,6 +39,7 @@ class PageUpdate:
     data: dict[str, Any]
     page: dict[str, Any]
     extra_files: dict[str, str] = field(default_factory=dict)
+    state_files: dict[str, str] = field(default_factory=dict)
     partial: bool = False
 
 
@@ -78,14 +79,26 @@ def _refresh_lock(root: Path):
         import fcntl
     except ImportError as exc:
         raise RefreshError("manual refresh requires POSIX file locking") from exc
-    (root / "logs").mkdir(parents=True, exist_ok=True)
-    with (root / "logs/refresh-live-pages.lock").open("a") as handle:
+    logs = root / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    if logs.is_symlink() or not logs.is_dir():
+        raise RefreshError("refresh lock directory is unsafe")
+    lock_path = logs / "refresh-live-pages.lock"
+    flags = os.O_RDWR | os.O_CREAT
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(lock_path, flags, 0o600)
+    except OSError as exc:
+        raise RefreshError("refresh lock is unavailable or unsafe") from exc
+    os.fchmod(descriptor, 0o600)
+    with os.fdopen(descriptor, "a", encoding="utf-8") as handle:
         try:
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise RefreshError("another refresh is running") from exc
         try:
-            yield
+            yield lock_path
         finally:
             fcntl.flock(handle, fcntl.LOCK_UN)
 
@@ -155,7 +168,7 @@ def _cli_report(data: dict) -> str:
     return output.getvalue()
 
 
-def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] | None, actual_cli_tree: bool, allow_offline_regression: bool, scheduled: bool = False, collection: CollectionOptions | None = None) -> PageUpdate:
+def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] | None, actual_cli_tree: bool, allow_offline_regression: bool, scheduled: bool = False, collection: CollectionOptions | None = None, run_id: str | None = None) -> PageUpdate:
     collection = collection or CollectionOptions()
     previous_path = root / "data" / PAGE_SPECS[key][1]
     previous = _json(previous_path)
@@ -185,6 +198,7 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
         return PageUpdate(key, data, build_sites_page(data))
     if key == "servers":
         from .servers import (load_server_inventory_config, aliases_from_inventory_config, collection_options_from_inventory_config, host_connection_overrides_from_inventory_config, collect_server_status, apply_server_inventory_config, page_options_from_inventory_config, build_servers_page, server_status_regressions)
+        from .server_cache import LAST_GOOD_RELATIVE, dump_last_good, prepare_server_refresh
         inventory = load_server_inventory_config(collection.server_inventory or root / "config/server-inventory.yml")
         aliases = aliases_from_inventory_config(inventory)
         if not aliases:
@@ -194,8 +208,17 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
         data = apply_server_inventory_config(data, inventory)
         if previous and server_status_regressions(previous, data) and not allow_offline_regression:
             raise RefreshError("server offline regression; previous snapshot retained")
+        cache_plan = prepare_server_refresh(root, data, inventory, run_id=run_id)
+        data = cache_plan.snapshot
         from .page_control import overlay_notes
-        return PageUpdate(key, data, build_servers_page(overlay_notes(root, data), **page_options_from_inventory_config(inventory)))
+        partial = bool(data.get("count")) and int(data.get("online", 0)) < int(data.get("count", 0))
+        return PageUpdate(
+            key,
+            data,
+            build_servers_page(overlay_notes(root, data), **page_options_from_inventory_config(inventory)),
+            state_files={str(LAST_GOOD_RELATIVE): dump_last_good(cache_plan.last_good)},
+            partial=partial,
+        )
     from .project_inventory import RefreshOptions, refresh_project_inventory
     from .projects import build_projects_page
     from .portable import portable_settings
@@ -213,7 +236,12 @@ def _restart(service: str) -> None:
 
 
 def _publish(root: Path, stage: Path, payloads: dict[Path, str]) -> str | None:
-    changed = {path: text for path, text in payloads.items() if not path.exists() or path.read_text(encoding="utf-8") != text}
+    changed = {}
+    for path, text in payloads.items():
+        private_state = path == root / "private" or root / "private" in path.parents
+        unsafe_private_mode = path.exists() and private_state and path.stat().st_mode & 0o777 != 0o600
+        if not path.exists() or path.read_text(encoding="utf-8") != text or unsafe_private_mode:
+            changed[path] = text
     if not changed:
         return None
     backup = root / "config/backups" / ("refresh-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ"))
@@ -227,7 +255,8 @@ def _publish(root: Path, stage: Path, payloads: dict[Path, str]) -> str | None:
                 saved[path].chmod(0o600)
         temporary = stage / f"publish-{index}"
         temporary.write_text(text, encoding="utf-8")
-        temporary.chmod(0o600 if path == root / "config/glance.yml" else path.stat().st_mode & 0o777 if path.exists() else 0o600)
+        private_state = path == root / "private" or root / "private" in path.parents
+        temporary.chmod(0o600 if path == root / "config/glance.yml" or private_state else path.stat().st_mode & 0o777 if path.exists() else 0o600)
         prepared[path] = temporary
     (backup / "manifest.json").write_text(json.dumps({str(path.relative_to(root)): saved[path].name if path in saved else None for path in changed}, indent=2), encoding="utf-8")
     try:
@@ -247,7 +276,7 @@ def _publish(root: Path, stage: Path, payloads: dict[Path, str]) -> str | None:
     return str(backup)
 
 
-def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str] = (), *, glance_bin: str | Path | None = None, restart: bool = True, service_name: str = "chatarch-glance.service", profiles: Sequence[str] | None = None, actual_cli_tree: bool | None = None, allow_offline_regression: bool | None = None, scheduled: bool = False, collection: CollectionOptions | None = None) -> dict[str, Any]:
+def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str] = (), *, glance_bin: str | Path | None = None, restart: bool = True, service_name: str = "chatarch-glance.service", profiles: Sequence[str] | None = None, actual_cli_tree: bool | None = None, allow_offline_regression: bool | None = None, scheduled: bool = False, collection: CollectionOptions | None = None, source: str | None = None, run_id: str | None = None) -> dict[str, Any]:
     """Collect configured pages; only explicit scheduled mode may execute policy.
 
     Failed pages retain their previous snapshots; successful and cached partial
@@ -258,75 +287,225 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
         raise RefreshError("unknown refresh page")
     if type(scheduled) is not bool:
         raise RefreshError("scheduled must be boolean")
+    source = source or ("scheduled" if scheduled else "manual")
+    if source not in {"native", "manual", "scheduled", "browser"}:
+        raise RefreshError("unknown refresh source")
+    if scheduled and source != "scheduled":
+        raise RefreshError("scheduled policy execution requires a scheduled source")
     collection = collection or CollectionOptions()
     actual_cli_tree = scheduled if actual_cli_tree is None else actual_cli_tree
-    allow_offline_regression = scheduled if allow_offline_regression is None else allow_offline_regression
+    # Identity-fenced last-good rows make an offline observation safe to publish:
+    # the current status stays offline while only proven historical hardware is
+    # retained.  The explicit negative option remains available for operators
+    # who still want the legacy regression gate.
+    allow_offline_regression = True if allow_offline_regression is None else allow_offline_regression
     root = Path(runtime_home).expanduser().resolve() if runtime_home is not None else default_runtime_home()
     config_path = root / "config/glance.yml"
-    if not config_path.is_file():
-        raise RefreshError("runtime config is missing; configure Glance first")
+
+    from .refresh_history import RefreshHistory, RefreshHistoryError
+
+    history = RefreshHistory(root)
+    try:
+        journal_id = history.start(source, selected, run_id=run_id)
+    except RefreshHistoryError as exc:
+        raise RefreshError("refresh history is unavailable") from exc
+
     validator = Path(glance_bin).expanduser() if glance_bin is not None else root / "bin/glance"
-    if not validator.is_file():
-        raise RefreshError("Glance validator is missing; pass --glance-bin")
-    with _refresh_lock(root):
-        initial = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    rows: list[dict[str, Any]] = []
+    result = {
+        "ok": False,
+        "runtime_home": str(root),
+        "run_id": journal_id,
+        "source": source,
+        "pages": rows,
+        "changed": False,
+        "published": False,
+        "restarted": False,
+        "reset_execution": scheduled and "account-limits" in selected,
+        "backup_dir": None,
+    }
+    journal_finished = False
+    phase = "configuration"
+    validation_status = "skipped"
+    publication_status = "skipped"
+    restart_status = "disabled" if not restart else "skipped"
+
+    def finish_journal(status: str, *, error_type: str | None = None) -> None:
+        nonlocal journal_finished
+        history.finish(
+            journal_id,
+            status=status,
+            pages=rows,
+            error_type=error_type,
+            validation=validation_status,
+            publication=publication_status,
+            restart=restart_status,
+            changed=bool(result["changed"]),
+            published=bool(result["published"]),
+            restarted=bool(result["restarted"]),
+            backup_id=Path(result["backup_dir"]).name if result["backup_dir"] else None,
+        )
+        journal_finished = True
+
+    try:
+        if not config_path.is_file():
+            raise RefreshError("runtime config is missing; configure Glance first")
+        try:
+            initial = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, yaml.YAMLError) as exc:
+            raise RefreshError("runtime config is malformed") from exc
         if not isinstance(initial, dict) or not isinstance(initial.get("pages"), list):
             raise RefreshError("runtime config must contain pages")
-        selected = selected or _configured_pages(initial, root, collection)
+        if not selected:
+            try:
+                selected = _configured_pages(initial, root, collection)
+            except Exception as exc:
+                raise RefreshError("configured page discovery failed") from exc
         if not selected:
             raise RefreshError("no configured generated pages to refresh")
-        staging = root / "staging"
-        staging.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix="refresh-", dir=staging) as temporary:
-            stage = Path(temporary)
-            updates, rows = [], []
-            for key in selected:
+        result["reset_execution"] = scheduled and "account-limits" in selected
+        history.checkpoint(journal_id, requested_pages=selected)
+        from .config import history_settings
+        history_settings()
+        if not validator.is_file():
+            raise RefreshError("Glance validator is missing; pass --glance-bin")
+        phase = "lock"
+        with _refresh_lock(root) as lock_path:
+            history.acquired(journal_id, lock_path)
+            phase = "collection"
+            staging = root / "staging"
+            staging.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(prefix="refresh-", dir=staging) as temporary:
+                stage = Path(temporary)
+                updates = []
+                for key in selected:
+                    try:
+                        update = _collect_page(
+                            key,
+                            root,
+                            stage,
+                            profiles=profiles,
+                            actual_cli_tree=actual_cli_tree,
+                            allow_offline_regression=allow_offline_regression,
+                            scheduled=scheduled,
+                            collection=collection,
+                            run_id=journal_id,
+                        )
+                        counts = update.data.get("counts", {})
+                        details = {}
+                        if key == "servers":
+                            counts = {"servers": update.data.get("count", 0), "online": update.data.get("online", 0)}
+                        elif key == "account-limits":
+                            status = update.data.get("refresh_status", {})
+                            counts = {"profiles": len(update.data.get("codex", [])), "ok": status.get("ok_count", 0), "failed": status.get("failed_count", 0)}
+                            details = {"failed_profiles": status.get("failed_profiles", []), "calendar_status": update.data.get("codex_reset", {}).get("status"), "calendar_cached": bool(update.data.get("codex_reset", {}).get("using_last_known_values"))}
+                        rows.append({"page": key, "status": "partial" if update.partial else "ok", "generated_at": update.data.get("generated_at"), "counts": counts, **details})
+                        updates.append(update)
+                    except Exception as exc:
+                        # Raw upstream exceptions can contain tokens, headers or URLs.
+                        rows.append({"page": key, "status": "error", "error_type": type(exc).__name__, "message": "collection failed; live artifacts unchanged"})
+                result["ok"] = all(row["status"] == "ok" for row in rows)
+                history.checkpoint(journal_id, pages=rows, collection="completed")
+                if not updates:
+                    finish_journal("failed", error_type="collection_error")
+                    return result
+
+                # Rebase onto the latest config so unrelated edits made during
+                # collection are retained, then reject a validation race.
+                before = config_path.read_text(encoding="utf-8")
+                config = yaml.safe_load(before)
+                if not isinstance(config, dict) or not isinstance(config.get("pages"), list):
+                    raise RefreshError("runtime config must contain pages")
+                payloads = {}
+                for update in updates:
+                    _replace_page(config, update.page, inventory=update.data if update.key == "projects" else None)
+                    _, data_name, page_name = PAGE_SPECS[update.key]
+                    payloads[root / "data" / data_name] = json.dumps(update.data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+                    payloads[root / "data" / page_name] = yaml.safe_dump(update.page, allow_unicode=True, sort_keys=False)
+                    for name, text in update.extra_files.items():
+                        payloads[root / "data" / name] = text
+                    for relative, text in update.state_files.items():
+                        relative_path = Path(relative)
+                        if relative_path.is_absolute() or ".." in relative_path.parts:
+                            raise RefreshError("state payload path escaped runtime home")
+                        payloads[root / relative_path] = text
+                payloads[config_path] = yaml.safe_dump(config, allow_unicode=True, sort_keys=False)
+                candidate = stage / "glance.yml"
+                candidate.write_text(payloads[config_path], encoding="utf-8")
+                candidate.chmod(0o600)
+                phase = "validation"
+                validation_status = "failed"
+                history.checkpoint(journal_id, pages=rows, collection="completed", validation="running")
                 try:
-                    update = _collect_page(key, root, stage, profiles=profiles, actual_cli_tree=actual_cli_tree, allow_offline_regression=allow_offline_regression, scheduled=scheduled, collection=collection)
-                    counts = update.data.get("counts", {})
-                    details = {}
-                    if key == "servers":
-                        counts = {"servers": update.data.get("count", 0), "online": update.data.get("online", 0)}
-                    elif key == "account-limits":
-                        status = update.data.get("refresh_status", {})
-                        counts = {"profiles": len(update.data.get("codex", [])), "ok": status.get("ok_count", 0), "failed": status.get("failed_count", 0)}
-                        details = {"failed_profiles": status.get("failed_profiles", []), "calendar_status": update.data.get("codex_reset", {}).get("status"), "calendar_cached": bool(update.data.get("codex_reset", {}).get("using_last_known_values"))}
-                    rows.append({"page": key, "status": "partial" if update.partial else "ok", "generated_at": update.data.get("generated_at"), "counts": counts, **details})
-                    updates.append(update)
+                    validate_glance_config(validator, candidate)
                 except Exception as exc:
-                    # Raw upstream exceptions can contain tokens, headers or URLs.
-                    rows.append({"page": key, "status": "error", "error_type": type(exc).__name__, "message": "collection failed; live artifacts unchanged"})
-            result = {"ok": all(row["status"] == "ok" for row in rows), "runtime_home": str(root), "pages": rows, "changed": False, "restarted": False, "reset_execution": scheduled and "account-limits" in selected, "backup_dir": None}
-            if not updates:
+                    raise RefreshError("candidate validation failed; live artifacts unchanged") from exc
+                validation_status = "passed"
+                history.checkpoint(journal_id, pages=rows, collection="completed", validation="passed")
+                if config_path.read_text(encoding="utf-8") != before:
+                    phase = "config_changed"
+                    raise RefreshError("runtime config changed during validation; retry refresh")
+                phase = "publication"
+                publication_status = "failed"
+                history.checkpoint(
+                    journal_id, pages=rows, collection="completed", validation="passed",
+                    publication="running", changed=None, published=None,
+                )
+                result["backup_dir"] = _publish(root, stage, payloads)
+                result["changed"] = result["backup_dir"] is not None
+                result["published"] = result["changed"]
+                publication_status = "published" if result["changed"] else "unchanged"
+                history.checkpoint(
+                    journal_id, pages=rows, collection="completed", validation="passed",
+                    publication=publication_status, changed=bool(result["changed"]),
+                    published=bool(result["published"]),
+                    backup_id=Path(result["backup_dir"]).name if result["backup_dir"] else None,
+                )
+                if result["changed"] and restart:
+                    phase = "restart"
+                    restart_status = "failed"
+                    history.checkpoint(
+                        journal_id, pages=rows, collection="completed", validation="passed",
+                        publication=publication_status, restart="running", changed=True,
+                        published=True, restarted=None,
+                        backup_id=Path(result["backup_dir"]).name,
+                    )
+                    try:
+                        _restart(service_name)
+                    except (OSError, subprocess.SubprocessError) as exc:
+                        raise RefreshError("artifacts published, but service restart failed") from exc
+                    result["restarted"] = True
+                    restart_status = "completed"
+                    history.checkpoint(
+                        journal_id, pages=rows, collection="completed", validation="passed",
+                        publication=publication_status, restart="completed", changed=True,
+                        published=True, restarted=True,
+                        backup_id=Path(result["backup_dir"]).name,
+                    )
+                terminal = "success" if result["ok"] else "partial"
+                finish_journal(terminal)
                 return result
-            # Rebase onto the latest config so unrelated edits made during slow
-            # collection are retained, then reject a race during validation.
-            before = config_path.read_text(encoding="utf-8")
-            config = yaml.safe_load(before)
-            payloads = {}
-            for update in updates:
-                _replace_page(config, update.page, inventory=update.data if update.key == "projects" else None)
-                _, data_name, page_name = PAGE_SPECS[update.key]
-                payloads[root / "data" / data_name] = json.dumps(update.data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-                payloads[root / "data" / page_name] = yaml.safe_dump(update.page, allow_unicode=True, sort_keys=False)
-                for name, text in update.extra_files.items():
-                    payloads[root / "data" / name] = text
-            payloads[config_path] = yaml.safe_dump(config, allow_unicode=True, sort_keys=False)
-            candidate = stage / "glance.yml"
-            candidate.write_text(payloads[config_path], encoding="utf-8")
-            candidate.chmod(0o600)
-            try:
-                validate_glance_config(validator, candidate)
-            except Exception as exc:
-                raise RefreshError("candidate validation failed; live artifacts unchanged") from exc
-            if config_path.read_text(encoding="utf-8") != before:
-                raise RefreshError("runtime config changed during validation; retry refresh")
-            result["backup_dir"] = _publish(root, stage, payloads)
-            result["changed"] = result["backup_dir"] is not None
-            if result["changed"] and restart:
-                try:
-                    _restart(service_name)
-                except (OSError, subprocess.SubprocessError) as exc:
-                    raise RefreshError("artifacts published, but service restart failed") from exc
-                result["restarted"] = True
-            return result
+    except Exception as exc:
+        if not journal_finished:
+            if phase == "lock" and isinstance(exc, RefreshError) and "another refresh is running" in str(exc):
+                status, error_type = "busy", "busy"
+                validation_status = "not_started"
+                publication_status = "not_started"
+                restart_status = "not_started"
+            elif phase == "validation":
+                status, error_type = "failed", "validation_error"
+            elif phase == "config_changed":
+                status, error_type = "failed", "config_changed"
+            elif phase == "publication":
+                status, error_type = "failed", "publication_error"
+            elif phase == "restart":
+                status, error_type = "failed", "restart_error"
+            elif phase == "configuration":
+                status, error_type = "failed", "configuration_error"
+                validation_status = "not_started"
+                publication_status = "not_started"
+                restart_status = "not_started"
+            else:
+                status, error_type = "failed", "collection_error"
+            finish_journal(status, error_type=error_type)
+        raise
