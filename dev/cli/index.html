@@ -628,6 +628,10 @@
 │   ├── controls
 │   ├── adopt
 │   ├── check
+│   ├── history
+│   │   ├── list
+│   │   ├── prune
+│   │   └── show
 │   ├── init
 │   ├── install
 │   ├── import-env
@@ -651,7 +655,7 @@
 └── disks
     └── root-only
 </code></pre></div>
-<p><code>refresh</code> 使用运行时现有清单刷新已配置页面；手动模式不会兑换重置卡。<code>runtime init</code> 仅创建 loopback 配置和空快照；<code>install-binary</code> 要求本地归档及 SHA256。<code>render-portable</code> 只打印或写入审核目录，不注册服务；<code>serve</code> 和 <code>controls</code> 需要显式执行。<code>runtime maintain</code> 可以改写指定 runtime 配置；旧的 <code>install-systemd</code>、<code>start</code> 会操作 user-level 服务/定时器，需要额外审核。详情见 <a href="../operations/">刷新与运行</a>。</p>
+<p><code>refresh</code> 使用运行时现有清单刷新已配置页面；手动模式不会兑换重置卡。<code>runtime history list/show</code> 只读，<code>prune</code> 默认 preview、<code>--apply</code> 才清理确认归属的历史。<code>runtime init</code> 仅创建 loopback 配置和空快照；<code>install-binary</code> 要求本地归档及 SHA256。<code>render-portable</code> 只打印或写入审核目录，不注册服务；<code>serve</code> 和 <code>controls</code> 需要显式执行。<code>runtime maintain</code> 可以改写指定 runtime 配置；旧的 <code>install-systemd</code>、<code>start</code> 会操作 user-level 服务/定时器，需要额外审核。详情见 <a href="../operations/">刷新与运行</a>。</p>
 <h2 id="_4">订阅与重置控制</h2>
 <p>托管 <code>install</code>、<code>adopt</code>、<code>update</code>、<code>rollback</code>、<code>stop</code>、<code>restart</code> 默认 dry-run，<code>--apply</code>/<code>--yes</code> 才授权执行。<code>start</code>/<code>status</code> 通过 <code>--runtime-home</code> 选择托管模式，省略时保留旧行为。<code>check</code> 检查二进制/配置/所有权；<code>refresh-managed</code> 与 <code>maintain-managed</code> 是真实安装包原生单元入口。完整接管/回滚和私有输入边界见<a href="../deployment/">托管部署</a>。</p>
 <div class="highlight"><pre><span></span><code>chatglance
