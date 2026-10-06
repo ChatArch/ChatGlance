@@ -665,11 +665,12 @@
 <h2 id="_1">五层边界与兼容性</h2>
 <ol>
 <li>Git 跟踪的源码负责公共模板、Python API 与文档。</li>
-<li>安装的 <strong>ChatGlance 0.2.0 wheel</strong> 负责全部业务逻辑；服务入口不依赖 checkout。</li>
-<li>单独维护的 <strong>ChatArch/glance chatarch-v0.2.0</strong> 负责网页、登录和会话；不需要新 Go 特性时兼容维护版 0.1.0。未修改上游不能作为登录后端的直接替代品。</li>
+<li>安装的 <strong>ChatGlance 0.2.2 wheel</strong> 负责全部业务逻辑；服务入口不依赖 checkout。</li>
+<li>单独维护的 <strong>ChatArch/glance chatarch-v0.2.1</strong> 负责网页、登录和会话；不需要新 Go 特性时兼容维护版 0.1.0。未修改上游不能作为登录后端的直接替代品。</li>
 <li>标准 typed ChatEnv 保存敏感配置，home 下 <code>glance/</code> 保存私有运行配置、清单、快照与已校验二进制。</li>
 <li>可选 Linux user-systemd 单元是薄入口；nginx 由操作者单独管理。</li>
 </ol>
+<p>项目「概览」旁的原生刷新图标需要维护版 Go <code>chatarch-v0.2.1</code> 或更新版本的 <code>header-controls-url</code> 支持；旧二进制不能显示这个入口。Python 与 Go 版本独立，升级时先部署已校验的新 Go 二进制，再重渲染页面。</p>
 <p>管理部署支持 Linux/POSIX、user systemd、隔离的 Python 安装环境与适合目标架构的维护版 Go 二进制。init/渲染可以不使用 systemd。安装不自动发布、迁移生产、启动服务、发现 SSH 主机或消费重置卡。本指南不是已完成生产切换的声明。</p>
 <h2 id="_2">完整通用目录</h2>
 <div class="highlight"><pre><span></span><code>repository/
@@ -700,7 +701,7 @@ chatenv<span class="w"> </span>init<span class="w"> </span>-t<span class="w"> </
 chatenv<span class="w"> </span><span class="nb">set</span><span class="w"> </span>-i
 chatglance<span class="w"> </span>runtime<span class="w"> </span>paths
 chatglance<span class="w"> </span>runtime<span class="w"> </span>init<span class="w"> </span>--with-auth
-chatglance<span class="w"> </span>runtime<span class="w"> </span>install-binary<span class="w"> </span>--archive<span class="w"> </span>reviewed.tar.gz<span class="w"> </span>--sha256<span class="w"> </span>EXPECTED_SHA256<span class="w"> </span>--binary-version<span class="w"> </span>chatarch-v0.2.0+40_LOWERCASE_HEX
+chatglance<span class="w"> </span>runtime<span class="w"> </span>install-binary<span class="w"> </span>--archive<span class="w"> </span>reviewed.tar.gz<span class="w"> </span>--sha256<span class="w"> </span>EXPECTED_SHA256<span class="w"> </span>--binary-version<span class="w"> </span>chatarch-v0.2.1+40_LOWERCASE_HEX
 chatglance<span class="w"> </span>runtime<span class="w"> </span>install<span class="w"> </span>--page<span class="w"> </span>projects<span class="w"> </span>--interval<span class="w"> </span>30min
 chatglance<span class="w"> </span>runtime<span class="w"> </span>install<span class="w"> </span>--page<span class="w"> </span>projects<span class="w"> </span>--interval<span class="w"> </span>30min<span class="w"> </span>--apply
 chatglance<span class="w"> </span>runtime<span class="w"> </span>check
@@ -728,7 +729,7 @@ chatglance<span class="w"> </span>runtime<span class="w"> </span>import-env<span
 <div class="highlight"><pre><span></span><code>chatglance<span class="w"> </span>runtime<span class="w"> </span>check<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--live
 chatglance<span class="w"> </span>runtime<span class="w"> </span>restart<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span>
 chatglance<span class="w"> </span>runtime<span class="w"> </span>stop<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--apply
-chatglance<span class="w"> </span>runtime<span class="w"> </span>update<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--archive<span class="w"> </span>reviewed-next.tar.gz<span class="w"> </span>--sha256<span class="w"> </span>EXPECTED_SHA256<span class="w"> </span>--binary-version<span class="w"> </span>chatarch-v0.2.0+40_LOWERCASE_HEX<span class="w"> </span>--apply<span class="w"> </span>--restart
+chatglance<span class="w"> </span>runtime<span class="w"> </span>update<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--archive<span class="w"> </span>reviewed-next.tar.gz<span class="w"> </span>--sha256<span class="w"> </span>EXPECTED_SHA256<span class="w"> </span>--binary-version<span class="w"> </span>chatarch-v0.2.1+40_LOWERCASE_HEX<span class="w"> </span>--apply<span class="w"> </span>--restart
 chatglance<span class="w"> </span>runtime<span class="w"> </span>rollback<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--backup<span class="w"> </span>BACKUP_ID
 chatglance<span class="w"> </span>runtime<span class="w"> </span>rollback<span class="w"> </span>--runtime-home<span class="w"> </span><span class="s2">"</span><span class="nv">$CHATARCH_HOME</span><span class="s2">/glance"</span><span class="w"> </span>--backup<span class="w"> </span>BACKUP_ID<span class="w"> </span>--apply
 </code></pre></div>
