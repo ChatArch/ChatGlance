@@ -945,6 +945,22 @@ def _getdevices_table(rows_data: list[dict[str, str]]) -> str:
     return "<table><thead><tr><th>硬盘设备</th><th>类型</th><th>容量</th><th>使用时间</th><th>逻辑卷</th><th>挂载目录</th></tr></thead><tbody>" + body + "</tbody></table>"
 
 
+def _history_time(label: str, value: Any) -> str:
+    raw = str(value or "").strip()
+    escaped = html.escape(raw or "—", quote=True)
+    try:
+        parsed = datetime.fromisoformat(raw[:-1] + "+00:00" if raw.endswith("Z") else raw)
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError
+        offset = parsed.strftime("%z")
+        zone = f"UTC{offset[:3]}:{offset[3:]}"
+        readable = html.escape(f"{parsed.strftime('%Y-%m-%d %H:%M:%S')} {zone}", quote=True)
+        timestamp = f'<time datetime="{escaped}" title="{escaped}">{readable}</time>'
+    except ValueError:
+        timestamp = f'<span title="{escaped}">{escaped}</span>'
+    return f'<span class="server-history-time"><span>{html.escape(label)}：</span>{timestamp}</span>'
+
+
 def _server_card(server: dict[str, Any], index: int = 0) -> str:
     cpu = cast(dict[str, Any], server.get("cpu")) if isinstance(server.get("cpu"), dict) else {}
     memory = cast(dict[str, Any], server.get("memory")) if isinstance(server.get("memory"), dict) else {}
@@ -955,6 +971,18 @@ def _server_card(server: dict[str, Any], index: int = 0) -> str:
     primary_disk = next((disk for disk in disks if disk.get("mountpoint") == "/"), disks[0] if disks else {})
     error_html = f'<div class="server-error">{html_text(server.get("error"))}</div>' if server.get("error") else ""
     note_html = f'<div class="server-note">备注：{html_text(server.get("note"))}</div>' if server.get("note") else ""
+    data_state = text_value(server.get("data_state"), "fresh" if server.get("status") == "online" else "unavailable")
+    attempt = server.get("last_attempt_at") or server.get("collected_at")
+    observed = server.get("last_observed_at") or server.get("last_success_at") or (server.get("collected_at") if server.get("status") == "online" else None)
+    if data_state == "last-good":
+        freshness = (f'<div class="server-freshness stale"><span class="server-history-badge">历史数据</span>'
+                     f'{_history_time("最后成功", observed)}{_history_time("本次尝试", attempt)}</div>')
+    elif data_state == "unavailable":
+        freshness = (f'<div class="server-freshness unavailable"><span class="server-history-badge">无历史数据</span>'
+                     f'{_history_time("本次尝试", attempt)}</div>')
+    else:
+        freshness = (f'<div class="server-freshness fresh">{_history_time("本次观测", observed)}'
+                     f'{_history_time("本次尝试", attempt)}</div>')
     alias = str(server.get("alias") or "")
     popover_id = f"server-note-{index}"
     title = html_text(server.get('display_name') or alias)
@@ -970,11 +998,12 @@ def _server_card(server: dict[str, Any], index: int = 0) -> str:
   <div class="server-card-head">
     <div>
       {note_control}
-      <div class="server-subtitle">{html_text(server.get('alias'))} · {html_text(server.get('connection_kind'))} · {html_text(server.get('collected_at'))}</div>
+      <div class="server-subtitle">{html_text(server.get('alias'))} · {html_text(server.get('connection_kind'))}</div>
     </div>
     <span class="server-pill">{html_text(_status_label(text_value(server.get('status'), 'unknown')))}</span>
   </div>
   {error_html}
+  {freshness}
   {note_html}
   <div class="metric-grid">
     <div><span>IP</span><strong>{html_text(server.get('ip'))}</strong></div>
@@ -1020,6 +1049,11 @@ button.server-title:hover, button.server-title:focus-visible {{ color: var(--col
 .status-online .server-pill {{ color: var(--color-positive); }}
 .status-unreachable .server-pill, .status-error .server-pill {{ color: var(--color-negative); }}
 .server-error {{ color: var(--color-negative); margin-bottom: 0.55rem; }}
+.server-freshness {{ color: var(--color-text-subdue); font-size: max(12px, 0.9rem); margin-bottom: 0.55rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.65rem; }}
+.server-history-badge {{ font-weight: 700; white-space: nowrap; }}
+.server-history-time {{ display: inline-flex; flex-wrap: wrap; gap: 0.2rem; }}
+.server-freshness.stale .server-history-badge {{ color: var(--color-warning, #d5a647); }}
+.server-freshness.unavailable .server-history-badge {{ color: var(--color-negative); }}
 .server-note {{ white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 0.55rem; }}
 .metric-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 0.55rem; }}
 .metric-grid div {{ border: 1px solid var(--color-separator); border-radius: 10px; padding: 0.5rem; min-width: 0; }}

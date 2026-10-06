@@ -15,6 +15,7 @@ inventory:
   default_candidates: false
   hosts:
     - alias: "infra-primary"
+      server_id: "datacenter-primary-01"
       hostname: "192.0.2.10"
       port: 22
       user: "service-user"
@@ -26,7 +27,13 @@ collection:
   workers: 4
 ```
 
-`alias` selects existing SSH configuration and keys. Optional `hostname`, `port`, `user` and `strict_host_key_checking` override only the selected connection. Review membership explicitly; do not include every historical SSH alias automatically. The template `examples/server-inventory.example.yml` documents the same structure.
+`alias` selects existing SSH configuration and keys. `server_id` is optional;
+when absent, last-good derives a stable SHA-256 ID from alias plus the reviewed
+`hostname`, `port`, and `user` connection fence (explicit values override the
+SSH selection). An explicit ID remains fenced by all connection fields. Review
+membership explicitly; do not include every historical SSH alias automatically.
+An unresolvable identity is collected without last-good reuse. The template
+`examples/server-inventory.example.yml` documents the same structure.
 
 ## Refresh through the installed CLI
 
@@ -39,7 +46,14 @@ chatglance refresh servers \
 
 The command shares the runtime lock, collects a candidate snapshot, renders the page, validates the complete candidate with the configured Glance binary, backs up replaced artifacts and publishes transactionally. It restarts the configured Glance service at most once if content changed. Use `--no-restart` when a supervisor owns the separate apply step.
 
-Manual refresh protects previously online servers from unexpected offline regression. Use `--allow-offline-regression` after reviewing an intentional offline transition. Explicit `--scheduled` mode publishes reviewed live outages by default, preserving the existing scheduled behavior; a removed inventory member is a membership change, not an outage.
+Manual and scheduled refreshes publish the truthful current offline status by
+default. If the identity fence matches, the same native card retains the last
+successful CPU, memory, GPU, disk/device and system facts, labels them as
+historical, and shows both last success and this attempt. A new or changed
+identity says that no historical data is available. Use
+`--no-allow-offline-regression` only when an operator intentionally wants the
+legacy gate that keeps the whole prior server artifact. A removed inventory
+member is a membership change and is not re-added from cache.
 
 ## Scheduled execution
 
@@ -55,7 +69,13 @@ Preserve the established timer cadence. For a complete site use `chatglance refr
 
 ## Runtime artifacts and acceptance
 
-Runtime files include `data/server-status.json`, the rendered page YAML, `config/glance.yml`, staging candidates and backups. They are data, not another implementation of the refresh pipeline. Credentials and private deployment values stay outside the repository.
+Runtime files include `data/server-status.json`, the rendered page YAML,
+`private/server-last-good.json`, `private/refresh-history/`,
+`config/glance.yml`, staging candidates and backups. They are data, not another
+implementation of the refresh pipeline. Credentials and private deployment
+values stay outside the repository. The complete identity, legacy-bootstrap,
+timestamp, journal and rotation schemas are in
+[Refresh history and server last-good state](refresh-history.md).
 
 Verify the CLI exit status and each page's result, not only systemd `active` or exit zero from an older wrapper. Re-read snapshot timestamps, changed/partial status and the real authenticated page. A failed page retains prior display values and must not be described as freshly collected.
 

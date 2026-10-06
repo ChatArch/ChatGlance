@@ -34,6 +34,10 @@ chatglance
 │   ├── adopt [--runtime-home RUNTIME-HOME] [--public-origin PUBLIC-ORIGIN] [--control-port CONTROL-PORT] [--replace-provider] [--apply]  # Import existing login accounts into typed ChatEnv without losing pages.
 │   ├── check [--runtime-home RUNTIME-HOME] [--live]  # Validate Go config and report installed-code, binary and owned-file evidence.
 │   ├── controls [--runtime-home RUNTIME-HOME]  # Run explicitly provisioned authenticated loopback controls.
+│   ├── history  # Inspect and prune package-owned refresh run history.
+│   │   ├── list [--runtime-home RUNTIME-HOME] [--limit LIMIT]  # List newest refresh runs without changing journal state.
+│   │   ├── prune [--runtime-home RUNTIME-HOME] [--retention-days RETENTION-DAYS] [--max-bytes MAX-BYTES] [--apply]  # Preview age/size pruning, or apply it explicitly.
+│   │   └── show <RUN-ID> [--runtime-home RUNTIME-HOME]  # Show one refresh run by its path-safe run ID, read-only.
 │   ├── import-env [--runtime-home RUNTIME-HOME] [--file SOURCE] [--replace-provider] [--retire] [--apply]  # Import supported literal legacy settings into typed ChatEnv.
 │   ├── init [--runtime-home RUNTIME-HOME] [--with-auth]  # Create a loopback runtime, empty snapshots and non-secret examples.
 │   ├── install [--runtime-home RUNTIME-HOME] [--unit-dir UNIT-DIR] [--python-bin PYTHON-BIN] [--page PAGES] [--interval INTERVAL] [--scheduled] [--controls] [--maintenance] [--web-unit WEB-UNIT] [--refresh-unit REFRESH-UNIT] [--refresh-timer REFRESH-TIMER] [--controls-unit CONTROLS-UNIT] [--maintenance-unit MAINTENANCE-UNIT] [--maintenance-timer MAINTENANCE-TIMER] [--adopt-units] [--retire-dropins] [--apply] [--enable] [--start]  # Plan or atomically install the managed user-service bundle.
@@ -97,6 +101,10 @@ chatglance
 │   ├── adopt  # Import existing login accounts into typed ChatEnv without losing pages.
 │   ├── check  # Validate Go config and report installed-code, binary and owned-file evidence.
 │   ├── controls  # Run explicitly provisioned authenticated loopback controls.
+│   ├── history  # Inspect and prune package-owned refresh run history.
+│   │   ├── list  # List newest refresh runs without changing journal state.
+│   │   ├── prune  # Preview age/size pruning, or apply it explicitly.
+│   │   └── show  # Show one refresh run by its path-safe run ID, read-only.
 │   ├── import-env  # Import supported literal legacy settings into typed ChatEnv.
 │   ├── init  # Create a loopback runtime, empty snapshots and non-secret examples.
 │   ├── install  # Plan or atomically install the managed user-service bundle.

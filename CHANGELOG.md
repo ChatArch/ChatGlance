@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-10-06
+
+- Keep truthful current offline server status while retaining identity-fenced last-good CPU, memory, GPU, disk/device and system facts in the existing native cards, with optional explicit or deterministically derived server IDs, readable separate attempt/success timestamps, and manifest-confirmed bounded legacy bootstrap.
+- Journal manual, scheduled and browser refreshes under one allowlisted `run_id` schema, including busy, partial, validation, publication, restart and evidence-based interrupted outcomes without raw exception/config/account data.
+- Add typed 30-day/256-MiB history limits plus importable list/show/prune APIs and `runtime history` CLI; pruning previews by default, enforces age and actual aggregate bytes, and protects latest/active/future/last-good/current-rollback runs.
+
 ## 0.2.2 - 2026-10-06
 
 - Requires the maintained Go Glance `chatarch-v0.2.1` or newer for native overview header controls.

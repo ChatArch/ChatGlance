@@ -12,6 +12,17 @@ chatglance refresh --json-output --no-restart
 
 `refresh` 只对已有 Glance 配置中的受管页面采集并发布快照，按页返回成功/部分失败。候选先用指定 Glance binary 的 `config:validate` 校验，再备份并替换；失败页保留旧文件，运行中使用共享非阻塞锁。`--no-restart` 保留运行进程不变。上例只是**示意**：缺 runtime、凭据或校验程序时命令会失败，绝不自动构建环境。
 
+每次原生、计划或浏览器刷新都有同一个 `run_id`，安全流水位于 runtime
+的 `private/refresh-history`。用 `chatglance runtime history list` / `show
+RUN_ID` 只读检查；`history prune` 默认预览，只有 `--apply` 才删除确认归属
+且未受保护的记录。typed 默认是 30 天和 256 MiB，流水不包含异常原文、
+Token/Cookie、配置或整份账号快照。
+
+服务器当前状态与最后成功观测分离：离线仍标离线；`server_id` 可显式
+指定，缺省时从 alias 与受审 target/user/port 派生，身份完全一致时原卡片保留并标记历史 CPU/内存/GPU/
+磁盘/系统字段，同时显示最后成功和本次尝试；新机或身份变化明确显示无
+历史。last-good 与可见快照参加同一校验/发布事务，用户备注仅在渲染时覆盖。
+
 无 `--scheduled` 的手动调用不兑换重置卡；订阅页面只是展示当前快照。定时刷新应仍在既有调度链中显式使用 `--scheduled` 和逐账号策略，不能通过阅读按钮状态代替授权。刷新项目若识别到同址可选登录模式，访客列会重新从 Public allowlist 生成，认证列保留全量视图；不匹配布局会拒绝而非覆写私有行。
 
 ## 手动检查并用卡

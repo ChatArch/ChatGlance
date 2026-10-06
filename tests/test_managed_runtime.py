@@ -176,7 +176,7 @@ def test_owned_units_preserve_schedule_and_native_refresh_contract(tmp_path, mon
     monkeypatch.setattr(refresh, "refresh_runtime", lambda *args, **kwargs: calls.append((args, kwargs)) or {"ok": True})
     managed.refresh_managed(root)
     assert calls[0][0][1] == ["servers", "account-limits", "projects"]
-    assert calls[0][1] == {"service_name": "chatarch-glance.service", "scheduled": True}
+    assert calls[0][1] == {"service_name": "chatarch-glance.service", "scheduled": True, "source": "scheduled"}
     assert commands == [("daemon-reload",), ("daemon-reload",)]
 
 

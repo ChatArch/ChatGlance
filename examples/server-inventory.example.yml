@@ -24,6 +24,17 @@ inventory:
 
   # Add reviewed SSH aliases/optional overrides only in your private runtime
   # inventory. Examples are deliberately empty to prevent accidental probing.
+  # Each host that may reuse last-good data needs a reviewed connection identity
+  # (`hostname`, `port`, `user`). `server_id` is optional; when omitted it is
+  # derived from alias plus that identity. An explicit stable ID may be used, e.g.:
+  # - alias: "infra-primary"
+  #   server_id: "datacenter-primary-01"
+  #   hostname: "192.0.2.10"
+  #   port: 22
+  #   user: "service-user"
+  # For an explicitly reviewed DNS legacy migration only, the same host may
+  # include `legacy_identities: [{approved: true, ip: "192.0.2.10", port: 22,
+  # user: "service-user"}]`. Alias-only legacy matching is never performed.
   hosts: []
 
 collection:

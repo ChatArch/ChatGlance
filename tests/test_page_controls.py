@@ -98,7 +98,8 @@ def test_note_save_publishes_existing_snapshot_without_collection(tmp_path, monk
     (root / "bin/glance").write_text("synthetic")
     config = root / "config/glance.yml"
     config.write_text(yaml.safe_dump({"pages": [build_servers_page({"servers": []})]}))
-    data = {"generated_at": "old-observation", "count": 1, "servers": [{"alias": "fixture-host", "status": "online"}]}
+    observed = "2026-10-05T08:00:00+00:00"
+    data = {"generated_at": observed, "count": 1, "servers": [{"alias": "fixture-host", "status": "online"}]}
     (root / "data/server-status.json").write_text(json.dumps(data))
     restarts = []
     monkeypatch.setattr('chatglance.runtime.validate_glance_config', lambda *args: None)
@@ -107,14 +108,17 @@ def test_note_save_publishes_existing_snapshot_without_collection(tmp_path, monk
     assert restarts == ["chatarch-glance.service"]
     assert json.loads((root / "data/server-status.json").read_text()) == data
     published = (root / "data/server-page.yml").read_text()
-    assert "old-observation" in published and "Operator &lt;note&gt;" in published
+    assert observed in published and "Operator &lt;note&gt;" in published
     assert "Operator <note>" not in published
 
     monkeypatch.setattr(servers, "collect_server_status", lambda *args, **kwargs: data)
+    monkeypatch.setattr(servers, "ssh_target", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("synthetic unresolved alias")))
     update = refresh._collect_page("servers", root, tmp_path, profiles=None, actual_cli_tree=False,
                                    allow_offline_regression=False, scheduled=False, collection=refresh.CollectionOptions())
     assert "Operator &lt;note&gt;" in str(update.page)
-    assert update.data == data
+    assert data["servers"][0] == {"alias": "fixture-host", "status": "online"}
+    assert update.data["servers"][0]["data_state"] == "fresh"
+    assert update.data["servers"][0]["last_attempt_at"] == observed
 
 
 def test_note_validation_failure_does_not_save_note(tmp_path, monkeypatch):
@@ -237,7 +241,8 @@ def test_page_refresh_is_explicit_and_single_flight(tmp_path, monkeypatch):
         app.start({"page": "projects", "action": "refresh", "csrf": app.token(cookie)}, cookie, "https://evil.invalid")
     try:
         values = {"page": "projects", "action": "refresh", "csrf": app.token(cookie)}
-        assert app.start(values, cookie, "https://example.invalid")["state"] == "running"
+        accepted = app.start(values, cookie, "https://example.invalid")
+        assert accepted["state"] == "running" and accepted["run_id"]
         assert started.wait(2)
         assert app.status("projects")["state"] == "running"
         assert app.start({**values, "csrf": app.token(cookie)}, cookie, "https://example.invalid")["state"] == "busy"
@@ -248,7 +253,10 @@ def test_page_refresh_is_explicit_and_single_flight(tmp_path, monkeypatch):
             threading.Event().wait(.01)
         assert app.status("projects")["state"] == "success"
         assert app.status("projects")["observed_at"] == "observed"
-        assert calls == [{"pages": ["projects"], "scheduled": False, "actual_cli_tree": False, "runtime_home": runtime}]
+        assert app.status("projects")["run_id"] == accepted["run_id"]
+        assert calls == [{"pages": ["projects"], "scheduled": False, "actual_cli_tree": False,
+                          "runtime_home": runtime, "source": "browser", "run_id": accepted["run_id"],
+                          "allow_offline_regression": None}]
     finally:
         release.set()
 
@@ -262,8 +270,10 @@ def test_scheduler_lock_reports_busy_without_queuing(tmp_path, monkeypatch):
     with refresh._refresh_lock(root):
         result = app.start({"page": "servers", "action": "refresh", "csrf": app.token("cookie")},
                            "cookie", "https://example.invalid")
-    assert result == {"state": "busy"}
-    assert not calls and app.status("servers")["state"] == "busy"
+    assert result["state"] == "busy" and result["run_id"]
+    assert not calls and app.status("servers") == {
+        "state": "busy", "run_id": result["run_id"], "finished_at": app.status("servers")["finished_at"]
+    }
 
 
 @pytest.mark.parametrize("kind,terminal", [("refresh", "success"), ("refresh", "partial"),

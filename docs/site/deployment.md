@@ -3,7 +3,7 @@
 ## 五层边界与兼容性
 
 1. Git 跟踪的源码负责公共模板、Python API 与文档。
-2. 安装的 **ChatGlance 0.2.2 wheel** 负责全部业务逻辑；服务入口不依赖 checkout。
+2. 安装的 **ChatGlance 0.3.0 wheel** 负责全部业务逻辑；服务入口不依赖 checkout。
 3. 单独维护的 **ChatArch/glance chatarch-v0.2.1** 负责网页、登录和会话；不需要新 Go 特性时兼容维护版 0.1.0。未修改上游不能作为登录后端的直接替代品。
 4. 标准 typed ChatEnv 保存敏感配置，home 下 `glance/` 保存私有运行配置、清单、快照与已校验二进制。
 5. 可选 Linux user-systemd 单元是薄入口；nginx 由操作者单独管理。
@@ -58,7 +58,7 @@ chatglance runtime start --runtime-home "$CHATARCH_HOME/glance" --apply
 
 摘要和版本占位符必须替换为**实际观察并审查的发行产物信息**。不猜测校验文件，不下载 unchecked latest。tar 中只允许一个普通 `glance` 文件；明确授权的 SHA256 允许执行有超时的 staged `--version`，要求精确的维护版标识 `chatarch-vMAJOR.MINOR.PATCH+40hex`。来源 JSON 记录实际 tag/source revision 和 archive/binary 摘要。
 
-用 `chatenv set -i` 交互保存 `CHATGLANCE_LOGIN_USER`、`CHATGLANCE_LOGIN_SECRET`（严格标准 base64，解码**恰好 64 字节**）及完整 bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH`，不在 argv 保存密码/密钥。`chatenv list`、`chatenv use -t chatglance PROFILE` 管理标准 profile。**托管登录忽略继承的进程 `CHATGLANCE_LOGIN_*` 与索引 `CHATGLANCE_AUTH_*`**，启动/验证/控制服务只以选定 active EnvStore profile 为准。非认证的 owner、页面、cadence、端口、公网 origin 等配置仍允许进程环境优先；显式 CLI 参数覆盖默认。CRS consumerKey/OAuth/token 仍由原 provider 管理；GitHub 等使用共享 Token resolver，不新建密钥库。
+用 `chatenv set -i` 交互保存 `CHATGLANCE_LOGIN_USER`、`CHATGLANCE_LOGIN_SECRET`（严格标准 base64，解码**恰好 64 字节**）及完整 bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH`，不在 argv 保存密码/密钥。`chatenv list`、`chatenv use -t chatglance PROFILE` 管理标准 profile。**托管登录忽略继承的进程 `CHATGLANCE_LOGIN_*` 与索引 `CHATGLANCE_AUTH_*`**，启动/验证/控制服务只以选定 active EnvStore profile 为准。非认证的 owner、页面、cadence、端口、公网 origin 等配置仍允许进程环境优先；刷新流水使用同一 typed provider/process 优先级的 `CHATGLANCE_REFRESH_HISTORY_RETENTION_DAYS`（默认 30）和 `CHATGLANCE_REFRESH_HISTORY_MAX_BYTES`（默认 268435456），非法值拒绝。显式 CLI 参数覆盖默认。CRS consumerKey/OAuth/token 仍由原 provider 管理；GitHub 等使用共享 Token resolver，不新建密钥库。
 
 没有登录配置时省略 `--with-auth`；已有无认证配置不能被 init 悄悄升级。默认仅回环监听、空清单无网络调用；先审查并添加需要的页面。机器排除策略只写私有 runtime `server-inventory.yml` 的 `inventory.exclude` / `inventory.excludes`；源码仅排除通用 `local` / `localhost`。`default_candidates: false` 保持关闭。
 
