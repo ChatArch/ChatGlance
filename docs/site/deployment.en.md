@@ -3,7 +3,7 @@
 ## Five layers and compatibility
 
 1. Git-tracked source owns public templates, Python APIs and documentation.
-2. The installed **ChatGlance 0.2.2** wheel owns all executable business logic. No unit points at a checkout.
+2. The installed **ChatGlance 0.3.0** wheel owns all executable business logic. No unit points at a checkout.
 3. A separately maintained **ChatArch/glance chatarch-v0.2.1** binary owns web/login/session handling. The maintained 0.1.0 fork is compatible when no new Go feature is needed; unmodified upstream is not an interchangeable login backend.
 4. Typed ChatEnv owns credentials; its `glance/` runtime owns private configuration, inventories, generated snapshots and verified binaries.
 5. Optional Linux user-systemd units are thin installed-package entrypoints; nginx is separately operator-managed.
