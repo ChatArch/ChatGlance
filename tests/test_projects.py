@@ -261,7 +261,7 @@ def test_project_overview_shows_inventory_refresh_time():
     page = build_projects_page(sample_inventory())
     rendered = yaml.safe_dump(page, allow_unicode=True, sort_keys=False)
 
-    assert "刷新时间" in rendered
+    assert "数据观测时间" in rendered
     assert "2026-08-11T17:30:00+08:00" in rendered
 
 

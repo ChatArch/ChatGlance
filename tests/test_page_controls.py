@@ -271,9 +271,11 @@ def test_scheduler_lock_reports_busy_without_queuing(tmp_path, monkeypatch):
         result = app.start({"page": "servers", "action": "refresh", "csrf": app.token("cookie")},
                            "cookie", "https://example.invalid")
     assert result["state"] == "busy" and result["run_id"]
-    assert not calls and app.status("servers") == {
-        "state": "busy", "run_id": result["run_id"], "finished_at": app.status("servers")["finished_at"]
+    status = app.status("servers")
+    assert not calls and {key: status[key] for key in ("state", "run_id", "finished_at")} == {
+        "state": "busy", "run_id": result["run_id"], "finished_at": status["finished_at"]
     }
+    assert status["last_success_at"] is None
 
 
 @pytest.mark.parametrize("kind,terminal", [("refresh", "success"), ("refresh", "partial"),
@@ -286,15 +288,15 @@ def test_control_script_updates_status_and_refreshes_owner(tmp_path, kind, termi
 const vm = require('node:vm');
 const events = [];
 const buttons = {};
-const status = {set textContent(value) { events.push(value); }};
+const status = {dataset: {}, setAttribute() {}, set textContent(value) { events.push(value); }};
 const refreshButton = {disabled: false, getAttribute() { return '项目手动刷新：空闲'; },
   setAttribute(_name, value) { events.push(value); },
   addEventListener(_name, callback) { buttons['refresh-button'] = callback; }};
-const form = {action: '/pages/' + KIND, values: KIND === 'refresh'
+const form = {dataset: {state: 'idle',runId:'',lastSuccessAt:'',lastObservedAt:''}, action: '/pages/' + KIND, values: KIND === 'refresh'
   ? {page: 'projects', csrf: 'synthetic'}
   : {alias: 'fixture-host', note: 'saved', csrf: 'synthetic'}};
 const document = {getElementById(id) {
-  if (id === 'refresh-button') return refreshButton;
+  if (id === 'refresh-button') return KIND === 'refresh' ? refreshButton : null;
   if (id === 'note-button') return {
     addEventListener(_name, callback) { buttons[id] = callback; }, disabled: false
   };
@@ -307,11 +309,11 @@ const location = {origin: 'https://example.invalid', href: 'https://example.inva
 const parent = {location: {href: 'https://example.invalid/' + (KIND === 'note' ? 'servers' : 'projects'),
   reload() { events.push('parent-reload'); }}};
 const fetch = async url => ({ok: true, json: async () =>
-  String(url).includes('status') ? {state: TERMINAL, observed_at: '2026-10-04T11:00:00Z'}
-  : {state: KIND === 'note' ? 'saved' : TERMINAL === 'immediate-busy' ? 'busy' : 'running'}});
+  String(url).includes('status') ? {state: TERMINAL, run_id:'this-run', observed_at: '2026-10-04T11:00:00Z'}
+  : {run_id:'this-run',state: KIND === 'note' ? 'saved' : TERMINAL === 'immediate-busy' ? 'busy' : 'running'}});
 class FormData { constructor() { return Object.entries(form.values); } }
 vm.runInNewContext(SOURCE, {document, location, window: {parent}, parent, fetch,
-  FormData, URL, URLSearchParams,
+  FormData, URL, URLSearchParams, AbortController, clearTimeout:()=>{},
   setTimeout: callback => Promise.resolve().then(callback)});
 buttons[KIND === 'note' ? 'note-button' : 'refresh-button']();
 setTimeout(() => console.log(JSON.stringify(events)), 50);
@@ -323,7 +325,7 @@ setTimeout(() => console.log(JSON.stringify(events)), 50);
     assert result.returncode == 0, result.stderr
     events = json.loads(result.stdout)
     if kind == "refresh":
-        assert events[0].startswith("正在刷新"), events
+        assert any(value.startswith("正在刷新") for value in events), events
         if terminal in {"error", "busy", "immediate-busy"}:
             assert any(("刷新失败" if terminal == "error" else "已有刷新任务") in value for value in events)
         else:

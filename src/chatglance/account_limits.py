@@ -757,7 +757,9 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 .account-limits-resource-layout .codex-reset-day {{ min-height:24px; }}
 .account-limits-resource-layout .codex-reset-day.is-today .day-number {{ inline-size:22px; block-size:22px; }}
 
-.limit-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); }}
+.limit-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); display:flex;align-items:center;gap:8px;flex-wrap:wrap; }}
+.limit-summary > span:first-child {{ flex:1;min-width:220px; }}
+.limit-summary iframe {{ width:28px;height:28px;border:0;background:transparent;flex:0 0 28px; }}
 .limit-muted {{ color: var(--color-text-subdue); font-size: 0.76rem; margin-top: 0.18rem; }}
 .limit-status-banner {{ display: flex; flex-direction: column; gap: 0.25rem; border: 1px solid var(--color-separator); border-radius: 14px; padding: 0.62rem 0.75rem; margin-bottom: 0.8rem; background: color-mix(in srgb, var(--color-negative) 9%, var(--color-widget-background)); }}
 .limit-status-banner strong {{ font-size: 0.86rem; }}
@@ -795,7 +797,7 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
 .limit-progress span {{ display: block; height: 100%; border-radius: inherit; background: var(--color-primary); }}
 @media (max-width: 720px) {{ .account-limits-resource-layout {{ grid-template-columns: 1fr; }} }}
 </style>
-<div class="limit-summary">订阅详情 · 最新整理：{html_text(normalized.get('generated_at'))} · Codex 账号 {counts['codex_profiles']} 个</div>
+<div class="limit-summary"><span>订阅详情 · 数据观测：{html_text(normalized.get('generated_at'))} · Codex 账号 {counts['codex_profiles']} 个</span><iframe title="订阅详情手动刷新" loading="lazy" src="/_chatglance/reset-policy/pages/?page=account-limits&amp;view=icon"></iframe></div>
 {status_banner}
 <div class="account-limits-resource-layout">
   <section class="codex-reset-panel"><h2>Codex 官方重置日历</h2><p class="limit-muted">{reset_intro}</p>{reset_calendar}</section>
