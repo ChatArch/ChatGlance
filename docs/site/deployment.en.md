@@ -3,10 +3,12 @@
 ## Five layers and compatibility
 
 1. Git-tracked source owns public templates, Python APIs and documentation.
-2. The installed **ChatGlance 0.2.0** wheel owns all executable business logic. No unit points at a checkout.
-3. A separately maintained **ChatArch/glance chatarch-v0.2.0** binary owns web/login/session handling. The maintained 0.1.0 fork is compatible when no new Go feature is needed; unmodified upstream is not an interchangeable login backend.
+2. The installed **ChatGlance 0.2.2** wheel owns all executable business logic. No unit points at a checkout.
+3. A separately maintained **ChatArch/glance chatarch-v0.2.1** binary owns web/login/session handling. The maintained 0.1.0 fork is compatible when no new Go feature is needed; unmodified upstream is not an interchangeable login backend.
 4. Typed ChatEnv owns credentials; its `glance/` runtime owns private configuration, inventories, generated snapshots and verified binaries.
 5. Optional Linux user-systemd units are thin installed-package entrypoints; nginx is separately operator-managed.
+
+The native project overview refresh icon requires `header-controls-url` support from the maintained Go `chatarch-v0.2.1` or newer. Older binaries cannot display this entry. Python and Go versions are independent: deploy the verified Go binary before regenerating pages.
 
 Supported managed deployment: Linux/POSIX, user systemd, an isolated installed Python environment and a reviewed maintained Go binary for the machine's architecture. Rendering/init can be used without systemd. No automatic release, production migration, service activation, SSH discovery or account redemption occurs on installation. This guide describes operator-authorized actions, not a completed production cutover.
 
@@ -51,7 +53,7 @@ chatenv init -t chatglance -i
 chatenv set -i
 chatglance runtime paths
 chatglance runtime init --with-auth
-chatglance runtime install-binary --archive reviewed.tar.gz --sha256 EXPECTED_SHA256 --binary-version chatarch-v0.2.0+40_LOWERCASE_HEX
+chatglance runtime install-binary --archive reviewed.tar.gz --sha256 EXPECTED_SHA256 --binary-version chatarch-v0.2.1+40_LOWERCASE_HEX
 chatglance runtime install --page projects --interval 30min
 chatglance runtime install --page projects --interval 30min --apply
 chatglance runtime check
@@ -105,8 +107,8 @@ The foreground `controls` command intentionally runs the authenticated server. M
 chatglance runtime check --runtime-home "$CHATARCH_HOME/glance" --live
 chatglance runtime restart --runtime-home "$CHATARCH_HOME/glance"
 chatglance runtime stop --runtime-home "$CHATARCH_HOME/glance" --apply
-chatglance runtime update --runtime-home "$CHATARCH_HOME/glance" --archive reviewed-next.tar.gz --sha256 EXPECTED_SHA256 --binary-version chatarch-v0.2.0+40_LOWERCASE_HEX
-chatglance runtime update --runtime-home "$CHATARCH_HOME/glance" --archive reviewed-next.tar.gz --sha256 EXPECTED_SHA256 --binary-version chatarch-v0.2.0+40_LOWERCASE_HEX --apply --restart
+chatglance runtime update --runtime-home "$CHATARCH_HOME/glance" --archive reviewed-next.tar.gz --sha256 EXPECTED_SHA256 --binary-version chatarch-v0.2.1+40_LOWERCASE_HEX
+chatglance runtime update --runtime-home "$CHATARCH_HOME/glance" --archive reviewed-next.tar.gz --sha256 EXPECTED_SHA256 --binary-version chatarch-v0.2.1+40_LOWERCASE_HEX --apply --restart
 chatglance runtime rollback --runtime-home "$CHATARCH_HOME/glance" --backup BACKUP_ID
 chatglance runtime rollback --runtime-home "$CHATARCH_HOME/glance" --backup BACKUP_ID --apply
 ```

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.2 - 2026-10-06
+
+- Requires the maintained Go Glance `chatarch-v0.2.1` or newer for native overview header controls.
+
 - Integrate private project/server refresh as one compact icon in the existing overview/header row; edit server notes from each card's name instead of separate control widgets. Public project controls remain absent.
 
 ## 0.2.1 - 2026-10-06

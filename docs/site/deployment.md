@@ -3,10 +3,12 @@
 ## 五层边界与兼容性
 
 1. Git 跟踪的源码负责公共模板、Python API 与文档。
-2. 安装的 **ChatGlance 0.2.0 wheel** 负责全部业务逻辑；服务入口不依赖 checkout。
-3. 单独维护的 **ChatArch/glance chatarch-v0.2.0** 负责网页、登录和会话；不需要新 Go 特性时兼容维护版 0.1.0。未修改上游不能作为登录后端的直接替代品。
+2. 安装的 **ChatGlance 0.2.2 wheel** 负责全部业务逻辑；服务入口不依赖 checkout。
+3. 单独维护的 **ChatArch/glance chatarch-v0.2.1** 负责网页、登录和会话；不需要新 Go 特性时兼容维护版 0.1.0。未修改上游不能作为登录后端的直接替代品。
 4. 标准 typed ChatEnv 保存敏感配置，home 下 `glance/` 保存私有运行配置、清单、快照与已校验二进制。
 5. 可选 Linux user-systemd 单元是薄入口；nginx 由操作者单独管理。
+
+项目「概览」旁的原生刷新图标需要维护版 Go `chatarch-v0.2.1` 或更新版本的 `header-controls-url` 支持；旧二进制不能显示这个入口。Python 与 Go 版本独立，升级时先部署已校验的新 Go 二进制，再重渲染页面。
 
 管理部署支持 Linux/POSIX、user systemd、隔离的 Python 安装环境与适合目标架构的维护版 Go 二进制。init/渲染可以不使用 systemd。安装不自动发布、迁移生产、启动服务、发现 SSH 主机或消费重置卡。本指南不是已完成生产切换的声明。
 
@@ -46,7 +48,7 @@ chatenv init -t chatglance -i
 chatenv set -i
 chatglance runtime paths
 chatglance runtime init --with-auth
-chatglance runtime install-binary --archive reviewed.tar.gz --sha256 EXPECTED_SHA256 --binary-version chatarch-v0.2.0+40_LOWERCASE_HEX
+chatglance runtime install-binary --archive reviewed.tar.gz --sha256 EXPECTED_SHA256 --binary-version chatarch-v0.2.1+40_LOWERCASE_HEX
 chatglance runtime install --page projects --interval 30min
 chatglance runtime install --page projects --interval 30min --apply
 chatglance runtime check
@@ -89,7 +91,7 @@ adopt 保留**完全相同签名 key 和所有 bcrypt hash**，因此既有登�
 chatglance runtime check --runtime-home "$CHATARCH_HOME/glance" --live
 chatglance runtime restart --runtime-home "$CHATARCH_HOME/glance"
 chatglance runtime stop --runtime-home "$CHATARCH_HOME/glance" --apply
-chatglance runtime update --runtime-home "$CHATARCH_HOME/glance" --archive reviewed-next.tar.gz --sha256 EXPECTED_SHA256 --binary-version chatarch-v0.2.0+40_LOWERCASE_HEX --apply --restart
+chatglance runtime update --runtime-home "$CHATARCH_HOME/glance" --archive reviewed-next.tar.gz --sha256 EXPECTED_SHA256 --binary-version chatarch-v0.2.1+40_LOWERCASE_HEX --apply --restart
 chatglance runtime rollback --runtime-home "$CHATARCH_HOME/glance" --backup BACKUP_ID
 chatglance runtime rollback --runtime-home "$CHATARCH_HOME/glance" --backup BACKUP_ID --apply
 ```
