@@ -173,7 +173,7 @@ class PageControlApp:
         self.public_origin = public_origin
         self.lock = threading.RLock()
         self.tokens = {}
-        self.jobs = {key: {"state": "idle"} for key in ("projects", "servers")}
+        self.jobs = {key: {"state": "idle"} for key in ("projects", "servers", "account-limits")}
         self.active = False
         self.status_path = _private_dir(root) / "page-refresh.json"
         if self.status_path.exists():
@@ -231,11 +231,64 @@ class PageControlApp:
         if not entry or entry[1] <= time.monotonic() or not hmac.compare_digest(entry[0], hashlib.sha256(cookie.encode()).digest()):
             raise PageControlError("操作凭据已失效，请刷新", 403)
 
-    def status(self, page):
+    def status(self, page, run_id=None):
+        """Read truthful per-page progress and completed/observed clocks."""
         if page not in self.jobs:
             raise PageControlError("页面不存在", 404)
+        from .refresh_history import list_refresh_runs, show_refresh_run
         with self.lock:
-            return dict(self.jobs[page])
+            current = dict(self.jobs[page])
+        try:
+            records = list_refresh_runs(self.root, limit=100)
+        except (OSError, ValueError):
+            records = []
+
+        def belongs(record):
+            return page in (record.get("requested_pages") or []) or any(
+                row.get("page") == page for row in record.get("pages", []))
+
+        def moment(record):
+            value = record.get("finished_at") or record.get("started_at")
+            try:
+                parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                return parsed.timestamp() if parsed.tzinfo else 0
+            except (ValueError, TypeError, OverflowError):
+                return 0
+
+        def state_for(record):
+            state = record.get("effective_status") or record.get("status")
+            row = next((r for r in record.get("pages", []) if r.get("page") == page), {})
+            if state in {"success", "partial"}:
+                return "success" if row.get("status") == "ok" else "partial" if row.get("status") == "partial" else "error"
+            return {"running": "running", "busy": "busy", "failed": "error", "interrupted": "interrupted"}.get(state, "idle")
+
+        relevant = sorted((r for r in records if belongs(r)), key=moment, reverse=True)
+        good = next((r for r in relevant if state_for(r) == "success"), None)
+        clocks = {"last_success_at": good.get("finished_at") if good else None,
+                  "last_observed_at": next((row.get("generated_at") for row in good.get("pages", []) if row.get("page") == page), None) if good else None}
+        selected = None
+        if run_id is not None:
+            try:
+                selected = show_refresh_run(self.root, run_id)
+            except (OSError, ValueError):
+                if current.get("run_id") == run_id:
+                    return {**current, **clocks}
+                raise PageControlError("刷新记录不可用", 404) from None
+            if not belongs(selected):
+                raise PageControlError("刷新记录不属于此页面", 404)
+        else:
+            selected = next((r for r in relevant if state_for(r) == "running"), None)
+            selected = selected or (relevant[0] if relevant else None)
+            if current.get("state") == "running" and (not selected or state_for(selected) != "running"):
+                return {**current, **clocks}
+            if selected and state_for(selected) != "running" and moment(current) > moment(selected):
+                selected = None
+        if selected:
+            row = next((r for r in selected.get("pages", []) if r.get("page") == page), {})
+            current = {"state": state_for(selected), "run_id": selected.get("run_id"),
+                       "source": selected.get("source"), "started_at": selected.get("started_at"),
+                       "finished_at": selected.get("finished_at"), "observed_at": row.get("generated_at")}
+        return {**current, **clocks}
 
     def start(self, values, cookie, origin):
         from .refresh import RefreshError, _refresh_lock
@@ -313,8 +366,11 @@ def render_page(app, page, cookie, alias=None, feedback="", *, view="icon"):
     status = app.status(page)
     state = {"idle": "尚未手动刷新", "running": "正在刷新，请稍候", "success": "刷新成功", "partial": "部分成功", "error": "刷新失败，旧数据仍可用", "busy": "已有定时刷新在运行", "interrupted": "刷新中断，请重试"}.get(status["state"], "状态不可用")
     if view == "icon":
-        label = f'{"项目" if page == "projects" else "服务器"}手动刷新：{feedback or state}'
-        body = (f'<form id="refresh" method="post" action="refresh"><input type="hidden" name="csrf" value="{app.token(cookie)}">'
+        label = f'{ {"projects": "项目", "servers": "服务器", "account-limits": "订阅详情"}[page]}手动刷新：{feedback or state}'
+        body = (f'<form id="refresh" method="post" action="refresh" data-state="{escape(status["state"], quote=True)}" '
+                f'data-run-id="{escape(str(status.get("run_id") or ""), quote=True)}" '
+                f'data-last-success-at="{escape(str(status.get("last_success_at") or ""), quote=True)}" '
+                f'data-last-observed-at="{escape(str(status.get("last_observed_at") or ""), quote=True)}"><input type="hidden" name="csrf" value="{app.token(cookie)}">'
                 f'<input type="hidden" name="page" value="{page}">'
                 f'<button type="button" id="refresh-button" title="{escape(label, quote=True)}" aria-label="{escape(label, quote=True)}" {"disabled" if status["state"] == "running" else ""}>'
                 '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 11a8 8 0 1 0-2.3 6.2M20 4v7h-7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></form>'
@@ -331,7 +387,7 @@ def render_page(app, page, cookie, alias=None, feedback="", *, view="icon"):
         body = (f'<form id="note" method="post" action="note"><input type="hidden" name="csrf" value="{app.token(cookie)}">'
                 f'<input type="hidden" name="alias" value="{escape(alias, quote=True)}"><input type="hidden" name="revision" value="{escape(entry["revision"], quote=True)}">'
                 f'<textarea name="note" aria-label="{escape(alias, quote=True)} 的备注" maxlength="2000">{escape(entry["note"])}</textarea>'
-                '<button type="button" id="note-button">保存备注（清空即删除）</button><button type="button" id="note-cancel">取消</button></form>'
+                '<button type="button" id="note-button">保存</button><button type="button" id="note-cancel">取消</button><button type="button" id="note-clear">清空</button></form>'
                 f'<p id="note-status" role="status" aria-live="polite">{escape(feedback)}</p>')
         style = ('<style>*{box-sizing:border-box}body{font:13px/1.4 system-ui,sans-serif;margin:0;padding:4px;'
                  'color:var(--color-text-highlight,#ddd);background:var(--color-widget-background,#1b1b20)}'
@@ -341,99 +397,144 @@ def render_page(app, page, cookie, alias=None, feedback="", *, view="icon"):
     return '<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width">' + style + body + '<script src="./control.js"></script></html>'
 
 
-CONTROL_JS = """(() => {
+CONTROL_JS = r"""(() => {
+  let owner = null;
   try {
-    if (window.parent !== window && parent.document && parent.getComputedStyle &&
-        new URL(parent.location.href).origin === location.origin) {
-      const host = parent.getComputedStyle(parent.document.documentElement);
-      for (const key of ['--color-text-highlight', '--color-widget-background', '--color-separator', '--color-primary']) {
-        const value = host.getPropertyValue(key);
+    if (window.parent !== window && new URL(parent.location.href).origin === location.origin) {
+      owner = parent;
+      const theme = owner.getComputedStyle(owner.document.documentElement);
+      for (const key of ['--color-text-highlight','--color-widget-background','--color-separator','--color-primary']) {
+        const value = theme.getPropertyValue(key);
         if (value) document.documentElement.style.setProperty(key, value);
       }
-      // Transparent child canvases can still paint white in Chrome's light scheme.
-      // Match the actual host canvas for the icon, without hard-coded theme colors.
       if (document.getElementById('refresh-button')) {
-        const canvas = parent.getComputedStyle(parent.document.body).backgroundColor;
+        const canvas = owner.getComputedStyle(owner.document.body).backgroundColor;
         document.documentElement.style.backgroundColor = canvas;
         document.body.style.backgroundColor = canvas;
       }
     }
   } catch (_) {}
-  const refreshStatus = document.getElementById('refresh-status');
   const refreshButton = document.getElementById('refresh-button');
-  const setRefreshStatus = message => {
-    if (!refreshStatus) return;
-    refreshStatus.textContent = message;
-    refreshButton.title = refreshButton.getAttribute('aria-label').split('：')[0] + '：' + message;
-    refreshButton.setAttribute('aria-label', refreshButton.title);
+  const refreshForm = document.getElementById('refresh');
+  const refreshStatus = document.getElementById('refresh-status');
+  let badge = refreshStatus;
+  if (refreshButton && owner && window.frameElement) {
+    const host = window.frameElement.parentElement;
+    badge = host.querySelector('[data-refresh-feedback]');
+    if (!badge) {
+      badge = owner.document.createElement('span');
+      badge.dataset.refreshFeedback = 'true';
+      badge.setAttribute('role','status'); badge.setAttribute('aria-live','polite');
+      Object.assign(badge.style,{fontSize:'max(12px, 1.2rem)',lineHeight:'1.4',color:'var(--color-text-highlight)',marginLeft:'8px',minWidth:'0',maxWidth:'calc(100% - 80px)',whiteSpace:'normal'});
+      window.frameElement.style.flexShrink='0';
+      const heading=host.querySelector(':scope > h2');
+      if (heading) heading.style.flexShrink='0';
+      host.appendChild(badge);
+    }
+  }
+  const stamp = raw => {
+    if (!raw) return '';
+    const date = new Date(raw);
+    if (!Number.isFinite(date.getTime())) return '';
+    return date.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) + ' UTC+08:00';
+  };
+  const labels = {idle:'尚未刷新',running:'正在刷新…',success:'刷新成功',partial:'部分成功，部分数据仍为历史数据',busy:'已有刷新任务，本次未执行',error:'刷新失败，旧数据仍可用',interrupted:'刷新中断，请核对后重试'};
+  const show = (message, status={}) => {
+    if (refreshStatus) refreshStatus.textContent = message;
+    if (refreshButton) {
+      const prefix = refreshButton.getAttribute('aria-label').split('：')[0];
+      refreshButton.title = prefix + '：' + message;
+      refreshButton.setAttribute('aria-label',refreshButton.title);
+      refreshButton.setAttribute('aria-busy',String(status.state === 'running'));
+    }
+    if (badge) {
+      const completed = stamp(status.last_success_at);
+      const observed = stamp(status.last_observed_at);
+      const compact = completed ? new Date(status.last_success_at).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}) : '';
+      badge.textContent = status.state==='success' && compact ? '成功于 ' + compact : message;
+      badge.title = (completed ? '最近成功刷新：' + completed : '尚无成功刷新记录') + (observed ? ' · 数据观测：' + observed : '');
+      badge.setAttribute('aria-label', message + '。' + badge.title);
+      badge.dataset.state = status.state || 'pending';
+      badge.dataset.runId = status.run_id || '';
+    }
+  };
+  const closeNote = () => {
+    try { window.frameElement.closest('[popover]').hidePopover(); } catch (_) {}
   };
   const reloadOwner = page => {
     try {
-      if (window.parent !== window && parent.location &&
-          new URL(parent.location.href).origin === location.origin &&
-          new URL(parent.location.href).pathname.replace(/\\/$/, '') === '/' + page) {
-        parent.location.reload();
-        return;
-      }
+      if (owner && new URL(owner.location.href).pathname.replace(/\/$/,'') === '/' + page) { owner.location.reload(); return; }
     } catch (_) {}
     location.reload();
   };
-  const pollRefresh = page => {
+  const requestJSON = async (url, options={}) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(()=>controller.abort(),15000);
+    try {
+      const response = await fetch(url,{...options,signal:controller.signal});
+      const result = await response.json().catch(()=>({error:'操作未完成，请刷新核对'}));
+      return {response,result};
+    } finally { clearTimeout(timeout); }
+  };
+  let polling = false;
+  const pollRefresh = (page, expectedRun) => {
+    if (polling) return;
+    polling = true;
+    const deadline = Date.now() + 60*60*1000;
+    let failures = 0;
     const poll = async () => {
       try {
-        const response = await fetch('./status?page=' + encodeURIComponent(page), {credentials: 'same-origin'});
-        if (!response.ok) throw Error('刷新状态不可用，请重新加载核对');
-        const status = await response.json();
-        if (status.state === 'running') { setTimeout(poll, 1500); return; }
-        setRefreshStatus(({success: '刷新成功', partial: '部分成功', busy: '已有刷新任务，请稍后重试',
-          error: '刷新失败，旧数据仍可用', interrupted: '刷新中断，请重试'})[status.state] || '状态不可用');
-        if (status.state === 'success' || status.state === 'partial') reloadOwner(page);
-        else refreshButton.disabled = false;
-      } catch (error) { setRefreshStatus(error.message); refreshButton.disabled = false; }
-    };
-    setTimeout(poll, 1500);
-  };
-  if (refreshButton && refreshButton.disabled) {
-    const page = document.querySelector('#refresh input[name="page"]').value;
-    pollRefresh(page);
-  }
-  const cancel = document.getElementById('note-cancel');
-  if (cancel) cancel.addEventListener('click', () => {
-    try { window.frameElement.closest('[popover]').hidePopover(); } catch (_) {}
-  });
-  for (const [id, formId, action] of [
-    ['refresh-button', 'refresh', 'refresh'], ['note-button', 'note', 'save']
-  ]) {
-    const button = document.getElementById(id);
-    if (!button) continue;
-    button.addEventListener('click', async () => {
-      button.disabled = true;
-      const form = document.getElementById(formId);
-      const values = new URLSearchParams(new FormData(form));
-      values.set('action', action);
-      if (action === 'refresh') setRefreshStatus('正在刷新，请稍候…');
-      try {
-        const response = await fetch(form.action, {
-          method: 'POST', credentials: 'same-origin',
-          headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: values
-        });
-        const result = await response.json().catch(() => ({error: '操作未完成，请刷新核对'}));
-        if (!response.ok) throw Error(result.error || '操作失败，请重新加载');
-        if (result.state === 'running') {
-          pollRefresh(values.get('page'));
-        } else if (result.state === 'busy') {
-          setRefreshStatus('已有刷新任务，请稍后重试');
-          button.disabled = false;
-        } else if (action === 'save' && result.state === 'saved') {
-          document.getElementById('note-status').textContent = '备注已保存';
-          reloadOwner('servers');
-        } else {
-          throw Error('操作状态不可用，请重新加载核对');
+        const url = './status?page=' + encodeURIComponent(page) + (expectedRun ? '&run_id=' + encodeURIComponent(expectedRun) : '');
+        const {response,result:status} = await requestJSON(url,{credentials:'same-origin',cache:'no-store'});
+        if (!response.ok) throw Error('刷新状态暂不可用');
+        failures = 0;
+        if (expectedRun && status.run_id !== expectedRun) {
+          if (Date.now() >= deadline) throw Error('刷新记录尚未关联，请重新加载核对');
+          setTimeout(poll,1500); return;
         }
+        show(labels[status.state] || '状态不可用',status);
+        if (status.state === 'running' && Date.now() < deadline) { setTimeout(poll,1500); return; }
+        polling = false; refreshButton.disabled = false;
+        if (status.state === 'success' || status.state === 'partial') setTimeout(()=>reloadOwner(page),350);
+        else if (status.state === 'running') show('仍在刷新，可重新加载查看状态',status);
       } catch (error) {
-        if (action === 'refresh') setRefreshStatus(error.message);
-        else document.getElementById('note-status').textContent = error.message;
-        button.disabled = false;
+        if (++failures <= 3 && Date.now() < deadline) { show('正在刷新，连接恢复中…',{state:'running',run_id:expectedRun});setTimeout(poll,1500);return; }
+        polling = false; refreshButton.disabled = false;show(error.message,{state:'error'});
+      }
+    };
+    setTimeout(poll,600);
+  };
+  if (refreshButton && refreshForm) {
+    const initial = {state:refreshForm.dataset.state,run_id:refreshForm.dataset.runId,last_success_at:refreshForm.dataset.lastSuccessAt,last_observed_at:refreshForm.dataset.lastObservedAt};
+    show(labels[initial.state] || '状态不可用',initial);
+    if (initial.state === 'running') { refreshButton.disabled = true;pollRefresh(refreshForm.elements.page.value,initial.run_id); }
+  }
+  const noteForm = document.getElementById('note');
+  const noteStatus = document.getElementById('note-status');
+  const cancel = document.getElementById('note-cancel');
+  if (cancel) cancel.addEventListener('click',()=>{
+    if (noteForm) noteForm.reset();
+    if (noteStatus) noteStatus.textContent='';
+    closeNote(); window.location.reload();
+  });
+  const clear = document.getElementById('note-clear');
+  if (clear) clear.addEventListener('click',()=>{const input=document.querySelector('#note textarea');input.value='';input.focus();document.getElementById('note-status').textContent='已清空输入，保存后删除备注';});
+  for (const [id,formId,action] of [['refresh-button','refresh','refresh'],['note-button','note','save']]) {
+    const button=document.getElementById(id);if(!button)continue;
+    button.addEventListener('click',async()=>{
+      button.disabled=true;
+      const form=document.getElementById(formId);const values=new URLSearchParams(new FormData(form));values.set('action',action);
+      if(action==='refresh')show('正在刷新…',{state:'running'});
+      try {
+        const {response,result}=await requestJSON(form.action,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:values});
+        if(!response.ok)throw Error(result.error || '操作失败，请重新加载');
+        if(action==='refresh' && result.state==='running' && result.run_id) {show('正在刷新…',result);pollRefresh(values.get('page'),result.run_id);}
+        else if(action==='refresh' && result.state==='busy') {show(labels.busy,result);button.disabled=false;}
+        else if(action==='save' && result.state==='saved') {document.getElementById('note-status').textContent='备注已保存';closeNote();reloadOwner('servers');}
+        else throw Error('操作状态不可用，请重新加载核对');
+      } catch(error) {
+        if(action==='refresh')show(error.message,{state:'error'});else document.getElementById('note-status').textContent=error.message;
+        button.disabled=false;
       }
     });
   }

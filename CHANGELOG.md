@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.1 - 2026-10-07
+
+- Make server-note actions explicit: Save, Cancel and Clear; successful saves/cancellation close the card popover, cancellation discards unsaved input, and Clear remains local until Save.
+- Expose visible, run-correlated refresh progress and completed-versus-observed times for project/server/subscription pages; completion reloads the owning page, while contention/failure keeps old data truthful. Subscription refresh is authenticated and never consumes reset credits.
+
 ## 0.3.0 - 2026-10-06
 
 - Keep truthful current offline server status while retaining identity-fenced last-good CPU, memory, GPU, disk/device and system facts in the existing native cards, with optional explicit or deterministically derived server IDs, readable separate attempt/success timestamps, and manifest-confirmed bounded legacy bootstrap.

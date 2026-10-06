@@ -29,6 +29,12 @@ user notes are overlaid only while rendering.
 
 Manual calls without `--scheduled` never redeem reset cards; account pages only display snapshots. Existing scheduling must use explicit `--scheduled` with per-account policy, not infer authority from a rendered toggle. When refreshing projects in optional-login mode, guest columns are rebuilt from the Public allowlist and authenticated columns retain full rows. A broken layout is rejected rather than overwritten with private guest content.
 
+## Page action feedback
+
+Projects, servers and subscriptions reuse authenticated same-origin refresh controls for the selected page, without redeeming credits. Clicking shows running immediately and prevents duplicates. Lock contention explicitly says this request did not execute; failure retains truthful old data. Completion displays that run's success time and reloads its owning page. **Completion time** comes from the refresh journal; **observation time** comes from the snapshot and stays old for cached data. The status tooltip includes the full date and time zone.
+
+Open a server's name to edit its note. **Save**, **Cancel** and **Clear** are explicit: a successful save or cancellation closes the popover, cancellation discards unsaved input, and Clear empties the input without deleting the persisted note until Save. Conflicts and save failures preserve the editor and input.
+
 ## Manual check and use
 
 After signing in, open the account control popup on the subscription page and choose **检查并用卡** (check and use a credit). Only after explicit confirmation does the server reload that account's current policy, live quota and available cards. It attempts at most one exact card only when the configured threshold and all existing time-window, forecast, identity and idempotency conditions pass. It does not wait for the next scheduled scan or weaken existing safeguards.

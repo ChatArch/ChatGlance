@@ -383,7 +383,7 @@ def make_overview_groups(data: dict[str, Any]) -> list[dict[str, Any]]:
             "links": [
                 {"title": "可见仓库", "url": "https://github.com/ChatArch", "description": str(counts.get("visible_repos", len(repositories(data)))), "icon": "si:github"},
                 {"title": "PR-issue", "url": "https://github.com/ChatArch", "description": str(triage_count), "icon": "mdi:source-pull"},
-                {"title": "刷新时间", "url": "https://github.com/ChatArch", "description": generated_at, "icon": "mdi:clock-outline"},
+                {"title": "数据观测时间", "url": "https://github.com/ChatArch", "description": generated_at, "icon": "mdi:clock-outline"},
                 {"title": "生成数据", "url": "https://github.com/ChatArch", "description": "本地生成快照 · 不含凭据", "icon": "mdi:code-json"},
             ],
         }
