@@ -17,8 +17,7 @@ def test_refresh_and_notes_update_owning_page_in_browser(tmp_path, monkeypatch):
     pytest.importorskip("selenium")
     from selenium import webdriver
     from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import Select, WebDriverWait
-    from selenium.webdriver.support import expected_conditions as conditions
+    from selenium.webdriver.support.ui import WebDriverWait
 
     monkeypatch.setenv("CHATARCH_HOME", str(tmp_path))
     monkeypatch.setenv("TMPDIR", str(tmp_path))
@@ -65,8 +64,11 @@ def test_refresh_and_notes_update_owning_page_in_browser(tmp_path, monkeypatch):
                     notes = page_control.note_entry(root, "fixture-host")
                     card = '<div id="note">' + escape(notes["note"]) + '</div>'
                 key = target.path[1:]
+                note_popup = ('<button popovertarget="fixture-note">fixture-host</button>'
+                              '<div id="fixture-note" popover><button popovertarget="fixture-note" popovertargetaction="hide">关闭</button>'
+                              '<iframe title="fixture-host note" src="/pages/?page=servers&view=note&alias=fixture-host"></iframe></div>') if key == "servers" else ""
                 self.respond(200, '<!doctype html><style>:root{--color-text-highlight:#aabbcc}</style>' +
-                             card + f'<iframe title="control" style="height:250px;width:100%" src="/pages/?page={key}"></iframe>')
+                             card + note_popup + f'<iframe title="control" style="height:28px;width:28px" src="/pages/?page={key}&view=icon"></iframe>')
                 return
             if self.headers.get("Cookie") != "session=synthetic":
                 self.respond(401, "login required")
@@ -78,7 +80,7 @@ def test_refresh_and_notes_update_owning_page_in_browser(tmp_path, monkeypatch):
                 self.respond(200, json.dumps(app.status(query["page"][0])), "application/json")
             elif target.path == "/pages/":
                 self.respond(200, page_control.render_page(app, query["page"][0],
-                             "session=synthetic", query.get("alias", [None])[0]))
+                             "session=synthetic", query.get("alias", [None])[0], view=query["view"][0]))
             else:
                 self.respond(404, "not found")
 
@@ -118,24 +120,19 @@ def test_refresh_and_notes_update_owning_page_in_browser(tmp_path, monkeypatch):
         driver.refresh()
         driver.switch_to.frame(driver.find_element(By.CSS_SELECTOR, "iframe"))
         driver.find_element(By.ID, "refresh-button").click()
-        WebDriverWait(driver, 2).until(lambda current: "正在刷新" in current.find_element(By.ID, "refresh-status").text)
+        WebDriverWait(driver, 2).until(lambda current: "正在刷新" in current.find_element(By.ID, "refresh-button").get_attribute("title"))
         driver.switch_to.default_content()
         WebDriverWait(driver, 6).until(lambda current: current.find_element(By.ID, "snapshot").text == "fresh-observation")
         driver.switch_to.frame(driver.find_element(By.CSS_SELECTOR, "iframe"))
-        assert "刷新成功" in driver.find_element(By.ID, "refresh-status").text
-        assert "fresh-observation" in driver.find_element(By.ID, "refresh-status").text
+        assert "刷新成功" in driver.find_element(By.ID, "refresh-button").get_attribute("title")
         driver.switch_to.default_content()
         driver.get(base + "/servers")
-        driver.switch_to.frame(driver.find_element(By.CSS_SELECTOR, "iframe"))
-        Select(driver.find_element(By.NAME, "alias")).select_by_value("fixture-host")
-        driver.find_element(By.XPATH, '//button[text()="查看备注"]').click()
-        WebDriverWait(driver, 3).until(lambda current: current.find_element(By.NAME, "alias").get_attribute("value") == "fixture-host")
+        driver.find_element(By.CSS_SELECTOR, '[popovertarget="fixture-note"]').click()
+        driver.switch_to.frame(driver.find_element(By.CSS_SELECTOR, '#fixture-note iframe'))
+        assert driver.find_element(By.NAME, "alias").get_attribute("value") == "fixture-host"
         driver.find_element(By.NAME, "note").send_keys("Browser note")
         assert driver.execute_script("return getComputedStyle(document.body).color") == "rgb(170, 187, 204)"
-        assert driver.execute_script("return getComputedStyle(document.body).overflowY") == "auto"
         driver.find_element(By.ID, "note-button").click()
-        WebDriverWait(driver, 3).until(conditions.alert_is_present())
-        driver.switch_to.alert.accept()
         driver.switch_to.default_content()
         WebDriverWait(driver, 5).until(lambda current: current.find_element(By.ID, "note").text == "Browser note")
     finally:

@@ -95,6 +95,8 @@ python -m twine check dist/*
 
 ## Manual refresh and CLI tree
 
+The private Projects overview header and the Servers summary row each contain one compact refresh icon, without a separate controls widget. Click a server card's name to edit only that server's note; saving updates the Servers page. Public Projects has no controls. Page refresh never redeems reset cards.
+
 The installed package can refresh an existing runtime without a source checkout:
 
 ```bash

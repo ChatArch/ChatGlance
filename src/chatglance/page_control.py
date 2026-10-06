@@ -269,31 +269,37 @@ class PageControlApp:
             self._save()
 
 
-def render_page(app, page, cookie, alias=None, feedback=""):
+def render_page(app, page, cookie, alias=None, feedback="", *, view="icon"):
+    if view not in {"icon", "note"} or (view == "icon" and alias is not None) or (view == "note" and (page != "servers" or not alias)):
+        raise PageControlError("页面不存在", 404)
     status = app.status(page)
-    token = app.token(cookie)
     state = {"idle": "尚未手动刷新", "running": "正在刷新，请稍候", "success": "刷新成功", "partial": "部分成功", "error": "刷新失败，旧数据仍可用", "busy": "已有定时刷新在运行", "interrupted": "刷新中断，请重试"}.get(status["state"], "状态不可用")
-    observation = escape(str(status.get("observed_at") or "—"))
-    body = (f'<p id="refresh-status" role="status">{escape(feedback or state)} · 快照采集时间：{observation}</p>'
-            f'<form id="refresh" method="post" action="refresh"><input type="hidden" name="csrf" value="{token}">'
-            f'<input type="hidden" name="page" value="{page}"><button type="button" id="refresh-button">手动刷新</button></form>')
-    if page == "servers":
-        aliases = sorted(_aliases(app.root))
-        selected = alias if alias in aliases else ""
-        options = '<option value="">选择服务器</option>' + ''.join(f'<option value="{escape(item, quote=True)}"' + (' selected' if item == selected else '') + f'>{escape(item)}</option>' for item in aliases)
-        entry = note_entry(app.root, selected) if selected else {"note": "", "revision": "0"}
-        body += (f'<form method="get"><input type="hidden" name="page" value="servers"><select name="alias">{options}</select><button type="submit">查看备注</button></form>'
-                 f'<form id="note" method="post" action="note"><input type="hidden" name="csrf" value="{app.token(cookie)}">'
-                 f'<input type="hidden" name="alias" value="{escape(selected, quote=True)}"><input type="hidden" name="revision" value="{entry["revision"]}">'
-                 f'<textarea name="note" maxlength="2000">{escape(entry["note"])}</textarea><button type="button" id="note-button" {"" if selected else "disabled"}>保存备注（清空即删除）</button></form>')
-    style = ('<style>*{box-sizing:border-box}body{font:14px/1.35 system-ui,sans-serif;'
-             'height:100vh;overflow-y:auto;margin:0;padding:6px;color:var(--color-text-highlight,#ddd);'
-             'background:var(--color-widget-background,#1b1b20)}'
-             'form{display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin:3px 0}'
-             'button,select,textarea{font:inherit;color:inherit;background:var(--color-widget-background,#1b1b20);'
-             'border:1px solid var(--color-separator,#666);border-radius:5px;padding:4px;max-width:100%}'
-             'button{cursor:pointer}textarea{flex-basis:100%;min-width:0;height:42px;resize:vertical}'
-             'p{margin:4px 0;overflow-wrap:anywhere}</style>')
+    if view == "icon":
+        label = f'{"项目" if page == "projects" else "服务器"}手动刷新：{feedback or state}'
+        body = (f'<form id="refresh" method="post" action="refresh"><input type="hidden" name="csrf" value="{app.token(cookie)}">'
+                f'<input type="hidden" name="page" value="{page}">'
+                f'<button type="button" id="refresh-button" title="{escape(label, quote=True)}" aria-label="{escape(label, quote=True)}" {"disabled" if status["state"] == "running" else ""}>'
+                '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 11a8 8 0 1 0-2.3 6.2M20 4v7h-7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></form>'
+                f'<span id="refresh-status" role="status" aria-live="polite" class="sr-only">{escape(feedback or state)}</span>')
+        style = ('<style>*{box-sizing:border-box}html,body{width:28px;height:28px;margin:0;overflow:hidden;background:transparent}'
+                 'form{margin:0}button{display:grid;place-items:center;width:28px;height:28px;padding:4px;border:0;border-radius:6px;'
+                 'background:transparent;color:var(--color-text-highlight,#ddd);cursor:pointer}button:hover{background:rgba(128,128,128,.15)}'
+                 'button:focus-visible{outline:2px solid var(--color-primary,#8bb9ff);outline-offset:-2px}'
+                 'button:disabled{opacity:.6;cursor:wait}button:disabled svg{animation:spin 1s linear infinite}'
+                 'svg{width:20px;height:20px}@keyframes spin{to{transform:rotate(360deg)}}'
+                 '.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}</style>')
+    else:
+        entry = note_entry(app.root, alias)
+        body = (f'<form id="note" method="post" action="note"><input type="hidden" name="csrf" value="{app.token(cookie)}">'
+                f'<input type="hidden" name="alias" value="{escape(alias, quote=True)}"><input type="hidden" name="revision" value="{escape(entry["revision"], quote=True)}">'
+                f'<textarea name="note" aria-label="{escape(alias, quote=True)} 的备注" maxlength="2000">{escape(entry["note"])}</textarea>'
+                '<button type="button" id="note-button">保存备注（清空即删除）</button><button type="button" id="note-cancel">取消</button></form>'
+                f'<p id="note-status" role="status" aria-live="polite">{escape(feedback)}</p>')
+        style = ('<style>*{box-sizing:border-box}body{font:13px/1.4 system-ui,sans-serif;margin:0;padding:4px;'
+                 'color:var(--color-text-highlight,#ddd);background:var(--color-widget-background,#1b1b20)}'
+                 'form{display:flex;gap:8px;flex-wrap:wrap}textarea{width:100%;min-height:90px;max-height:115px;resize:vertical}'
+                 'button,textarea{font:inherit;color:inherit;background:transparent;border:1px solid var(--color-separator,#666);border-radius:5px;padding:5px}'
+                 'button{cursor:pointer}p{margin:6px 0;overflow-wrap:anywhere}</style>')
     return '<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width">' + style + body + '<script src="./control.js"></script></html>'
 
 
@@ -302,13 +308,27 @@ CONTROL_JS = """(() => {
     if (window.parent !== window && parent.document && parent.getComputedStyle &&
         new URL(parent.location.href).origin === location.origin) {
       const host = parent.getComputedStyle(parent.document.documentElement);
-      for (const key of ['--color-text-highlight', '--color-widget-background', '--color-separator']) {
+      for (const key of ['--color-text-highlight', '--color-widget-background', '--color-separator', '--color-primary']) {
         const value = host.getPropertyValue(key);
         if (value) document.documentElement.style.setProperty(key, value);
+      }
+      // Transparent child canvases can still paint white in Chrome's light scheme.
+      // Match the actual host canvas for the icon, without hard-coded theme colors.
+      if (document.getElementById('refresh-button')) {
+        const canvas = parent.getComputedStyle(parent.document.body).backgroundColor;
+        document.documentElement.style.backgroundColor = canvas;
+        document.body.style.backgroundColor = canvas;
       }
     }
   } catch (_) {}
   const refreshStatus = document.getElementById('refresh-status');
+  const refreshButton = document.getElementById('refresh-button');
+  const setRefreshStatus = message => {
+    if (!refreshStatus) return;
+    refreshStatus.textContent = message;
+    refreshButton.title = refreshButton.getAttribute('aria-label').split('：')[0] + '：' + message;
+    refreshButton.setAttribute('aria-label', refreshButton.title);
+  };
   const reloadOwner = page => {
     try {
       if (window.parent !== window && parent.location &&
@@ -320,6 +340,29 @@ CONTROL_JS = """(() => {
     } catch (_) {}
     location.reload();
   };
+  const pollRefresh = page => {
+    const poll = async () => {
+      try {
+        const response = await fetch('./status?page=' + encodeURIComponent(page), {credentials: 'same-origin'});
+        if (!response.ok) throw Error('刷新状态不可用，请重新加载核对');
+        const status = await response.json();
+        if (status.state === 'running') { setTimeout(poll, 1500); return; }
+        setRefreshStatus(({success: '刷新成功', partial: '部分成功', busy: '已有刷新任务，请稍后重试',
+          error: '刷新失败，旧数据仍可用', interrupted: '刷新中断，请重试'})[status.state] || '状态不可用');
+        if (status.state === 'success' || status.state === 'partial') reloadOwner(page);
+        else refreshButton.disabled = false;
+      } catch (error) { setRefreshStatus(error.message); refreshButton.disabled = false; }
+    };
+    setTimeout(poll, 1500);
+  };
+  if (refreshButton && refreshButton.disabled) {
+    const page = document.querySelector('#refresh input[name="page"]').value;
+    pollRefresh(page);
+  }
+  const cancel = document.getElementById('note-cancel');
+  if (cancel) cancel.addEventListener('click', () => {
+    try { window.frameElement.closest('[popover]').hidePopover(); } catch (_) {}
+  });
   for (const [id, formId, action] of [
     ['refresh-button', 'refresh', 'refresh'], ['note-button', 'note', 'save']
   ]) {
@@ -330,7 +373,7 @@ CONTROL_JS = """(() => {
       const form = document.getElementById(formId);
       const values = new URLSearchParams(new FormData(form));
       values.set('action', action);
-      if (action === 'refresh') refreshStatus.textContent = '正在刷新，请稍候…';
+      if (action === 'refresh') setRefreshStatus('正在刷新，请稍候…');
       try {
         const response = await fetch(form.action, {
           method: 'POST', credentials: 'same-origin',
@@ -339,28 +382,21 @@ CONTROL_JS = """(() => {
         const result = await response.json().catch(() => ({error: '操作未完成，请刷新核对'}));
         if (!response.ok) throw Error(result.error || '操作失败，请重新加载');
         if (result.state === 'running') {
-          const poll = async () => {
-            try {
-              const response = await fetch('./status?page=' + encodeURIComponent(values.get('page')), {credentials: 'same-origin'});
-              if (!response.ok) throw Error('状态不可用');
-              const status = await response.json();
-              if (status.state === 'running') { setTimeout(poll, 1500); return; }
-              if (status.state === 'success' || status.state === 'partial') {
-                refreshStatus.textContent = (status.state === 'success' ? '刷新成功' : '部分成功') +
-                  ' · 快照采集时间：' + (status.observed_at || '—');
-                reloadOwner(values.get('page'));
-              } else location.reload();
-            } catch (error) { alert(error.message); location.reload(); }
-          };
-          setTimeout(poll, 1500);
+          pollRefresh(values.get('page'));
         } else if (result.state === 'busy') {
-          alert('已有刷新任务，请稍后重试');
-          location.reload();
-        } else {
-          alert('备注已保存');
+          setRefreshStatus('已有刷新任务，请稍后重试');
+          button.disabled = false;
+        } else if (action === 'save' && result.state === 'saved') {
+          document.getElementById('note-status').textContent = '备注已保存';
           reloadOwner('servers');
+        } else {
+          throw Error('操作状态不可用，请重新加载核对');
         }
-      } catch (error) { alert(error.message); location.reload(); }
+      } catch (error) {
+        if (action === 'refresh') setRefreshStatus(error.message);
+        else document.getElementById('note-status').textContent = error.message;
+        button.disabled = false;
+      }
     });
   }
 })();"""
