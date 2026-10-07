@@ -104,9 +104,37 @@ MANUAL_SCRIPT = """(() => {
   forceButton.disabled = false;
 })();"""
 _MANUAL_HASH = base64.b64encode(hashlib.sha256(MANUAL_SCRIPT.encode()).digest()).decode()
+STATUS_REFRESH_SCRIPT = """(() => {
+  const form=document.getElementById('status-refresh');
+  if (!form) return;
+  const button=document.getElementById('status-refresh-button');
+  const status=document.getElementById('status-refresh-result');
+  button.addEventListener('click',async()=>{
+    if (button.disabled) return;
+    button.disabled=true;button.dataset.state='running';button.setAttribute('aria-busy','true');
+    button.textContent='刷新中…';status.textContent='正在读取当前账号的最新状态…';
+    const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),35000);
+    try {
+      const response=await fetch(form.action,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(form)),signal:controller.signal});
+      const result=await response.json();
+      if (result.csrf) form.elements.csrf.value=result.csrf;
+      if (!response.ok || result.state!=='success') throw Error(result.error || '状态刷新失败，旧数据保留');
+      document.getElementById('status-updated').textContent='最近状态刷新 '+result.checked_at;
+      status.textContent='刷新成功 · '+result.checked_at;button.dataset.state='success';
+      setTimeout(()=>location.reload(),500);
+    } catch(error) {
+      button.dataset.state='error';status.textContent=error.name==='AbortError' ? '刷新超时，请重新打开小窗核对；未使用重置卡。' : error.message;
+    } finally {
+      clearTimeout(timeout);button.disabled=false;button.setAttribute('aria-busy','false');button.textContent='刷新状态';
+    }
+  });
+  form.addEventListener('submit',event=>event.preventDefault());
+})();"""
+_STATUS_REFRESH_HASH = base64.b64encode(hashlib.sha256(STATUS_REFRESH_SCRIPT.encode()).digest()).decode()
+
 CONTROL_CSP = (
     "default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
-    f"script-src 'sha256-{_SCRIPT_HASH}' 'sha256-{_MANUAL_HASH}'; connect-src 'self'; "
+    f"script-src 'sha256-{_SCRIPT_HASH}' 'sha256-{_MANUAL_HASH}' 'sha256-{_STATUS_REFRESH_HASH}'; connect-src 'self'; "
     "form-action 'self'; frame-ancestors 'self'; base-uri 'none'"
 )
 
@@ -138,6 +166,8 @@ button,.action{border:1px solid var(--color-separator);border-radius:4px;backgro
 .check-value{color:var(--color-text-highlight);text-align:right;overflow-wrap:anywhere}
 .decision-row .state{min-width:3em;text-align:right}.rule{padding:7px 0 0 12px}
 .footer{margin-top:14px}.footer a{display:inline-block;margin-top:5px;color:var(--color-primary);text-decoration:none}
+#status-refresh{margin-top:8px}#status-refresh-result{display:inline-block;margin-left:8px;color:var(--color-text-highlight)}
+.heading .meta{min-width:0;overflow-wrap:anywhere}
 .warning{color:var(--color-negative)}
 .manual-credit{margin-top:14px;padding:10px;border:1px solid var(--color-separator)}
 .manual-credit p{margin:6px 0}.manual-credit button:disabled{opacity:.5;cursor:default}
@@ -171,7 +201,7 @@ def _display_value(check, report):
     return value
 
 
-def render_control_page(report, token, revision, *, overridden=False):
+def render_control_page(report, token, revision, *, overridden=False, refresh_token=None):
     profile, controls = report["profile"], report["controls"]
     paused = []
 
@@ -214,10 +244,12 @@ def render_control_page(report, token, revision, *, overridden=False):
         f'<span class="state {_e("fail" if check["state"] == "unknown" else check["state"])}">{_e(labels.get(check["state"], "未通过"))}</span></summary>'
         f'<p class="rule">{_e(check["rule"])}</p></details>' for check in visible_checks
     )
-    observed = source_time(report.get("observed_at")).replace("（北京时间）", "")
+    refreshed = report.get("status_refresh") or {}
+    observed = source_time(refreshed.get("checked_at") or report.get("observed_at")).replace("（北京时间）", "")
+    planned = source_time(refreshed.get("planned_at") or report.get("observed_at")).replace("（北京时间）", "")
     return f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>自动用卡设置</title>
 <style>{FORECAST_CSS}{CONTROL_CSS}</style></head><body>
-<header class="heading"><h1>{_e(profile)}</h1><span class="meta">上次计划检查 {_e(observed)}</span></header>
+<header class="heading"><h1>{_e(profile)}</h1><div class="meta"><span id="status-updated">最近状态刷新 {_e(observed)}</span><br><span>上次计划检查 {_e(planned)}</span></div></header>
 <section class="automation-status {state}" data-automation="{state}" role="status"><strong>{title}</strong><p class="meta">{_e(detail)}</p></section>
 {render_forecast(report.get("forecast"), report.get("forecast_threshold"))}
 <p class="checklist-title">执行清单 <span class="meta">· 点击条件查看要求</span></p>
@@ -227,5 +259,5 @@ def render_control_page(report, token, revision, *, overridden=False):
 <button type="submit" disabled>检查并用卡</button><button id="force-credit" type="button" disabled>强制用一张卡</button></form>
 <p class="meta">普通检查遵守自动条件；强制用卡跳过业务条件，但仍要求确切有效卡及去重保护。结果不明时不要重试。</p>
 <p id="manual-status" role="status" aria-live="polite">尚未手动检查</p></section>
-<footer class="footer">自动用卡只会在一次计划刷新内：先读取额度和卡片，再在同一次刷新中判断并最多消费一次。查看或刷新本小窗不会兑换。<br><a href="?{_e(urlencode({"profile":profile}))}">刷新状态</a></footer>
-<script>{THEME_SCRIPT}</script><script>{MANUAL_SCRIPT}</script></body></html>'''
+<footer class="footer">自动用卡只会在一次计划刷新内：先读取额度和卡片，再在同一次刷新中判断并最多消费一次。查看或刷新本小窗不会兑换。<form id="status-refresh" action="refresh-status" method="post"><input type="hidden" name="profile" value="{_e(profile)}"><input type="hidden" name="csrf" value="{_e(refresh_token or token)}"><button type="button" id="status-refresh-button" data-state="idle" aria-busy="false">刷新状态</button><span id="status-refresh-result" role="status" aria-live="polite">{_e('状态刷新成功 · ' + observed) if refreshed.get('checked_at') else ''}</span></form></footer>
+<script>{THEME_SCRIPT}</script><script>{MANUAL_SCRIPT}</script><script>{STATUS_REFRESH_SCRIPT}</script></body></html>'''

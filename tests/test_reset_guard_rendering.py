@@ -173,9 +173,4 @@ def test_control_frame_never_points_to_an_external_or_unsafe_path(path):
     output = render_account_limits_html(
         {"codex": [profile()], "reset_control_path": path}
     )
-    import re
-    # The fixed, authenticated read-only refresh frame is independent of the
-    # untrusted optional per-account control path. Reject only that path.
-    assert re.findall(r'<iframe[^>]+\bsrc="([^"]+)"', output) == [
-        "/_chatglance/reset-policy/pages/?page=account-limits&amp;view=icon"
-    ]
+    assert "<iframe" not in output

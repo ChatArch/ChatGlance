@@ -15,11 +15,11 @@ def test_note_has_three_short_buttons(tmp_path):
     assert 'id="note-clear"' in html
 
 
-def test_subscription_has_authenticated_native_refresh_entry():
+def test_subscription_does_not_add_another_top_refresh_entry():
     page = build_account_limits_page({'generated_at': '2026-10-06T01:00:00+08:00'})
     source = page['columns'][0]['widgets'][0]['source']
-    assert '<iframe title="订阅详情手动刷新"' in source
-    assert '/_chatglance/reset-policy/pages/?page=account-limits&amp;view=icon' in source
+    assert '订阅详情手动刷新' not in source
+    assert 'page=account-limits&amp;view=icon' not in source
 
 
 def test_status_separates_active_run_last_success_and_observation(tmp_path, monkeypatch):

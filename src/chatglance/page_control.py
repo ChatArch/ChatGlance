@@ -364,6 +364,9 @@ def render_page(app, page, cookie, alias=None, feedback="", *, view="icon"):
     if view not in {"icon", "note"} or (view == "icon" and alias is not None) or (view == "note" and (page != "servers" or not alias)):
         raise PageControlError("页面不存在", 404)
     status = app.status(page)
+    if view == "icon" and status["state"] == "running":
+        # No manual click occurred in this newly loaded document.
+        status = {**status, "state": "idle"}
     state = {"idle": "尚未手动刷新", "running": "正在刷新，请稍候", "success": "刷新成功", "partial": "部分成功", "error": "刷新失败，旧数据仍可用", "busy": "已有定时刷新在运行", "interrupted": "刷新中断，请重试"}.get(status["state"], "状态不可用")
     if view == "icon":
         label = f'{ {"projects": "项目", "servers": "服务器", "account-limits": "订阅详情"}[page]}手动刷新：{feedback or state}'
