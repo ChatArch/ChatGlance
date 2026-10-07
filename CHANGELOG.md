@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.3 - 2026-10-07
+
+- Keep the original projects/server manual refresh indicator running until its exact invocation ends, including transient status-read failures and same-tab reloads.
+- Show a persistent Refresh completed receipt with that invocation's completion time, separate from data observation and unrelated scheduled runs.
+
 ## 0.3.2 - 2026-10-07
 
 - Fix the original account popup's Refresh status action: user-triggered, selected-account non-consuming reads, visible running/success/failure, updated status time and preserved scheduled-check time in a private latest-row cache.
