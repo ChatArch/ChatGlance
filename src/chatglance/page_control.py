@@ -441,7 +441,7 @@ CONTROL_JS = r"""(() => {
     if (!Number.isFinite(date.getTime())) return '';
     return date.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) + ' UTC+08:00';
   };
-  const labels = {idle:'尚未刷新',running:'正在刷新…',success:'刷新成功',partial:'部分成功，部分数据仍为历史数据',busy:'已有刷新任务，本次未执行',error:'刷新失败，旧数据仍可用',interrupted:'刷新中断，请核对后重试'};
+  const labels = {idle:'尚未刷新',running:'刷新中…',success:'刷新完成',partial:'部分成功，部分数据仍为历史数据',busy:'已有刷新任务，本次未执行',error:'刷新失败，旧数据仍可用',interrupted:'刷新中断，请核对后重试'};
   const show = (message, status={}) => {
     if (refreshStatus) refreshStatus.textContent = message;
     if (refreshButton) {
@@ -451,10 +451,11 @@ CONTROL_JS = r"""(() => {
       refreshButton.setAttribute('aria-busy',String(status.state === 'running'));
     }
     if (badge) {
-      const completed = stamp(status.last_success_at);
-      const observed = stamp(status.last_observed_at);
-      const compact = completed ? new Date(status.last_success_at).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}) : '';
-      badge.textContent = status.state==='success' && compact ? '成功于 ' + compact : message;
+      const completedAt = status.state === 'success' ? (status.finished_at || status.last_success_at) : status.last_success_at;
+      const completed = stamp(completedAt);
+      const observed = stamp(status.observed_at || status.last_observed_at);
+      const compact = completed ? new Date(completedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}) : '';
+      badge.textContent = status.state==='success' && compact ? '刷新完成 · ' + compact : message;
       badge.title = (completed ? '最近成功刷新：' + completed : '尚无成功刷新记录') + (observed ? ' · 数据观测：' + observed : '');
       badge.setAttribute('aria-label', message + '。' + badge.title);
       badge.dataset.state = status.state || 'pending';
@@ -479,38 +480,57 @@ CONTROL_JS = r"""(() => {
       return {response,result};
     } finally { clearTimeout(timeout); }
   };
+  const receiptKey = refreshForm ? 'chatglance-manual-refresh:' + refreshForm.elements.page.value : '';
+  const readReceipt = () => { try { return JSON.parse(sessionStorage.getItem(receiptKey) || 'null'); } catch (_) { return null; } };
+  const remember = (status, reloaded=false) => {
+    if (!status.run_id) return;
+    try { sessionStorage.setItem(receiptKey,JSON.stringify({status,reloaded})); } catch (_) {}
+  };
   let polling = false;
-  const pollRefresh = (page, expectedRun) => {
+  const pollRefresh = (page, expectedRun, reloadOnCompletion=true) => {
     if (polling) return;
     polling = true;
-    const deadline = Date.now() + 60*60*1000;
     let failures = 0;
     const poll = async () => {
       try {
         const url = './status?page=' + encodeURIComponent(page) + (expectedRun ? '&run_id=' + encodeURIComponent(expectedRun) : '');
         const {response,result:status} = await requestJSON(url,{credentials:'same-origin',cache:'no-store'});
+        if (response.status === 401 || response.status === 403) {
+          polling = false;
+          show('刷新中，登录已失效；重新登录后核对结果',{state:'running',run_id:expectedRun});
+          return;
+        }
         if (!response.ok) throw Error('刷新状态暂不可用');
         failures = 0;
         if (expectedRun && status.run_id !== expectedRun) {
-          if (Date.now() >= deadline) throw Error('刷新记录尚未关联，请重新加载核对');
+          show('刷新中，等待本次任务状态…',{state:'running',run_id:expectedRun});
           setTimeout(poll,1500); return;
         }
-        show(labels[status.state] || '状态不可用',status);
-        if (status.state === 'running' && Date.now() < deadline) { setTimeout(poll,1500); return; }
+        if (!['running','success','partial','busy','error','interrupted'].includes(status.state)) throw Error('本次状态待核对');
+        show(labels[status.state],status);
+        if (status.state === 'running') { refreshButton.disabled = true;remember(status);setTimeout(poll,1500); return; }
         polling = false; refreshButton.disabled = false;
-        if (status.state === 'success' || status.state === 'partial') setTimeout(()=>reloadOwner(page),350);
-        else if (status.state === 'running') show('仍在刷新，可重新加载查看状态',status);
-      } catch (error) {
-        if (++failures <= 3 && Date.now() < deadline) { show('正在刷新，连接恢复中…',{state:'running',run_id:expectedRun});setTimeout(poll,1500);return; }
-        polling = false; refreshButton.disabled = false;show(error.message,{state:'error'});
+        remember(status,true);
+        if (reloadOnCompletion && (status.state === 'success' || status.state === 'partial')) setTimeout(()=>reloadOwner(page),350);
+      } catch (_) {
+        // A failed status read is not proof the background invocation ended.
+        failures++;
+        show('刷新中，连接恢复中…',{state:'running',run_id:expectedRun});
+        setTimeout(poll,Math.min(15000,1500*Math.pow(2,Math.min(failures,4))));
       }
     };
     setTimeout(poll,600);
   };
   if (refreshButton && refreshForm) {
     const initial = {state:refreshForm.dataset.state,run_id:refreshForm.dataset.runId,last_success_at:refreshForm.dataset.lastSuccessAt,last_observed_at:refreshForm.dataset.lastObservedAt};
-    show(labels[initial.state] || '状态不可用',initial);
-    if (initial.state === 'running') { refreshButton.disabled = true;pollRefresh(refreshForm.elements.page.value,initial.run_id); }
+    const receipt=readReceipt();
+    const resumed=receipt && receipt.status && typeof receipt.status.run_id==='string' && receipt.status.run_id;
+    const shown=resumed ? receipt.status : initial;
+    show(labels[shown.state] || '状态不可用',shown);
+    if (resumed && shown.state === 'running') {
+      refreshButton.disabled = true;
+      pollRefresh(refreshForm.elements.page.value,shown.run_id,!receipt.reloaded);
+    } else if (!resumed && initial.state === 'running') { refreshButton.disabled = true;pollRefresh(refreshForm.elements.page.value,initial.run_id); }
   }
   const noteForm = document.getElementById('note');
   const noteStatus = document.getElementById('note-status');
@@ -527,12 +547,12 @@ CONTROL_JS = r"""(() => {
     button.addEventListener('click',async()=>{
       button.disabled=true;
       const form=document.getElementById(formId);const values=new URLSearchParams(new FormData(form));values.set('action',action);
-      if(action==='refresh')show('正在刷新…',{state:'running'});
+      if(action==='refresh')show('刷新中…',{state:'running'});
       try {
         const {response,result}=await requestJSON(form.action,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:values});
         if(!response.ok)throw Error(result.error || '操作失败，请重新加载');
-        if(action==='refresh' && result.state==='running' && result.run_id) {show('正在刷新…',result);pollRefresh(values.get('page'),result.run_id);}
-        else if(action==='refresh' && result.state==='busy') {show(labels.busy,result);button.disabled=false;}
+        if(action==='refresh' && result.state==='running' && result.run_id) {remember(result);show('刷新中…',result);pollRefresh(values.get('page'),result.run_id);}
+        else if(action==='refresh' && result.state==='busy') {remember(result,true);show(labels.busy,result);button.disabled=false;}
         else if(action==='save' && result.state==='saved') {document.getElementById('note-status').textContent='备注已保存';closeNote();reloadOwner('servers');}
         else throw Error('操作状态不可用，请重新加载核对');
       } catch(error) {

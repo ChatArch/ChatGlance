@@ -292,7 +292,7 @@ const status = {dataset: {}, setAttribute() {}, set textContent(value) { events.
 const refreshButton = {disabled: false, getAttribute() { return '项目手动刷新：空闲'; },
   setAttribute(_name, value) { events.push(value); },
   addEventListener(_name, callback) { buttons['refresh-button'] = callback; }};
-const form = {dataset: {state: 'idle',runId:'',lastSuccessAt:'',lastObservedAt:''}, action: '/pages/' + KIND, values: KIND === 'refresh'
+const form = {elements:{page:{value:'projects'}},dataset: {state: 'idle',runId:'',lastSuccessAt:'',lastObservedAt:''}, action: '/pages/' + KIND, values: KIND === 'refresh'
   ? {page: 'projects', csrf: 'synthetic'}
   : {alias: 'fixture-host', note: 'saved', csrf: 'synthetic'}};
 const document = {getElementById(id) {
@@ -300,7 +300,8 @@ const document = {getElementById(id) {
   if (id === 'note-button') return {
     addEventListener(_name, callback) { buttons[id] = callback; }, disabled: false
   };
-  if (id === 'refresh' || id === 'note') return form;
+  if (id === 'refresh') return KIND === 'refresh' ? form : null;
+  if (id === 'note') return KIND === 'note' ? form : null;
   if (id === 'refresh-status' || id === 'note-status') return status;
   return null;
 }};
@@ -325,10 +326,10 @@ setTimeout(() => console.log(JSON.stringify(events)), 50);
     assert result.returncode == 0, result.stderr
     events = json.loads(result.stdout)
     if kind == "refresh":
-        assert any(value.startswith("正在刷新") for value in events), events
+        assert any(value.startswith("刷新中") for value in events), events
         if terminal in {"error", "busy", "immediate-busy"}:
             assert any(("刷新失败" if terminal == "error" else "已有刷新任务") in value for value in events)
         else:
-            assert any("成功" in value for value in events)
+            assert any(("刷新完成" if terminal == "success" else "部分成功") in value for value in events)
     assert ("parent-reload" in events) == (terminal not in {"error", "busy", "immediate-busy"})
     assert "iframe-reload" not in events

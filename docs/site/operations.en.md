@@ -31,7 +31,7 @@ Manual calls without `--scheduled` never redeem reset cards; account pages only 
 
 ## Page action feedback
 
-Existing project/server refresh icons indicate only the request started by the current click; opening a page never animates a manual button because a scheduled run is active. Completion and observation times remain distinct, and failure/contention never invents a newer observation.
+Existing project/server refresh icons show Refreshing until the backend confirms that exact click-started invocation ended. Transient status-read failures do not falsely finish the job or enable duplicates; reloading the same tab resumes its own run. Success shows a persistent Refresh completed receipt with the invocation completion time and reloads the parent data. Opening a page never follows an unrelated scheduled run. Completion and observation times remain separate; failures and lock contention never manufacture a new date.
 
 Subscriptions do not gain another header button. The account popup's original **刷新状态** (Refresh status) button reads only the selected account's latest quota, credits and conditions through its authenticated same-origin endpoint, without consuming credits or changing switches. The clicked button shows running; success updates **Latest status refresh**, rerenders the popup and leaves a success receipt; failure stops and preserves old data. **Last scheduled check** retains the actual scheduled snapshot time. The latest read-only row lives in a private per-account runtime cache, superseded by a later scheduled snapshot, without waiting behind full-site project collection.
 
