@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.2 - 2026-10-07
+
+- Fix the original account popup's Refresh status action: user-triggered, selected-account non-consuming reads, visible running/success/failure, updated status time and preserved scheduled-check time in a private latest-row cache.
+- Remove the added subscription header control. Background scheduled runs no longer animate untouched manual refresh buttons.
+
 ## 0.3.1 - 2026-10-07
 
 - Make server-note actions explicit: Save, Cancel and Clear; successful saves/cancellation close the card popover, cancellation discards unsaved input, and Clear remains local until Save.

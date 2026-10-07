@@ -95,7 +95,7 @@ def test_theme_script_has_exact_csp_hash_without_broad_script_permission():
     from chatglance.reset_control import CONTROL_CSP
     text = render_control_page(report(), 'nonce', 'revision')
     scripts = re.findall(r'<script>(.*?)</script>', text, re.S)
-    assert len(scripts) == 2
+    assert len(scripts) == 3
     for script in scripts:
         digest = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
         assert f"'sha256-{digest}'" in CONTROL_CSP

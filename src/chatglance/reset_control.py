@@ -81,6 +81,20 @@ def glance_authenticator(runtime_home):
     return authenticate
 
 
+def read_status_account(profile, policy, home):
+    """Read the exact managed account; never evaluate an executing action."""
+    from .codex_collector import _managed_client_options, fetch_public_codex_reset
+    from .codex_resets import scan_profile
+    settings = collection_settings(home=home)
+    options = _managed_client_options(settings, [profile])
+    if options.get("token_service") != "CRS":
+        raise ControlError("账号映射不可用", 503)
+    forecast = (fetch_public_codex_reset(3).get("forecast")
+                if policy.skip_if_forecast_24h_above is not None else None)
+    return scan_profile(profile, policy=policy, execute=False, home=home,
+                        timeout=8, forecast=forecast, **options)
+
+
 class ControlApp:
     def __init__(
         self,
@@ -110,6 +124,7 @@ class ControlApp:
         self.diagnose = diagnose
         self.tokens = {}
         self.lock = threading.RLock()
+        self.status_locks = {}
 
     def authorized(self, cookie):
         if not cookie or len(cookie) > 8192:
@@ -135,7 +150,7 @@ class ControlApp:
         except (OSError, ValueError, TypeError):
             raise ControlError("无法读取自动用卡配置", 503) from None
 
-    def account(self, profile):
+    def _snapshot_account(self, profile):
         fallback = {
             "profile": profile,
             "status": "error",
@@ -156,6 +171,71 @@ class ControlApp:
             return matches[0] if len(matches) == 1 else fallback
         except (OSError, ValueError, TypeError, AttributeError):
             return fallback
+
+    def _status_path(self, profile):
+        from .page_control import _private_dir
+        directory = _private_dir(self.runtime_home) / "account-status"
+        directory.mkdir(mode=0o700, exist_ok=True)
+        if directory.is_symlink() or not directory.is_dir():
+            raise ControlError("状态缓存不可用", 503)
+        directory.chmod(0o700)
+        path = directory / (hashlib.sha256(profile.encode()).hexdigest() + ".json")
+        if path.is_symlink():
+            raise ControlError("状态缓存不可用", 503)
+        return path
+
+    def account(self, profile):
+        snapshot = self._snapshot_account(profile)
+        try:
+            path = self._status_path(profile)
+            if not path.exists() or path.stat().st_size > 256 * 1024:
+                return snapshot
+            cache = json.loads(path.read_text())
+            if not isinstance(cache, dict):
+                return snapshot
+            fresh = cache.get("account")
+            if (not isinstance(fresh, dict) or fresh.get("profile") != profile
+                    or fresh.get("status") != "ok"
+                    or (_epoch(fresh.get("observed_at")) or 0) <= (_epoch(snapshot.get("observed_at")) or 0)):
+                return snapshot
+            return {**fresh, "status_refresh": {"checked_at": cache["checked_at"],
+                    "planned_at": snapshot.get("observed_at")}}
+        except (OSError, ValueError, TypeError, KeyError, ControlError):
+            return snapshot
+
+    def refresh_status(self, values, cookie, origin):
+        if origin != self.public_origin:
+            raise ControlError("拒绝跨站操作", 403)
+        if set(values) != {"profile", "csrf"}:
+            raise ControlError("操作参数不完整")
+        profile = values["profile"]
+        _, policies, _ = self.flags(profile)
+        self.consume_token(cookie, values["csrf"])
+        with self.lock:
+            guard = self.status_locks.setdefault(profile, threading.Lock())
+        if not guard.acquire(blocking=False):
+            return {"state": "busy", "error": "此账号已在刷新", "csrf": self.token(cookie)}
+        try:
+            path = self._status_path(profile)  # path safety before remote reads
+            row = read_status_account(profile, policies[profile], self.home)
+            if (not isinstance(row, dict) or row.get("profile") != profile
+                    or row.get("status") != "ok" or not _epoch(row.get("observed_at"))):
+                raise ValueError("status unavailable")
+            allowed = {"profile", "account_name", "plan", "status", "credential_status",
+                       "token_service", "observed_at", "last_successful_at", "windows",
+                       "reset_credits", "reset_history", "auto_reset", "account_id"}
+            row = {k: v for k, v in row.items() if k in allowed}
+            cache = {"account": row, "checked_at": row["observed_at"]}
+            if len(json.dumps(cache).encode()) > 256 * 1024:
+                raise ValueError("status too large")
+            from .page_control import _atomic_json
+            _atomic_json(path, cache)
+            return {"state": "success", "checked_at": row["observed_at"],
+                    "csrf": self.token(cookie)}
+        except Exception:
+            return {"state": "error", "error": "状态读取失败，旧数据保留", "csrf": self.token(cookie)}
+        finally:
+            guard.release()
 
     def token(self, cookie):
         with self.lock:
@@ -203,12 +283,14 @@ class ControlApp:
         report["forecast"] = forecast_snapshot(auto.get("forecast"), now=now)
         report["forecast_threshold"] = policies[profile].skip_if_forecast_24h_above
         report["policy"] = asdict(policies[profile])
+        report["status_refresh"] = account.get("status_refresh", {})
         token = self.token(cookie)
         return render_control_page(
             report,
             token,
             revision,
             overridden=POLICIES in os.environ,
+            refresh_token=self.token(cookie),
         )
 
     def change(self, values, cookie, origin):
@@ -444,7 +526,7 @@ def make_control_server(
                         result = {"state": "saved", **publish_notes(page_app.root, values["alias"], values["note"], values["revision"])}
                     self.respond(200, json.dumps(result, ensure_ascii=False), content_type="application/json")
                     return
-                if target.query or target.path not in ("/toggle", "/use-credit"):
+                if target.query or target.path not in ("/toggle", "/use-credit", "/refresh-status"):
                     raise ControlError("操作不存在", 404)
                 cookie = self.check_auth()
                 if (
@@ -463,14 +545,19 @@ def make_control_server(
                 if any(len(value) != 1 for value in raw.values()):
                     raise ControlError("不接受重复参数")
                 values = {key: value[0] for key, value in raw.items()}
-                if target.path == "/use-credit":
+                if target.path == "/refresh-status":
+                    result = app.refresh_status(values, cookie, self.headers.get("Origin"))
+                    self.respond(200, json.dumps(result, ensure_ascii=False), content_type="application/json")
+                elif target.path == "/use-credit":
                     result = app.use_credit(values, cookie, self.headers.get("Origin"))
                     self.respond(200, json.dumps(result), content_type="application/json")
                 else:
                     app.change(values, cookie, self.headers.get("Origin"))
                     self.respond(303, location="./?" + urlencode({"profile": values["profile"]}))
             except ControlError as error:
-                if urlsplit(self.path).path == "/use-credit":
+                if urlsplit(self.path).path == "/refresh-status":
+                    self.respond(error.status, '{"state":"error","error":"刷新请求未获授权，请重新打开小窗"}', content_type="application/json")
+                elif urlsplit(self.path).path == "/use-credit":
                     self.respond(error.status, '{"state":"unmet","reason":"invalid_request"}',
                                  content_type="application/json")
                 elif urlsplit(self.path).path.startswith("/pages/"):

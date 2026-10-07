@@ -3,7 +3,7 @@
 ## 五层边界与兼容性
 
 1. Git 跟踪的源码负责公共模板、Python API 与文档。
-2. 安装的 **ChatGlance 0.3.1 wheel** 负责全部业务逻辑；服务入口不依赖 checkout。
+2. 安装的 **ChatGlance 0.3.2 wheel** 负责全部业务逻辑；服务入口不依赖 checkout。
 3. 单独维护的 **ChatArch/glance chatarch-v0.2.1** 负责网页、登录和会话；不需要新 Go 特性时兼容维护版 0.1.0。未修改上游不能作为登录后端的直接替代品。
 4. 标准 typed ChatEnv 保存敏感配置，home 下 `glance/` 保存私有运行配置、清单、快照与已校验二进制。
 5. 可选 Linux user-systemd 单元是薄入口；nginx 由操作者单独管理。

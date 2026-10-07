@@ -31,7 +31,9 @@ Manual calls without `--scheduled` never redeem reset cards; account pages only 
 
 ## Page action feedback
 
-Projects, servers and subscriptions reuse authenticated same-origin refresh controls for the selected page, without redeeming credits. Clicking shows running immediately and prevents duplicates. Lock contention explicitly says this request did not execute; failure retains truthful old data. Completion displays that run's success time and reloads its owning page. **Completion time** comes from the refresh journal; **observation time** comes from the snapshot and stays old for cached data. The status tooltip includes the full date and time zone.
+Existing project/server refresh icons indicate only the request started by the current click; opening a page never animates a manual button because a scheduled run is active. Completion and observation times remain distinct, and failure/contention never invents a newer observation.
+
+Subscriptions do not gain another header button. The account popup's original **刷新状态** (Refresh status) button reads only the selected account's latest quota, credits and conditions through its authenticated same-origin endpoint, without consuming credits or changing switches. The clicked button shows running; success updates **Latest status refresh**, rerenders the popup and leaves a success receipt; failure stops and preserves old data. **Last scheduled check** retains the actual scheduled snapshot time. The latest read-only row lives in a private per-account runtime cache, superseded by a later scheduled snapshot, without waiting behind full-site project collection.
 
 Open a server's name to edit its note. **Save**, **Cancel** and **Clear** are explicit: a successful save or cancellation closes the popover, cancellation discards unsaved input, and Clear empties the input without deleting the persisted note until Save. Conflicts and save failures preserve the editor and input.
 
