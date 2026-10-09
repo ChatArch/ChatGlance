@@ -308,8 +308,23 @@ class PageControlApp:
                 raise PageControlError("刷新历史不可用", 503) from error
             return {"state": "busy", "run_id": run_id}
 
+        def attached_to_running():
+            # A matching in-flight run will produce newer data for this exact page.
+            current = self.status(page)
+            if current.get("state") == "running" and current.get("run_id"):
+                return {
+                    "state": "running",
+                    "run_id": current["run_id"],
+                    "source": current.get("source"),
+                    "attached": True,
+                }
+            return None
+
         with self.lock:
             if self.active:
+                attached = attached_to_running()
+                if attached:
+                    return attached
                 if self.jobs[page]["state"] != "running":
                     self.jobs[page] = {"state": "busy", "run_id": run_id, "finished_at": datetime.now(timezone.utc).isoformat()}
                     self._save()
@@ -319,6 +334,9 @@ class PageControlApp:
                     pass
             except RefreshError as error:
                 if "another refresh is running" in str(error):
+                    attached = attached_to_running()
+                    if attached:
+                        return attached
                     self.jobs[page] = {"state": "busy", "run_id": run_id, "finished_at": datetime.now(timezone.utc).isoformat()}
                     self._save()
                     return rejected_busy()
@@ -369,22 +387,25 @@ def render_page(app, page, cookie, alias=None, feedback="", *, view="icon"):
         status = {**status, "state": "idle"}
     state = {"idle": "尚未手动刷新", "running": "正在刷新，请稍候", "success": "刷新成功", "partial": "部分成功", "error": "刷新失败，旧数据仍可用", "busy": "已有定时刷新在运行", "interrupted": "刷新中断，请重试"}.get(status["state"], "状态不可用")
     if view == "icon":
+        control_width = 88 if page == "servers" else 28
+        visible_label = '<span class="refresh-label" data-refresh-label>刷新</span>' if page == "servers" else ""
+        button_class = "refresh-button with-label" if visible_label else "refresh-button"
         label = f'{ {"projects": "项目", "servers": "服务器", "account-limits": "订阅详情"}[page]}手动刷新：{feedback or state}'
         body = (f'<form id="refresh" method="post" action="refresh" data-state="{escape(status["state"], quote=True)}" '
                 f'data-run-id="{escape(str(status.get("run_id") or ""), quote=True)}" '
                 f'data-last-success-at="{escape(str(status.get("last_success_at") or ""), quote=True)}" '
                 f'data-last-observed-at="{escape(str(status.get("last_observed_at") or ""), quote=True)}"><input type="hidden" name="csrf" value="{app.token(cookie)}">'
                 f'<input type="hidden" name="page" value="{page}">'
-                f'<button type="button" id="refresh-button" title="{escape(label, quote=True)}" aria-label="{escape(label, quote=True)}" {"disabled" if status["state"] == "running" else ""}>'
-                '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 11a8 8 0 1 0-2.3 6.2M20 4v7h-7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></form>'
+                f'<button type="button" id="refresh-button" class="{button_class}" title="{escape(label, quote=True)}" aria-label="{escape(label, quote=True)}" {"disabled" if status["state"] == "running" else ""}>'
+                '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 11a8 8 0 1 0-2.3 6.2M20 4v7h-7" stroke-linecap="round" stroke-linejoin="round"/></svg>' + visible_label + '</button></form>'
                 f'<span id="refresh-status" role="status" aria-live="polite" class="sr-only">{escape(feedback or state)}</span>')
-        style = ('<style>*{box-sizing:border-box}html,body{width:28px;height:28px;margin:0;overflow:hidden;background:transparent}'
-                 'form{margin:0}button{display:grid;place-items:center;width:28px;height:28px;padding:4px;border:0;border-radius:6px;'
+        style = (f'<style>*{{box-sizing:border-box}}html,body{{width:{control_width}px;height:28px;margin:0;overflow:hidden;background:transparent}}'
+                 'form{margin:0}button{display:flex;align-items:center;justify-content:center;gap:4px;width:100%;height:28px;padding:4px;border:0;border-radius:6px;'
                  'background:transparent;color:var(--color-text-highlight,#ddd);cursor:pointer}button:hover{background:rgba(128,128,128,.15)}'
                  'button:focus-visible{outline:2px solid var(--color-primary,#8bb9ff);outline-offset:-2px}'
                  'button:disabled{opacity:.6;cursor:wait}button:disabled svg{animation:spin 1s linear infinite}'
-                 'svg{width:20px;height:20px}@keyframes spin{to{transform:rotate(360deg)}}'
-                 '.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}</style>')
+                 'svg{width:20px;height:20px;flex:0 0 20px}@keyframes spin{to{transform:rotate(360deg)}}'
+                 '.refresh-label{font:600 12px/1 system-ui,sans-serif;white-space:nowrap}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}</style>')
     else:
         entry = note_entry(app.root, alias)
         body = (f'<form id="note" method="post" action="note"><input type="hidden" name="csrf" value="{app.token(cookie)}">'
@@ -420,6 +441,7 @@ CONTROL_JS = r"""(() => {
   const refreshButton = document.getElementById('refresh-button');
   const refreshForm = document.getElementById('refresh');
   const refreshStatus = document.getElementById('refresh-status');
+  const refreshLabel = refreshButton && refreshButton.querySelector ? refreshButton.querySelector('[data-refresh-label]') : null;
   let badge = refreshStatus;
   if (refreshButton && owner && window.frameElement) {
     const host = window.frameElement.parentElement;
@@ -449,6 +471,7 @@ CONTROL_JS = r"""(() => {
       refreshButton.title = prefix + '：' + message;
       refreshButton.setAttribute('aria-label',refreshButton.title);
       refreshButton.setAttribute('aria-busy',String(status.state === 'running'));
+      if (refreshLabel) refreshLabel.textContent = status.state === 'running' ? '刷新中' : '刷新';
     }
     if (badge) {
       const completedAt = status.state === 'success' ? (status.finished_at || status.last_success_at) : status.last_success_at;

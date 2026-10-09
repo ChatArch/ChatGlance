@@ -1031,8 +1031,10 @@ def render_servers_html(data: dict[str, Any]) -> str:
     cards = "\n".join(_server_card(item, index) for index, item in enumerate(servers))
     return f"""
 <style>
-.server-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }}
-.server-summary iframe {{ width: 28px; height: 28px; flex: 0 0 28px; border: 0; background: transparent; }}
+.server-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }}
+.server-summary > span:first-child {{ flex: 1 1 18rem; min-width: 0; }}
+.server-refresh-control {{ display: inline-flex; align-items: center; gap: 0.45rem; flex: 0 0 auto; min-height: 28px; }}
+.server-refresh-control iframe {{ width: 88px; height: 28px; flex: 0 0 88px; border: 0; background: transparent; }}
 .server-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0.75rem; }}
 .server-card {{ border: 1px solid var(--color-separator); border-radius: 14px; padding: 0.8rem; background: var(--color-widget-background); }}
 .server-card-head {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.65rem; }}
@@ -1066,7 +1068,7 @@ button.server-title:hover, button.server-title:focus-visible {{ color: var(--col
 .detail-section table {{ width: 100%; border-collapse: collapse; font-size: 0.82rem; }}
 .detail-section th, .detail-section td {{ border-bottom: 1px solid var(--color-separator); padding: 0.28rem 0.35rem; text-align: left; vertical-align: top; }}
 </style>
-<div class="server-summary"><span>最新采集：{generated_at} · 服务器 {len(servers)} 台 · 在线 {online} 台 · 数据来自静态 JSON 快照</span><iframe title="服务器手动刷新" loading="lazy" src="/_chatglance/reset-policy/pages/?page=servers&amp;view=icon"></iframe></div>
+<div class="server-summary"><span>最新采集：{generated_at} · 服务器 {len(servers)} 台 · 在线 {online} 台 · 数据来自静态 JSON 快照</span><span class="server-refresh-control"><iframe title="服务器手动刷新" loading="lazy" src="/_chatglance/reset-policy/pages/?page=servers&amp;view=icon"></iframe></span></div>
 <div class="server-grid">
 {cards or '<p>暂无服务器状态数据。</p>'}
 </div>

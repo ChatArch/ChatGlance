@@ -12,6 +12,7 @@ from chatglance import page_control
 from chatglance.projects import build_projects_page
 from chatglance.servers import build_servers_page
 from chatglance import refresh
+from chatglance import refresh_history
 from chatglance import servers
 from chatglance.reset_control import ControlApp, ControlError
 import yaml
@@ -31,6 +32,16 @@ def test_rendered_pages_have_private_control_and_canonical_slug():
     assert len(servers_page["columns"][0]["widgets"]) == 1
     assert "view=icon" in servers_page["columns"][0]["widgets"][0]["source"]
     assert "服务器刷新与备注" not in str(servers_page)
+
+
+def test_server_refresh_is_a_visible_labeled_original_control(tmp_path):
+    source = servers.render_servers_html({"generated_at": "observed", "servers": []})
+    assert 'class="server-refresh-control"' in source
+    assert 'title="服务器手动刷新"' in source
+    icon = page_control.render_page(page_control.PageControlApp(tmp_path, "https://example.invalid"),
+                                    "servers", "cookie")
+    assert 'data-refresh-label' in icon and '>刷新</span>' in icon
+    assert 'width:88px' in icon
 
 
 def test_compact_page_views_validate_alias_and_do_not_write(tmp_path):
@@ -245,7 +256,8 @@ def test_page_refresh_is_explicit_and_single_flight(tmp_path, monkeypatch):
         assert accepted["state"] == "running" and accepted["run_id"]
         assert started.wait(2)
         assert app.status("projects")["state"] == "running"
-        assert app.start({**values, "csrf": app.token(cookie)}, cookie, "https://example.invalid")["state"] == "busy"
+        duplicate = app.start({**values, "csrf": app.token(cookie)}, cookie, "https://example.invalid")
+        assert duplicate == {"state": "running", "run_id": accepted["run_id"], "source": None, "attached": True}
         release.set()
         for _ in range(100):
             if app.status("projects")["state"] != "running":
@@ -259,6 +271,30 @@ def test_page_refresh_is_explicit_and_single_flight(tmp_path, monkeypatch):
                           "allow_offline_regression": None}]
     finally:
         release.set()
+
+
+def test_manual_server_refresh_attaches_to_active_server_run(tmp_path, monkeypatch):
+    root = tmp_path / "glance"
+    root.mkdir()
+    active = {
+        "run_id": "scheduled-servers",
+        "source": "scheduled",
+        "status": "running",
+        "effective_status": "running",
+        "started_at": "2026-10-09T05:00:00+00:00",
+        "requested_pages": ["servers", "projects"],
+        "pages": [],
+    }
+    rejected = []
+    monkeypatch.setattr(refresh_history, "list_refresh_runs", lambda *args, **kwargs: [active])
+    monkeypatch.setattr(refresh_history, "record_rejected_run", lambda *args, **kwargs: rejected.append(args))
+    app = page_control.PageControlApp(root, "https://example.invalid")
+    with refresh._refresh_lock(root):
+        result = app.start({"page": "servers", "action": "refresh", "csrf": app.token("cookie")},
+                           "cookie", "https://example.invalid")
+    assert result == {"state": "running", "run_id": "scheduled-servers", "source": "scheduled", "attached": True}
+    assert rejected == []
+    assert app.jobs["servers"] == {"state": "idle"}
 
 
 def test_scheduler_lock_reports_busy_without_queuing(tmp_path, monkeypatch):

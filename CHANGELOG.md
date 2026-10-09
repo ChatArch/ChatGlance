@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.4 - 2026-10-09
+
+- Make the existing server refresh control visibly labeled and preserve its click target.
+- When the same page is already refreshing, attach the click to that exact running page instead of recording a no-op busy attempt; unrelated page locks remain explicit busy results.
+
 ## 0.3.3 - 2026-10-07
 
 - Keep the original projects/server manual refresh indicator running until its exact invocation ends, including transient status-read failures and same-tab reloads.
