@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Preserve an existing, explicitly paired optional-login guest home with the reviewed four-bookmark shape through project refresh, maintenance and candidate rendering. Continue generating the canonical two-bookmark home for first-time conversion and reject unsafe links or extra public content.
 - Preserve refresh PID-reuse fencing on macOS with native `libproc` process-birth identity while retaining Linux `/proc` behavior.
 - Allow authenticated controls to opt into an explicit RFC1918 IPv4 bind while keeping `127.0.0.1` as the default and retaining the same login, origin and CSRF checks.
 - Restart changed Glance services through the canonical `chatarch-glance.service` user LaunchAgent on macOS: validate its native-serve runtime topology, wait boundedly for bootout before bootstrapping that exact job, then require a stable new launchd PID and bounded guest-home readiness before recording success. A failed bootstrap/readiness check attempts bounded recovery of the same verified job while retaining failure reporting. Browser refresh and note save use the same runtime context. Linux continues to use `systemctl --user`.

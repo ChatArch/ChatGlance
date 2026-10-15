@@ -13,7 +13,7 @@ from chatglance.glance_config import replace_projects_page
 from chatglance.runtime import build_maintained_config
 from chatglance.refresh import _replace_page
 from chatglance.projects import build_projects_page
-from chatglance.optional_login import build_single_origin_optional_login_config
+from chatglance.optional_login import build_single_origin_optional_login_config, optional_login_enabled
 
 
 @pytest.fixture
@@ -80,6 +80,104 @@ def test_maintenance_and_refresh_keep_optional_login(private_config, inventory):
     _replace_page(initial, build_projects_page(fresh), inventory=fresh)
     assert initial["pages"][1]["public"] is True
     assert "SecretRow" not in json.dumps(initial["pages"][1]["columns"])
+
+
+@pytest.fixture
+def reviewed_four_bookmarks(private_config, inventory):
+    config = build_single_origin_optional_login_config(private_config, inventory)
+    links = config["pages"][0]["columns"][0]["widgets"][0]["groups"][0]["links"]
+    links[1:1] = [
+        {"title": "Public Editor", "url": "https://editor.example.org/public", "description": "Public browser editor", "icon": "si:code"},
+        {"title": "Public Docs", "url": "https://docs.example.org/guide", "description": "Public documentation", "icon": "si:book"},
+    ]
+    links[3] = {"title": "Organization Source", "url": "https://code.example.org/team", "description": "Public organization code", "icon": "si:github"}
+    return config
+
+
+def test_reviewed_four_bookmarks_survive_detection_project_refresh_and_maintenance(reviewed_four_bookmarks, inventory):
+    from copy import deepcopy
+    original = deepcopy(reviewed_four_bookmarks)
+    fresh = {**inventory, "repositories": inventory["repositories"][:1]}
+    assert optional_login_enabled(reviewed_four_bookmarks) is True
+    candidates = [
+        build_single_origin_optional_login_config(reviewed_four_bookmarks, fresh),
+        replace_projects_page(reviewed_four_bookmarks, fresh),
+        build_maintained_config(reviewed_four_bookmarks, fresh),
+    ]
+    assembled = deepcopy(reviewed_four_bookmarks)
+    _replace_page(assembled, build_projects_page(fresh), inventory=fresh)
+    candidates.append(assembled)
+    for candidate in candidates:
+        assert candidate["pages"][0]["columns"] == original["pages"][0]["columns"]
+        assert candidate["pages"][0]["authenticated-columns"] == original["pages"][0]["authenticated-columns"]
+        assert [p["name"] for p in candidate["pages"]] == [p["name"] for p in original["pages"]]
+        guest = json.dumps(candidate["pages"][1]["columns"])
+        authenticated = json.dumps(candidate["pages"][1]["authenticated-columns"])
+        assert "SecretRow" not in guest and "UnknownRow" not in guest
+        assert "PublicRow" in guest and "PublicRow" in authenticated
+    assert reviewed_four_bookmarks == original
+
+
+@pytest.mark.parametrize("unsafe", [
+    "javascript:alert(1)", "http://editor.example.org/", "https://user:pass@editor.example.org/",
+    "https://192.168.1.4/", "https://127.0.0.1/", "https://127.1/", "https://localhost/",
+    "https://editor.local/", "https://editor.example.org:8443/",
+    "https://editor.example.org/?token=secret", "//editor.example.org/",
+    "https://[fd00::1]/", "https://editor.example.org/\x00hidden",
+])
+def test_reviewed_bookmarks_reject_unsafe_url(reviewed_four_bookmarks, unsafe):
+    reviewed_four_bookmarks["pages"][0]["columns"][0]["widgets"][0]["groups"][0]["links"][1]["url"] = unsafe
+    with pytest.raises(ValueError, match="guest home"):
+        optional_login_enabled(reviewed_four_bookmarks)
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda w: w.update({"content": "unreviewed"}),
+    lambda w: w["groups"][0].update({"private": "unreviewed"}),
+    lambda w: w["groups"][0]["links"][1].update({"target": "_blank"}),
+    lambda w: w["groups"][0]["links"][1].update({"title": "<script>"}),
+    lambda w: w["groups"][0]["links"].append({"title": "Extra", "url": "https://extra.example.org/", "description": "More", "icon": "si:github"}),
+])
+def test_reviewed_bookmarks_reject_unreviewed_extra_content(reviewed_four_bookmarks, mutation):
+    widget = reviewed_four_bookmarks["pages"][0]["columns"][0]["widgets"][0]
+    mutation(widget)
+    with pytest.raises(ValueError, match="guest home"):
+        optional_login_enabled(reviewed_four_bookmarks)
+
+
+def test_reviewed_home_canonicalizes_only_legacy_project_link(reviewed_four_bookmarks, inventory):
+    from copy import deepcopy
+    reviewed_four_bookmarks["pages"][1]["slug"] = "legacy-projects"
+    links = reviewed_four_bookmarks["pages"][0]["columns"][0]["widgets"][0]["groups"][0]["links"]
+    links[0]["url"] = "/legacy-projects"
+    remaining = deepcopy(links[1:])
+    assert optional_login_enabled(reviewed_four_bookmarks)
+    for candidate in (replace_projects_page(reviewed_four_bookmarks, inventory),
+                      build_single_origin_optional_login_config(reviewed_four_bookmarks, inventory)):
+        new_links = candidate["pages"][0]["columns"][0]["widgets"][0]["groups"][0]["links"]
+        assert new_links[0]["url"] == "/projects" and new_links[1:] == remaining
+
+
+def test_native_refresh_preserves_reviewed_four_bookmarks(tmp_path, reviewed_four_bookmarks, inventory, monkeypatch):
+    from copy import deepcopy
+    from chatglance import refresh as pipeline
+    root = tmp_path / "runtime"
+    for name in ("config", "data", "bin"):
+        (root / name).mkdir(parents=True)
+    config_path = root / "config/glance.yml"
+    config_path.write_text(yaml.safe_dump(reviewed_four_bookmarks, allow_unicode=True))
+    (root / "bin/glance").write_text("synthetic validator")
+    (root / "data/chatarch-projects.json").write_text(json.dumps(inventory))
+    fresh = {**inventory, "repositories": inventory["repositories"][:1]}
+    before = deepcopy(reviewed_four_bookmarks["pages"][0])
+    monkeypatch.setattr(pipeline, "_collect_page", lambda key, *args, **kwargs: pipeline.PageUpdate(key, fresh, build_projects_page(fresh)))
+    monkeypatch.setattr(pipeline, "validate_glance_config", lambda *args: None)
+    result = pipeline.refresh_runtime(root, pages=["projects"], restart=False)
+    assert result["ok"] is True and result["published"] is True
+    updated = yaml.safe_load(config_path.read_text())["pages"]
+    assert updated[0] == before
+    assert "SecretRow" not in json.dumps(updated[1]["columns"])
+    assert "PublicRow" in json.dumps(updated[1]["authenticated-columns"])
 
 
 def test_empty_private_config_still_adds_projects_page():
