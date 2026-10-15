@@ -7,6 +7,7 @@ import hashlib
 import hmac
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from ipaddress import IPv4Address, ip_address, ip_network
 import json
 import os
 from pathlib import Path
@@ -25,6 +26,21 @@ from .codex_forecast import forecast_snapshot
 from .reset_control_view import CONTROL_CSP, render_control_page
 
 POLICIES = "CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES"
+PRIVATE_CONTROL_NETWORKS = tuple(
+    ip_network(value) for value in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
+)
+
+
+def validated_private_host(host):
+    try:
+        address = ip_address(host)
+    except (TypeError, ValueError):
+        raise ValueError("host must be a literal private IPv4 address") from None
+    if not isinstance(address, IPv4Address) or not (
+        address.is_loopback or any(address in network for network in PRIVATE_CONTROL_NETWORKS)
+    ):
+        raise ValueError("host must be a literal private IPv4 address")
+    return str(address)
 
 
 
@@ -55,13 +71,12 @@ def glance_authenticator(runtime_home):
                 port = int(bridge_environment()["CHATGLANCE_WEB_PORT"])
         if not auth.get("users") or not auth.get("secret-key"):
             raise ValueError
-        if server.get("host", "127.0.0.1") not in ("127.0.0.1", "localhost"):
-            raise ValueError
+        host = validated_private_host(server.get("host", "127.0.0.1"))
         if type(port) is not int or not 1 <= port <= 65535:
             raise ValueError
     except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError):
         raise ControlError("Glance 本地登录配置不可用", 503) from None
-    url = f"http://127.0.0.1:{port}/account-limits"
+    url = f"http://{host}:{port}/account-limits"
     opener = build_opener(ProxyHandler({}), _NoRedirect())
 
     def authenticate(cookie):
@@ -410,8 +425,12 @@ def make_control_server(
     authenticate=None,
     diagnose=None,
 ):
-    if host != "127.0.0.1" or type(port) is not int or not 0 <= port <= 65535:
-        raise ControlError("控制服务只能监听 IPv4 loopback")
+    try:
+        host = validated_private_host(host)
+    except ValueError:
+        raise ControlError("控制服务只能监听 IPv4 loopback 或显式私有接口") from None
+    if type(port) is not int or not 0 <= port <= 65535:
+        raise ControlError("控制服务只能监听 IPv4 loopback 或显式私有接口")
     app = ControlApp(
         runtime_home=runtime_home,
         public_origin=public_origin,
@@ -592,9 +611,13 @@ def make_control_server(
     return server
 
 
-def serve_controls(*, runtime_home, public_origin, port=5679, home=None):
+def serve_controls(*, runtime_home, public_origin, host="127.0.0.1", port=5679, home=None):
     server = make_control_server(
-        runtime_home=runtime_home, public_origin=public_origin, port=port, home=home
+        runtime_home=runtime_home,
+        public_origin=public_origin,
+        host=host,
+        port=port,
+        home=home,
     )
     try:
         server.serve_forever()

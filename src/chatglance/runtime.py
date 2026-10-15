@@ -4,12 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import http.client
 import os
 from pathlib import Path
+import plistlib
+import re
 import shutil
 import subprocess
+import sys
 import tempfile
+import time
 from typing import Any
+
+import yaml
 
 from .glance_config import load_yaml, patch_server_stats_mountpoints, replace_projects_page, write_yaml
 from .projects import PAGE_NAME, load_inventory
@@ -24,6 +31,113 @@ class MaintainResult:
     backup_path: Path | None
     validated: bool
     restarted: bool
+
+
+def _web_ready(host: str, port: int) -> bool:
+    connection = http.client.HTTPConnection(host, port, timeout=1)
+    try:
+        connection.request("GET", "/")
+        return connection.getresponse().status in (200, 302, 303)
+    except (OSError, http.client.HTTPException):
+        return False
+    finally:
+        connection.close()
+
+
+def _launchd_pid(target: str) -> int:
+    output = subprocess.run(
+        ["/bin/launchctl", "print", target], check=True, capture_output=True, text=True, timeout=3,
+    ).stdout
+    state = re.search(r"^\s*state = running\s*$", output, re.MULTILINE)
+    match = re.search(r"^\s*pid = ([1-9][0-9]*)\s*$", output, re.MULTILINE)
+    return int(match.group(1)) if state and match else 0
+
+
+def restart_user_service(service: str, runtime_home: str | Path | None = None) -> None:
+    """Restart the selected Glance user service through the native manager."""
+
+    if sys.platform == "darwin":
+        if service != "chatarch-glance.service":
+            raise ValueError("restart target must be a Glance launchd label")
+        if runtime_home is None:
+            raise ValueError("Glance runtime home is required for launchd restart")
+        root = Path(runtime_home).expanduser().resolve(strict=True)
+        plist = Path.home() / "Library/LaunchAgents" / f"{service}.plist"
+        if (plist.is_symlink() or plist.parent.is_symlink() or not plist.is_file()
+                or plist.stat().st_uid != os.getuid() or plist.stat().st_mode & 0o022
+                or plist.stat().st_size > 65536):
+            raise ValueError("Glance LaunchAgent is missing or unsafe")
+        try:
+            definition = plistlib.loads(plist.read_bytes())
+        except (OSError, ValueError, TypeError, plistlib.InvalidFileException):
+            raise ValueError("Glance LaunchAgent is invalid") from None
+        if not isinstance(definition, dict):
+            raise ValueError("Glance LaunchAgent is invalid")
+        arguments = definition.get("ProgramArguments")
+        expected = [arguments[0], "-m", "chatglance.cli", "runtime", "serve", "--runtime-home", str(root)] if (
+            isinstance(arguments, list) and arguments and isinstance(arguments[0], str)
+        ) else None
+        executable = Path(arguments[0]) if expected else None
+        if (definition.get("Label") != service or arguments != expected
+                or executable is None or not executable.is_absolute() or not executable.is_file()):
+            raise ValueError("Glance LaunchAgent topology does not match the runtime")
+        config = yaml.safe_load((root / "config/glance.yml").read_text(encoding="utf-8"))
+        if not isinstance(config, dict) or not isinstance(config.get("server", {}), dict):
+            raise ValueError("Glance web configuration is invalid")
+        server = config.get("server", {})
+        from .reset_control import validated_private_host
+        host = validated_private_host(server.get("host", "127.0.0.1"))
+        port = server.get("port", 8080)
+        if port == "${CHATGLANCE_WEB_PORT}":
+            from .portable import bridge_environment
+            port = int(bridge_environment()["CHATGLANCE_WEB_PORT"])
+        if type(port) is not int or not 1 <= port <= 65535:
+            raise ValueError("Glance web port is invalid")
+        target = f"gui/{os.getuid()}/{service}"
+        previous_pid = _launchd_pid(target)
+        if not previous_pid:
+            raise RuntimeError("Glance web service has no running owner")
+        bootstrap = ["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)]
+
+        def replacement_ready(seconds: int) -> bool:
+            deadline = time.monotonic() + seconds
+            while time.monotonic() < deadline:
+                try:
+                    current_pid = _launchd_pid(target)
+                    if (current_pid and current_pid != previous_pid and _web_ready(host, port)
+                            and _launchd_pid(target) == current_pid):
+                        return True
+                except (OSError, subprocess.SubprocessError):
+                    pass
+                time.sleep(0.2)
+            return False
+
+        # --wait confirms the old job has exited before the replacement can bind.
+        # A timeout is not proof of completion, so never bootstrap in that case.
+        subprocess.run(["/bin/launchctl", "bootout", "--wait", target],
+                       check=True, capture_output=True, text=True, timeout=10)
+        try:
+            subprocess.run(bootstrap, check=True, capture_output=True, text=True, timeout=10)
+            if replacement_ready(12):
+                return
+            raise RuntimeError("Glance web restart readiness was not confirmed")
+        except (OSError, subprocess.SubprocessError, RuntimeError) as original_error:
+            # After a completed bootout, try to restore only this verified job.
+            # Keep the original failure visible even if recovery succeeds.
+            recovery_error: Exception | None = None
+            try:
+                subprocess.run(bootstrap, check=True, capture_output=True, text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError) as error:
+                recovery_error = error
+            if replacement_ready(6):
+                raise RuntimeError("Glance web restart failed; service recovered and ready") from original_error
+            detail = type(recovery_error).__name__ if recovery_error else "readiness unconfirmed"
+            raise RuntimeError(f"Glance web restart failed; recovery failed ({detail})") from original_error
+    else:
+        subprocess.run(
+            ["systemctl", "--user", "restart", service],
+            check=True, capture_output=True, text=True, timeout=45,
+        )
 
 
 def _is_mountpoint(path: str) -> bool:
@@ -110,6 +224,7 @@ def maintain_config(
     validate_bin: str | Path | None = None,
     page_name: str = PAGE_NAME,
     restart_service: str | None = None,
+    runtime_home: str | Path | None = None,
     mountpoints: dict[str, str] | None = None,
 ) -> MaintainResult:
     """Maintain a Glance config using a repository-inventory snapshot.
@@ -166,7 +281,7 @@ def maintain_config(
                 backup_path.chmod(0o600)
         tmp.replace(output)
         if restart_service:
-            subprocess.run(["systemctl", "--user", "restart", restart_service], check=True)
+            restart_user_service(restart_service, runtime_home or source.parent.parent)
             restarted = True
     else:
         tmp.unlink(missing_ok=True)

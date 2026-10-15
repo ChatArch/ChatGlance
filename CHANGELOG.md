@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Preserve refresh PID-reuse fencing on macOS with native `libproc` process-birth identity while retaining Linux `/proc` behavior.
+- Allow authenticated controls to opt into an explicit RFC1918 IPv4 bind while keeping `127.0.0.1` as the default and retaining the same login, origin and CSRF checks.
+- Restart changed Glance services through the canonical `chatarch-glance.service` user LaunchAgent on macOS: validate its native-serve runtime topology, wait boundedly for bootout before bootstrapping that exact job, then require a stable new launchd PID and bounded guest-home readiness before recording success. A failed bootstrap/readiness check attempts bounded recovery of the same verified job while retaining failure reporting. Browser refresh and note save use the same runtime context. Linux continues to use `systemctl --user`.
+- Delegate controls login checks to the reviewed literal private IPv4 Go bind, preserving the negative guest probe and positive cookie check without a proxy or redirect.
+
 ## 0.3.4 - 2026-10-09
 
 - Make the existing server refresh control visibly labeled and preserve its click target.

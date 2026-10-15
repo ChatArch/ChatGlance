@@ -576,18 +576,19 @@ def account_limits() -> None:
 @account_limits.command("control-serve")
 @click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), default=None)
 @click.option("--public-origin", required=True, help="Exact HTTPS origin used for CSRF protection; no path.")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Explicit IPv4 loopback or private-interface bind.")
 @click.option("--port", type=click.IntRange(1, 65535), default=5679, show_default=True)
-def serve_reset_controls(runtime_home: Path | None, public_origin: str, port: int) -> None:
-    """Serve authenticated reset switches on loopback; never redeem cards."""
+def serve_reset_controls(runtime_home: Path | None, public_origin: str, host: str, port: int) -> None:
+    """Serve authenticated reset switches on a reviewed bind; never redeem cards."""
     from chatenv import get_paths
     from chatglance.reset_control import ControlError, serve_controls
     root = runtime_home.expanduser() if runtime_home is not None else get_paths().home_dir / "glance"
     try:
-        serve_controls(runtime_home=root, public_origin=public_origin, port=port)
+        serve_controls(runtime_home=root, public_origin=public_origin, host=host, port=port)
     except ControlError as exc:
         raise click.ClickException(str(exc)) from None
     except OSError:
-        raise click.ClickException("Could not start the loopback control service.") from None
+        raise click.ClickException("Could not start the control service.") from None
 
 
 @account_limits.command("collect")
@@ -785,11 +786,12 @@ def portable_serve(runtime_home: Path | None) -> None:
 
 @runtime.command("controls")
 @click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False))
-def portable_controls(runtime_home: Path | None) -> None:
-    """Run explicitly provisioned authenticated loopback controls."""
+@click.option("--host", help="Override the reviewed typed controls bind for this process.")
+def portable_controls(runtime_home: Path | None, host: str | None) -> None:
+    """Run explicitly provisioned authenticated controls."""
     from chatglance.portable import runtime_home as resolve
     from chatglance.managed import runtime_environment, effective_home
-    from chatglance.reset_control import serve_controls
+    from chatglance.reset_control import ControlError, serve_controls
     from urllib.parse import urlsplit
     try:
         environment = runtime_environment(resolve(runtime_home), auth=True)
@@ -800,9 +802,10 @@ def portable_controls(runtime_home: Path | None) -> None:
         port = int(environment.get("CHATGLANCE_CONTROL_PORT", "5679"))
         if not 1 <= port <= 65535:
             raise ValueError("invalid control port")
+        bind_host = host or environment.get("CHATGLANCE_CONTROL_HOST", "127.0.0.1")
         with effective_home(resolve(runtime_home)):
-            serve_controls(runtime_home=resolve(runtime_home), public_origin=origin, port=port)
-    except (ValueError, OSError) as exc:
+            serve_controls(runtime_home=resolve(runtime_home), public_origin=origin, host=bind_host, port=port)
+    except (ControlError, ValueError, OSError) as exc:
         raise click.ClickException(f"controls unavailable ({type(exc).__name__})") from None
 
 
@@ -837,7 +840,7 @@ def portable_units(runtime_home: Path | None, python_bin: Path | None, pages: tu
 @click.option("--page-name", default=PAGE_NAME, show_default=True, help="Generated Glance page name.")
 @click.option("--validate/--no-validate", default=True, show_default=True, help="Validate the candidate config with the upstream Glance binary before replacing it.")
 @click.option("--glance-bin", type=click.Path(path_type=Path, dir_okay=False), default=Path("bin/glance"), show_default=True, help="Runtime-relative or absolute Glance binary used for config validation.")
-@click.option("--restart-service", default=None, help="systemd user service to restart only if the rendered config changed.")
+@click.option("--restart-service", default=None, help="Glance user service to restart only if the rendered config changed.")
 def maintain_runtime(runtime_home: Path, config_path: Path, data_path: Path, backup_dir: Path, page_name: str, validate: bool, glance_bin: Path, restart_service: str | None) -> None:
     """Update runtime config atomically and optionally restart a service."""
 
@@ -858,6 +861,7 @@ def maintain_runtime(runtime_home: Path, config_path: Path, data_path: Path, bac
                 validate_bin=binary,
                 page_name=page_name,
                 restart_service=restart_service,
+                runtime_home=runtime_home,
                 mountpoints=mountpoints,
             )
     except RefreshError as exc:

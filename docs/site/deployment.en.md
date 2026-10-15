@@ -10,7 +10,7 @@
 
 The native project overview refresh icon requires `header-controls-url` support from the maintained Go `chatarch-v0.2.1` or newer. Older binaries cannot display this entry. Python and Go versions are independent: deploy the verified Go binary before regenerating pages.
 
-Supported managed deployment: Linux/POSIX, user systemd, an isolated installed Python environment and a reviewed maintained Go binary for the machine's architecture. Rendering/init can be used without systemd. No automatic release, production migration, service activation, SSH discovery or account redemption occurs on installation. This guide describes operator-authorized actions, not a completed production cutover.
+The full managed installer remains Linux user-systemd by default. macOS does not reuse the Linux ownership manifest: an operator may supply thin LaunchAgents invoking installed native `chatglance refresh` / `runtime maintain` entrypoints with explicit pages and scheduled policy. The Mac web job uses the canonical `chatarch-glance.service` label and matching `~/Library/LaunchAgents/chatarch-glance.service.plist`, whose `ProgramArguments` must invoke the installed Python `-m chatglance.cli runtime serve --runtime-home <reviewed absolute path>`. On changed content, the package checks this plist and runtime, waits boundedly for bootout before bootstrapping only that job, and requires a stable new launchd PID plus bounded guest-home readiness at the configured web host/port before recording success. A failed bootstrap/readiness check attempts bounded recovery of the same job and still reports the initial failure. No raw signals, generic service manager, or LaunchAgent installation is added. Rendering/init does not require systemd. No automatic release, production migration, service activation, SSH discovery or account redemption occurs on installation. This guide describes operator-authorized actions, not a completed production cutover.
 
 ## Generic source and runtime tree
 
@@ -90,7 +90,7 @@ Use the existing owned service names rather than introducing a second portable w
 
 ## Controls and maintenance
 
-Controls require complete login, reviewed HTTPS `CHATGLANCE_PUBLIC_ORIGIN`, a private account-limits page and a loopback control port. After reviewing configuration:
+Controls require complete login, reviewed HTTPS `CHATGLANCE_PUBLIC_ORIGIN`, a private account-limits page and a control port. `CHATGLANCE_CONTROL_HOST` defaults to `127.0.0.1`; only an explicitly reviewed RFC1918 IPv4 address (or a one-process `runtime controls --host` override) may bind a private interface. The native Go `server.host` also accepts only literal IPv4 loopback/RFC1918 for delegated login; the exact `/account-limits` guest-denied and cookie-accepted probes use that configured address with no proxy or redirects. Wildcard, public and hostname binds are rejected. Binding does not change same-origin checks, one-time CSRF, credit confirmation or endpoint validation. After reviewing configuration:
 
 ```bash
 chatglance runtime install --controls --page account-limits

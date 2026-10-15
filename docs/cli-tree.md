@@ -17,7 +17,7 @@ chatglance
 │   └── render-single-origin-optional-login [--config CONFIG-PATH] [--inventory INVENTORY-PATH] [--output OUTPUT-PATH]  # Write a private single-instance optional-login candidate without publishing it.
 ├── account-limits  # Render the `订阅详情` Glance page.
 │   ├── collect [--profiles PROFILES] [--output OUTPUT-PATH] [--history HISTORY-PATH] [--timeout TIMEOUT] [--reset-timeout RESET-TIMEOUT] [--no-public-reset] [--reset-policies RESET-POLICIES] [--reset-base-url RESET-BASE-URL] [--execute-resets] [--fail-on-profile-error]  # Scan usage/reset cards without model requests and write a safe snapshot.
-│   ├── control-serve [--runtime-home RUNTIME-HOME] [--public-origin PUBLIC-ORIGIN] [--port PORT]  # Serve authenticated reset switches on loopback; never redeem cards.
+│   ├── control-serve [--runtime-home RUNTIME-HOME] [--public-origin PUBLIC-ORIGIN] [--host HOST] [--port PORT]  # Serve authenticated reset switches on a reviewed bind; never redeem cards.
 │   ├── json [--data DATA-PATH] [--output OUTPUT-PATH]  # Write normalized, redacted account/quota JSON.
 │   ├── render-page [--data DATA-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME] [--page-slug PAGE-SLUG] [--widget-title WIDGET-TITLE]  # Write the `订阅详情` page YAML from account-limits JSON.
 │   └── update-config [--data DATA-PATH] [--config CONFIG-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME] [--page-slug PAGE-SLUG] [--widget-title WIDGET-TITLE]  # Write a config copy with the generated account-limits page replaced.
@@ -33,7 +33,7 @@ chatglance
 ├── runtime  # Maintain a durable Glance service runtime.
 │   ├── adopt [--runtime-home RUNTIME-HOME] [--public-origin PUBLIC-ORIGIN] [--control-port CONTROL-PORT] [--replace-provider] [--apply]  # Import existing login accounts into typed ChatEnv without losing pages.
 │   ├── check [--runtime-home RUNTIME-HOME] [--live]  # Validate Go config and report installed-code, binary and owned-file evidence.
-│   ├── controls [--runtime-home RUNTIME-HOME]  # Run explicitly provisioned authenticated loopback controls.
+│   ├── controls [--runtime-home RUNTIME-HOME] [--host HOST]  # Run explicitly provisioned authenticated controls.
 │   ├── history  # Inspect and prune package-owned refresh run history.
 │   │   ├── list [--runtime-home RUNTIME-HOME] [--limit LIMIT]  # List newest refresh runs without changing journal state.
 │   │   ├── prune [--runtime-home RUNTIME-HOME] [--retention-days RETENTION-DAYS] [--max-bytes MAX-BYTES] [--apply]  # Preview age/size pruning, or apply it explicitly.
@@ -84,7 +84,7 @@ chatglance
 │   └── render-single-origin-optional-login  # Write a private single-instance optional-login candidate without publishing it.
 ├── account-limits  # Render the `订阅详情` Glance page.
 │   ├── collect  # Scan usage/reset cards without model requests and write a safe snapshot.
-│   ├── control-serve  # Serve authenticated reset switches on loopback; never redeem cards.
+│   ├── control-serve  # Serve authenticated reset switches on a reviewed bind; never redeem cards.
 │   ├── json  # Write normalized, redacted account/quota JSON.
 │   ├── render-page  # Write the `订阅详情` page YAML from account-limits JSON.
 │   └── update-config  # Write a config copy with the generated account-limits page replaced.
@@ -100,7 +100,7 @@ chatglance
 ├── runtime  # Maintain a durable Glance service runtime.
 │   ├── adopt  # Import existing login accounts into typed ChatEnv without losing pages.
 │   ├── check  # Validate Go config and report installed-code, binary and owned-file evidence.
-│   ├── controls  # Run explicitly provisioned authenticated loopback controls.
+│   ├── controls  # Run explicitly provisioned authenticated controls.
 │   ├── history  # Inspect and prune package-owned refresh run history.
 │   │   ├── list  # List newest refresh runs without changing journal state.
 │   │   ├── prune  # Preview age/size pruning, or apply it explicitly.

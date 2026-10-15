@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import sys
 import tempfile
 from typing import Any, Callable, Iterable, Iterator, Sequence
 from uuid import uuid4
@@ -291,7 +292,71 @@ def _valid_run_record(value: dict[str, Any] | None, *, run_id: str | None = None
     )
 
 
+def _darwin_process_start(pid: int) -> str | None:
+    """Return libproc's microsecond process birth identity on Darwin."""
+
+    if type(pid) is not int or pid <= 0:
+        return None
+    try:
+        import ctypes
+
+        class ProcBSDInfo(ctypes.Structure):
+            _fields_ = [
+                ("pbi_flags", ctypes.c_uint32),
+                ("pbi_status", ctypes.c_uint32),
+                ("pbi_xstatus", ctypes.c_uint32),
+                ("pbi_pid", ctypes.c_uint32),
+                ("pbi_ppid", ctypes.c_uint32),
+                ("pbi_uid", ctypes.c_uint32),
+                ("pbi_gid", ctypes.c_uint32),
+                ("pbi_ruid", ctypes.c_uint32),
+                ("pbi_rgid", ctypes.c_uint32),
+                ("pbi_svuid", ctypes.c_uint32),
+                ("pbi_svgid", ctypes.c_uint32),
+                ("rfu_1", ctypes.c_uint32),
+                ("pbi_comm", ctypes.c_char * 16),
+                ("pbi_name", ctypes.c_char * 32),
+                ("pbi_nfiles", ctypes.c_uint32),
+                ("pbi_pgid", ctypes.c_uint32),
+                ("pbi_pjobc", ctypes.c_uint32),
+                ("e_tdev", ctypes.c_uint32),
+                ("e_tpgid", ctypes.c_uint32),
+                ("pbi_nice", ctypes.c_int32),
+                ("pbi_start_tvsec", ctypes.c_uint64),
+                ("pbi_start_tvusec", ctypes.c_uint64),
+            ]
+
+        library = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+        proc_pidinfo = library.proc_pidinfo
+        proc_pidinfo.argtypes = [
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint64,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        ]
+        proc_pidinfo.restype = ctypes.c_int
+        info = ProcBSDInfo()
+        size = ctypes.sizeof(info)
+        observed = proc_pidinfo(pid, 3, 0, ctypes.byref(info), size)
+        if (
+            observed != size
+            or info.pbi_pid != pid
+            or info.pbi_start_tvsec <= 0
+            or not 0 <= info.pbi_start_tvusec < 1_000_000
+        ):
+            return None
+        return f"darwin:{info.pbi_start_tvsec}:{info.pbi_start_tvusec:06d}"
+    except (AttributeError, OSError, OverflowError, TypeError, ValueError):
+        return None
+
+
 def _process_start(pid: int) -> str | None:
+    if sys.platform == "darwin":
+        try:
+            return _darwin_process_start(pid)
+        except Exception:
+            return None
     try:
         text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
         # The command name can contain spaces and parentheses.  Fields after the

@@ -114,9 +114,9 @@ def test_note_save_publishes_existing_snapshot_without_collection(tmp_path, monk
     (root / "data/server-status.json").write_text(json.dumps(data))
     restarts = []
     monkeypatch.setattr('chatglance.runtime.validate_glance_config', lambda *args: None)
-    monkeypatch.setattr(refresh, "_restart", lambda service: restarts.append(service))
+    monkeypatch.setattr(refresh, "_restart", lambda service, runtime_home: restarts.append((service, runtime_home)))
     assert page_control.publish_notes(root, "fixture-host", "Operator <note>", "0")["revision"] == "1"
-    assert restarts == ["chatarch-glance.service"]
+    assert restarts == [("chatarch-glance.service", root)]
     assert json.loads((root / "data/server-status.json").read_text()) == data
     published = (root / "data/server-page.yml").read_text()
     assert observed in published and "Operator &lt;note&gt;" in published
@@ -268,7 +268,7 @@ def test_page_refresh_is_explicit_and_single_flight(tmp_path, monkeypatch):
         assert app.status("projects")["run_id"] == accepted["run_id"]
         assert calls == [{"pages": ["projects"], "scheduled": False, "actual_cli_tree": False,
                           "runtime_home": runtime, "source": "browser", "run_id": accepted["run_id"],
-                          "allow_offline_regression": None}]
+                          "allow_offline_regression": None, "service_name": "chatarch-glance.service"}]
     finally:
         release.set()
 

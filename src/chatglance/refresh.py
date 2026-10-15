@@ -18,7 +18,7 @@ from typing import Any, Sequence
 import yaml
 from chatenv import get_paths
 from .glance_config import replace_projects_page
-from .runtime import validate_glance_config
+from .runtime import restart_user_service, validate_glance_config
 
 PAGE_SPECS = {
     "projects": ("项目", "chatarch-projects.json", "projects-page.yml"),
@@ -231,8 +231,8 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
     return PageUpdate(key, data, build_projects_page(data), {"project-cli-tree-report.tsv": _cli_report(data)})
 
 
-def _restart(service: str) -> None:
-    subprocess.run(["systemctl", "--user", "restart", service], check=True, capture_output=True, text=True, timeout=45)
+def _restart(service: str, runtime_home: Path) -> None:
+    restart_user_service(service, runtime_home)
 
 
 def _publish(root: Path, stage: Path, payloads: dict[Path, str]) -> str | None:
@@ -471,8 +471,8 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
                         backup_id=Path(result["backup_dir"]).name,
                     )
                     try:
-                        _restart(service_name)
-                    except (OSError, subprocess.SubprocessError) as exc:
+                        _restart(service_name, root)
+                    except (OSError, subprocess.SubprocessError, ValueError, RuntimeError) as exc:
                         raise RefreshError("artifacts published, but service restart failed") from exc
                     result["restarted"] = True
                     restart_status = "completed"

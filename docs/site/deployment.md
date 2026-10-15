@@ -10,7 +10,7 @@
 
 项目「概览」旁的原生刷新图标需要维护版 Go `chatarch-v0.2.1` 或更新版本的 `header-controls-url` 支持；旧二进制不能显示这个入口。Python 与 Go 版本独立，升级时先部署已校验的新 Go 二进制，再重渲染页面。
 
-管理部署支持 Linux/POSIX、user systemd、隔离的 Python 安装环境与适合目标架构的维护版 Go 二进制。init/渲染可以不使用 systemd。安装不自动发布、迁移生产、启动服务、发现 SSH 主机或消费重置卡。本指南不是已完成生产切换的声明。
+完整 managed installer 仍以 Linux user systemd 为默认；macOS 不复用 Linux ownership manifest，可由操作者提供仅调用已安装 `chatglance refresh` / `runtime maintain` 原生入口的薄 LaunchAgent，并显式传入页面与 scheduled policy。Mac web 使用既有产品标签 `chatarch-glance.service`（同名 `~/Library/LaunchAgents/chatarch-glance.service.plist`）；其 `ProgramArguments` 必须是已安装 Python 的 `-m chatglance.cli runtime serve --runtime-home <审核过的绝对路径>`。内容变化时先核对该 plist/运行目录，有限等待 bootout 完成后再对同一 job bootstrap，并要求稳定的新 launchd PID 与配置内 web host/port 的 guest 首页 HTTP 就绪；bootstrap/就绪失败时有限尝试恢复同一 job，仍如实报告初次失败。不发送 raw signal，也不提供通用 service manager 或安装 LaunchAgent。init/渲染不依赖 systemd。安装不自动发布、迁移生产、启动服务、发现 SSH 主机或消费重置卡。本指南不是已完成生产切换的声明。
 
 ## 完整通用目录
 
@@ -85,7 +85,7 @@ adopt 保留**完全相同签名 key 和所有 bcrypt hash**，因此既有登�
 
 ## 控制、维护、更新与回滚
 
-控制需要完整登录、私有 account-limits 页面、HTTPS `CHATGLANCE_PUBLIC_ORIGIN` 和回环控制端口。审查后 `runtime install --controls --page account-limits --apply` 安装，`runtime controls` 显式前台运行。可选 `runtime install --maintenance --apply`。不写重复凭据 EnvironmentFile。nginx 示例包含同源 `/_chatglance/reset-policy/`、登录路由及 `/项目` 到 `/projects` 旧路径重定向；操作者设置域名/TLS/上游端口，CLI 不安装或 reload nginx。
+控制需要完整登录、私有 account-limits 页面、HTTPS `CHATGLANCE_PUBLIC_ORIGIN` 和控制端口。`CHATGLANCE_CONTROL_HOST` 默认 `127.0.0.1`；只有审查后的显式 RFC1918 IPv4（或一次性 `runtime controls --host`）可绑定私有接口，`0.0.0.0`、公网地址和主机名均拒绝。Go 原生 `server.host` 同样只允许 literal IPv4 loopback/RFC1918；登录委托对该地址的 `/account-limits` 继续作 guest-denied 和 cookie-accepted 检查，不借代理或跳转。bind 不改变同源检查、一次性 CSRF、额度确认或 endpoint 校验。审查后 `runtime install --controls --page account-limits --apply` 安装，`runtime controls` 显式前台运行。可选 `runtime install --maintenance --apply`。不写重复凭据 EnvironmentFile。nginx 示例包含同源 `/_chatglance/reset-policy/`、登录路由及 `/项目` 到 `/projects` 旧路径重定向；操作者设置域名/TLS/上游端口，CLI 不安装或 reload nginx。
 
 ```bash
 chatglance runtime check --runtime-home "$CHATARCH_HOME/glance" --live
