@@ -46,7 +46,7 @@ chatglance refresh account-limits --json-output
 
 省略 `--execute` 只预览配置变更。`subscriptions --env-profile dashboard-a` 只编辑该命名 ChatGlance profile，不激活它；`--home` 选择明确的 ChatArch home。跟踪启用与自动用卡是两个概念：新账号政策默认关闭，启用跟踪不会开启用卡；已有政策不变。移除停止跟踪和旧小窗访问，但保留策略、台账及身份墓碑，不撤销可能共享的凭据。`list --all` 可查看移除引用；同名不得换绑另一账号。
 
-未配置新字段时兼容原 `PROFILES`、单个 `CRS_PROFILE` 和 `CRS_ACCOUNTS`；首次管理写入会无损迁移明确的旧映射。显式 `{}`、全部停用或全部移除表示零条有效跟踪，不从旧快照复活账号。批次结构错误在任何账号/公共来源请求和采集输出前拒绝；单账号上游失败如实显示 partial/error，不回退本机 OAuth，也不遮蔽其他健康账号。
+未配置新字段时兼容原 `PROFILES`、单个 `CRS_PROFILE` 和 `CRS_ACCOUNTS`；首次管理写入会无损迁移明确的旧映射。显式 `{}`、全部停用或全部移除表示零条有效跟踪，不从旧快照复活账号。批次结构错误在任何账号/公共来源请求和采集输出前拒绝；单账号上游失败如实显示 partial/error，不回退本机 OAuth，也不遮蔽其他健康账号。采集、首次迁移、跟踪修改和用卡控制共享同一 ChatArch home 下的配置锁，不依赖 runtime 放置路径；忙碌时本次操作不执行。已有孤立策略但无可证明身份的 label 不能绑定新账号，应使用新 label。
 
 ## 页面操作反馈
 

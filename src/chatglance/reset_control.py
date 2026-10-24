@@ -117,19 +117,19 @@ def _subscription_guard(operation):
     def guarded(self, values, cookie, origin):
         if origin != self.public_origin:
             raise ControlError("拒绝跨站操作", 403)
-        from .subscriptions import parse_subscriptions
-        from .refresh import _refresh_lock, RefreshError
+        from .subscriptions import parse_subscriptions, subscription_lock
+        from .refresh import RefreshError
         try:
-            registry = parse_subscriptions(collection_settings(home=self.home).get("subscriptions"))
+            parse_subscriptions(collection_settings(home=self.home).get("subscriptions"))
         except ValueError:
             raise ControlError("账号跟踪配置不可用", 503) from None
-        if registry is None:
-            return operation(self, values, cookie, origin)
         try:
-            with _refresh_lock(get_paths(self.home).home_dir / "glance"):
+            with subscription_lock(self.home):
                 return operation(self, values, cookie, origin)
         except RefreshError:
-            raise ControlError("刷新正在占用发布锁，请稍后重试", 409) from None
+            if operation.__name__ == "use_credit":
+                return {"state": "unmet", "reason": "busy", "checked_at": _iso_time()}
+            raise ControlError("账号设置或采集正在使用配置锁，请稍后重试", 409) from None
     return guarded
 
 

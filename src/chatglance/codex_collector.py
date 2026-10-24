@@ -525,6 +525,29 @@ def _managed_client_options(settings: dict, profiles: list[str]) -> dict:
     return {'client_factory': factory, 'token_service': 'CRS'}
 
 
+def _tracking_collection_guard(operation):
+    from functools import wraps
+    @wraps(operation)
+    def guarded(**kwargs):
+        from .subscriptions import parse_subscriptions, selected_profiles, subscription_lock
+        settings = collection_settings(home=kwargs.get('home'))
+        override = kwargs.get('reset_policies')
+        parse_policies(settings['reset_policies'] if override is None else override)
+        execute = kwargs.get('execute_resets')
+        if execute is not None and type(execute) is not bool:
+            raise ValueError('execute_resets must be boolean')
+        names = selected_profiles(settings, explicit=kwargs.get('profiles'))
+        if not names and parse_subscriptions(settings.get('subscriptions')) is None:
+            raise ValueError('At least one explicit Codex profile is required')
+        # Syntactic preflight before creating a lock file; repeat resolution
+        # inside ownership so a committed disable/migration cannot be ignored.
+        _managed_client_options(settings, names)
+        with subscription_lock(kwargs.get('home')):
+            return operation(**kwargs)
+    return guarded
+
+
+@_tracking_collection_guard
 def collect_account_limits(*, profiles=None, output_path: str | Path, history_path: str | Path | None = None,
                            timeout: float = 20, reset_timeout: float = 20, no_public_reset: bool = False,
                            reset_policies: str | None = None, reset_base_url: str | None = None,

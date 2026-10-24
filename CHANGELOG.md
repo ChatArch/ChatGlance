@@ -6,7 +6,7 @@
 
 - Add explicit per-account subscriptions backed by independent named CRS ChatEnv profiles, with dry-run-first list/add/enable/disable/remove CLI and importable APIs. Keep the legacy shared-profile mapping compatible until the first managed migration.
 - Keep an empty registry authoritative, validate the complete batch before I/O, retain removed-label identity fences, and deny stale account controls after tracking stops. Newly added accounts remain automatic-use disabled; tracking never issues or rewrites credentials.
-- Serialize registry changes and tracked-account policy/consume controls through the native publication owner while preserving independent provider failures as truthful partial results.
+- Serialize all account collection, legacy migration, registry changes and policy/consume controls through a per-ChatArch-home configuration owner, independent of runtime placement while preserving independent provider failures as truthful partial results.
 
 - Preserve an existing, explicitly paired optional-login guest home with the reviewed four-bookmark shape through project refresh, maintenance and candidate rendering. Continue generating the canonical two-bookmark home for first-time conversion and reject unsafe links or extra public content.
 - Preserve refresh PID-reuse fencing on macOS with native `libproc` process-birth identity while retaining Linux `/proc` behavior.

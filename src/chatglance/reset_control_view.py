@@ -55,6 +55,7 @@ MANUAL_SCRIPT = """(() => {
     forecast_unavailable: '未满足：预测不可用',
     cooldown: '未满足：冷却中', already_processed: '未满足：本窗口已处理',
     blocked_pending: '结果待确认：已阻断再次用卡', uncertain: '结果待确认：请勿重试',
+    busy: '账号设置或采集忙碌，本次未用卡',
     invalid_request: '操作未获授权，请刷新页面',
   };
   async function submitCredit(event, force = false) {

@@ -102,6 +102,16 @@ def _stored_settings(values):
             "crs_profile": values.get(LEGACY_CRS, ""), "crs_accounts": values.get(LEGACY_ACCOUNTS, "{}")}
 
 
+def subscription_lock(home=None):
+    """One configuration owner across all runtimes using this ChatArch home.
+
+    Reuse the native nonblocking lock primitive in a distinct namespace: a
+    collector may already hold its (possibly custom) publication lock.
+    """
+    from .refresh import _refresh_lock
+    return _refresh_lock(get_paths(home).home_dir / "chatglance" / "subscription-settings")
+
+
 def _registry(values):
     settings = _stored_settings(values)
     current = parse_subscriptions(settings["subscriptions"])
@@ -160,6 +170,8 @@ def _plan(values, action, name, crs_profile, account_id, enabled):
     from .codex_resets import parse_policies
     parse_policies(values.get(POLICIES))
     policies = json.loads(values.get(POLICIES) or "{}", object_pairs_hook=_unique)
+    if action == "add" and old is None and name in policies:
+        raise ValueError("Label already owns historical policy; choose a fresh label")
     if action == "add" and name not in policies:
         policies[name] = {"enabled": False}
         updated[POLICIES] = json.dumps(policies, ensure_ascii=False, separators=(",", ":"))
@@ -181,10 +193,8 @@ def change_subscription(action: str, name: str, *, crs_profile=None, account_id=
         SUBSCRIPTIONS, POLICIES, LEGACY_PROFILES, LEGACY_CRS, LEGACY_ACCOUNTS
     )):
         raise ValueError("Active collector environment overrides settings; select an explicit --env-profile")
-    from .refresh import _refresh_lock
-    # Same publication owner as native refresh; reload under lock to preserve
-    # settings changed after the preview. No profile/credential enumeration.
-    with _refresh_lock(get_paths(home).home_dir / "glance"):
+    # Reload under the configuration owner, independently of runtime placement.
+    with subscription_lock(home):
         values = _load(store, env_profile)
         updated, receipt = _plan(values, action, name, crs_profile, account_id, enabled)
         if env_profile is None:
