@@ -1,5 +1,6 @@
 from pathlib import Path
 import subprocess
+import sys
 
 import yaml
 from click.testing import CliRunner
@@ -66,6 +67,31 @@ def test_maintain_config_writes_backup_only_when_changed(tmp_path: Path):
     assert second.changed is False
     assert second.backup_path is None
     assert "项目" in config_path.read_text(encoding="utf-8")
+
+
+def test_maintain_config_reuses_canonical_glance_label_and_runtime(tmp_path: Path, monkeypatch):
+    import json
+    import chatglance.runtime as runtime_api
+
+    config_path = tmp_path / "glance.yml"
+    data_path = tmp_path / "chatarch-projects.json"
+    config_path.write_text(
+        yaml.safe_dump({"pages": [{"name": "ChatArch Projects"}]}, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    data_path.write_text(json.dumps(sample_inventory()), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(runtime_api, "restart_user_service", lambda service, root: calls.append((service, root)))
+
+    result = maintain_config(
+        config_path=config_path,
+        data_path=data_path,
+        restart_service="chatarch-glance.service",
+        runtime_home=tmp_path,
+    )
+
+    assert result.changed and result.restarted
+    assert calls == [("chatarch-glance.service", tmp_path)]
 
 
 def test_runtime_maintain_cli_uses_runtime_paths(tmp_path: Path):

@@ -5,8 +5,11 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import json
+import os
 from pathlib import Path
+import re
 import subprocess
+import sys
 import threading
 
 from click.testing import CliRunner
@@ -17,6 +20,7 @@ from chatglance.cli import main
 from chatglance.config import ChatGlanceConfig, history_settings
 from chatglance import page_control
 from chatglance import refresh
+from chatglance import refresh_history as history_api
 from chatglance.refresh_history import (
     DEFAULT_MAX_BYTES,
     DEFAULT_RETENTION_DAYS,
@@ -31,6 +35,57 @@ from chatglance.refresh_history import (
 
 
 UTC = timezone.utc
+
+
+def test_linux_process_birth_identity_keeps_proc_starttime(monkeypatch) -> None:
+    stat = "42 (fixture with spaces) S " + " ".join(["0"] * 18 + ["987654"])
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(
+        history_api.Path,
+        "read_text",
+        lambda path, **kwargs: stat if path == Path("/proc/42/stat") else "",
+    )
+
+    assert history_api._process_start(42) == "987654"
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Darwin native process identity")
+def test_darwin_process_birth_identity_is_native_and_dead_pid_fails_closed() -> None:
+    identity = history_api._process_start(os.getpid())
+
+    assert identity is not None
+    assert re.fullmatch(r"darwin:[1-9][0-9]*:[0-9]{1,6}", identity)
+    assert history_api._process_start(2**31 - 1) is None
+
+
+def test_darwin_process_identity_error_fails_closed(monkeypatch) -> None:
+    calls = []
+
+    def unavailable(pid):
+        calls.append(pid)
+        raise OSError("controlled native fixture")
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(history_api, "_darwin_process_start", unavailable, raising=False)
+
+    assert history_api._process_start(123) is None
+    assert calls == [123]
+
+
+def test_pid_reuse_identity_mismatch_rejects_even_valid_lock(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(history_api, "_process_start", lambda pid: "darwin:200:2")
+    monkeypatch.setattr(history_api, "_lock_evidence_active", lambda *args: True)
+    record = {
+        "status": "running",
+        "run_id": "pid-reuse",
+        "process": {
+            "pid": 42,
+            "start": "darwin:100:1",
+            "owner_lock": {"device": 1, "inode": 2},
+        },
+    }
+
+    assert history_api._record_active(tmp_path, record) is False
 
 
 def runtime(tmp_path: Path) -> Path:

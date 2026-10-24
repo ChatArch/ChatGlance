@@ -2,6 +2,8 @@ import importlib
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
+import sys
 
 from click.testing import CliRunner
 import pytest
@@ -16,6 +18,238 @@ def test_manual_refresh_command_is_registered():
 def test_manual_refresh_has_importable_python_api():
     assert importlib.util.find_spec("chatglance.refresh") is not None
     assert callable(importlib.import_module("chatglance.refresh").refresh_runtime)
+
+
+def test_linux_restart_contract_stays_systemd(tmp_path, monkeypatch):
+    module = importlib.import_module("chatglance.refresh")
+    runtime = importlib.import_module("chatglance.runtime")
+    calls = []
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(runtime.subprocess, "run", lambda args, **kwargs: calls.append((args, kwargs)))
+
+    module._restart("chatarch-glance.service", tmp_path)
+
+    assert calls[0][0] == ["systemctl", "--user", "restart", "chatarch-glance.service"]
+
+
+def test_darwin_restart_uses_owned_plist_new_pid_and_http_readiness(tmp_path, monkeypatch):
+    module = importlib.import_module("chatglance.refresh")
+    runtime = importlib.import_module("chatglance.runtime")
+    import plistlib
+    root = tmp_path / "glance"
+    (root / "config").mkdir(parents=True)
+    (root / "config/glance.yml").write_text("server: {host: 192.168.1.7, port: 15678}\n")
+    agents = tmp_path / "Library/LaunchAgents"
+    agents.mkdir(parents=True)
+    plist = agents / "chatarch-glance.service.plist"
+    plist.write_bytes(plistlib.dumps({"Label": "chatarch-glance.service", "ProgramArguments": [
+        sys.executable, "-m", "chatglance.cli", "runtime", "serve", "--runtime-home", str(root),
+    ]}))
+    calls = []
+    states = ["state = running\n pid = 123\n", "state = running\n pid = 456\n", "state = running\n pid = 456\n"]
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(runtime.os, "getuid", lambda: plist.stat().st_uid)
+    monkeypatch.setattr(runtime.Path, "home", lambda: tmp_path)
+    def command(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout=states.pop(0) if args[1] == "print" else "")
+    monkeypatch.setattr(runtime.subprocess, "run", command)
+    monkeypatch.setattr(runtime, "_web_ready", lambda host, port: (host, port) == ("192.168.1.7", 15678), raising=False)
+
+    module._restart("chatarch-glance.service", root)
+
+    assert calls == [
+        ["/bin/launchctl", "print", f"gui/{runtime.os.getuid()}/chatarch-glance.service"],
+        ["/bin/launchctl", "bootout", "--wait", f"gui/{runtime.os.getuid()}/chatarch-glance.service"],
+        ["/bin/launchctl", "bootstrap", f"gui/{runtime.os.getuid()}", str(plist)],
+        ["/bin/launchctl", "print", f"gui/{runtime.os.getuid()}/chatarch-glance.service"],
+        ["/bin/launchctl", "print", f"gui/{runtime.os.getuid()}/chatarch-glance.service"],
+    ]
+
+    with pytest.raises(ValueError, match="Glance launchd label"):
+        module._restart("com.example.unowned", root)
+    assert len(calls) == 5
+
+
+@pytest.fixture
+def darwin_job(tmp_path, monkeypatch):
+    import plistlib
+    from chatglance import runtime
+    root = tmp_path / "glance"
+    (root / "config").mkdir(parents=True)
+    (root / "config/glance.yml").write_text("server: {host: 192.168.1.7, port: 15678}\n")
+    agents = tmp_path / "Library/LaunchAgents"
+    agents.mkdir(parents=True)
+    plist = agents / "chatarch-glance.service.plist"
+    plist.write_bytes(plistlib.dumps({"Label": "chatarch-glance.service", "ProgramArguments": [
+        sys.executable, "-m", "chatglance.cli", "runtime", "serve", "--runtime-home", str(root),
+    ]}))
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(runtime.os, "getuid", lambda: plist.stat().st_uid)
+    monkeypatch.setattr(runtime.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(runtime.time, "sleep", lambda delay: None)
+    return runtime, root, plist
+
+
+def test_darwin_bootout_wait_is_bounded_and_never_bootstraps_while_stopping(darwin_job, monkeypatch):
+    runtime, root, _ = darwin_job
+    calls = []
+    def command(args, **kwargs):
+        calls.append((args, kwargs))
+        if args[1] == "bootout":
+            raise subprocess.TimeoutExpired(args, kwargs["timeout"])
+        return subprocess.CompletedProcess(args, 0, stdout="state = running\n pid = 123\n")
+    monkeypatch.setattr(runtime.subprocess, "run", command)
+    with pytest.raises(subprocess.TimeoutExpired):
+        runtime.restart_user_service("chatarch-glance.service", root)
+    assert [call[0][1] for call in calls] == ["print", "bootout"]
+    assert calls[1][0] == ["/bin/launchctl", "bootout", "--wait", f"gui/{runtime.os.getuid()}/chatarch-glance.service"]
+    assert 0 < calls[1][1]["timeout"] <= 10
+
+
+def test_darwin_bootstrap_failure_retries_owned_plist_but_reports_original_failure(darwin_job, monkeypatch):
+    runtime, root, plist = darwin_job
+    calls = []
+    snapshots = iter([123, 456, 456])
+    def command(args, **kwargs):
+        calls.append(args)
+        if args[1] == "print":
+            return subprocess.CompletedProcess(args, 0, stdout=f"state = running\n pid = {next(snapshots)}\n")
+        if args[1] == "bootstrap" and sum(call[1] == "bootstrap" for call in calls) == 1:
+            raise subprocess.CalledProcessError(5, args)
+        return subprocess.CompletedProcess(args, 0, stdout="")
+    monkeypatch.setattr(runtime.subprocess, "run", command)
+    monkeypatch.setattr(runtime, "_web_ready", lambda host, port: True)
+    with pytest.raises(RuntimeError, match="recovered") as error:
+        runtime.restart_user_service("chatarch-glance.service", root)
+    assert isinstance(error.value.__cause__, subprocess.CalledProcessError)
+    assert [call for call in calls if call[1] == "bootstrap"] == [
+        ["/bin/launchctl", "bootstrap", f"gui/{runtime.os.getuid()}", str(plist)],
+    ] * 2
+
+
+def test_darwin_readiness_failure_retries_once_and_requires_stable_pid(darwin_job, monkeypatch):
+    runtime, root, plist = darwin_job
+    calls = []
+    snapshots = iter([123, 456, 789, 789])
+    def command(args, **kwargs):
+        calls.append(args)
+        if args[1] == "print":
+            return subprocess.CompletedProcess(args, 0, stdout=f"state = running\n pid = {next(snapshots, 789)}\n")
+        return subprocess.CompletedProcess(args, 0, stdout="")
+    monkeypatch.setattr(runtime.subprocess, "run", command)
+    monkeypatch.setattr(runtime, "_web_ready", lambda host, port: sum(call[1] == "bootstrap" for call in calls) == 2)
+    ticks = iter(range(100))
+    monkeypatch.setattr(runtime.time, "monotonic", lambda: next(ticks))
+    with pytest.raises(RuntimeError, match="recovered"):
+        runtime.restart_user_service("chatarch-glance.service", root)
+    assert [call for call in calls if call[1] == "bootstrap"] == [
+        ["/bin/launchctl", "bootstrap", f"gui/{runtime.os.getuid()}", str(plist)],
+    ] * 2
+
+
+def test_darwin_failed_recovery_preserves_original_bootstrap_error(darwin_job, monkeypatch):
+    runtime, root, _ = darwin_job
+    calls = []
+    def command(args, **kwargs):
+        calls.append(args)
+        if args[1] == "print":
+            return subprocess.CompletedProcess(args, 0, stdout="state = running\n pid = 123\n")
+        if args[1] == "bootstrap":
+            raise subprocess.CalledProcessError(5, args)
+        return subprocess.CompletedProcess(args, 0, stdout="")
+    monkeypatch.setattr(runtime.subprocess, "run", command)
+    with pytest.raises(RuntimeError, match="recovery failed") as error:
+        runtime.restart_user_service("chatarch-glance.service", root)
+    assert isinstance(error.value.__cause__, subprocess.CalledProcessError)
+    assert sum(call[1] == "bootstrap" for call in calls) == 2
+
+
+def test_darwin_restart_rejects_mismatched_plist_without_lifecycle(tmp_path, monkeypatch):
+    import plistlib
+    from chatglance import runtime
+    root = tmp_path / "glance"
+    (root / "config").mkdir(parents=True)
+    (root / "config/glance.yml").write_text("server: {host: 127.0.0.1, port: 15678}\n")
+    agents = tmp_path / "Library/LaunchAgents"
+    agents.mkdir(parents=True)
+    (agents / "chatarch-glance.service.plist").write_bytes(plistlib.dumps({
+        "Label": "chatarch-glance.service", "ProgramArguments": ["/bin/echo", "unowned"],
+    }))
+    calls = []
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(runtime.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(runtime.subprocess, "run", lambda *args, **kwargs: calls.append(args))
+    with pytest.raises(ValueError, match="LaunchAgent"):
+        runtime.restart_user_service("chatarch-glance.service", root)
+    assert calls == []
+
+
+def test_darwin_restart_rejects_writable_or_unowned_plist_before_bootout(tmp_path, monkeypatch):
+    import plistlib
+    from chatglance import runtime
+    root = tmp_path / "glance"
+    root.mkdir()
+    agents = tmp_path / "Library/LaunchAgents"
+    agents.mkdir(parents=True)
+    plist = agents / "chatarch-glance.service.plist"
+    plist.write_bytes(plistlib.dumps({"Label": "chatarch-glance.service", "ProgramArguments": [
+        sys.executable, "-m", "chatglance.cli", "runtime", "serve", "--runtime-home", str(root),
+    ]}))
+    plist.chmod(0o666)
+    calls = []
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(runtime.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(runtime.subprocess, "run", lambda *args, **kwargs: calls.append(args))
+    with pytest.raises(ValueError, match="LaunchAgent"):
+        runtime.restart_user_service("chatarch-glance.service", root)
+    assert calls == []
+
+
+@pytest.mark.parametrize("status,expected", [(200, True), (303, True), (500, False)])
+def test_web_readiness_probes_only_guest_home_without_redirects(monkeypatch, status, expected):
+    from chatglance import runtime
+    requests = []
+    class Connection:
+        def __init__(self, host, port, timeout):
+            requests.append((host, port, timeout))
+        def request(self, method, path):
+            requests.append((method, path))
+        def getresponse(self):
+            return type("Response", (), {"status": status})()
+        def close(self):
+            requests.append("closed")
+    monkeypatch.setattr(runtime.http.client, "HTTPConnection", Connection)
+    assert runtime._web_ready("192.168.1.7", 15678) is expected
+    assert requests == [("192.168.1.7", 15678, 1), ("GET", "/"), "closed"]
+
+
+@pytest.mark.parametrize("next_state,ready", [
+    ("state = running\n pid = 123\n", True),
+    ("state = waiting\n pid = 456\n", True),
+    ("state = running\n pid = 456\n", False),
+])
+def test_darwin_restart_does_not_accept_old_or_unready_process(tmp_path, monkeypatch, next_state, ready):
+    import plistlib
+    from chatglance import runtime
+    root = tmp_path / "glance"
+    (root / "config").mkdir(parents=True)
+    (root / "config/glance.yml").write_text("server: {host: 127.0.0.1, port: 15678}\n")
+    agents = tmp_path / "Library/LaunchAgents"
+    agents.mkdir(parents=True)
+    (agents / "chatarch-glance.service.plist").write_bytes(plistlib.dumps({
+        "Label": "chatarch-glance.service", "ProgramArguments": [sys.executable, "-m", "chatglance.cli", "runtime", "serve", "--runtime-home", str(root)],
+    }))
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(runtime.Path, "home", lambda: tmp_path)
+    snapshots = iter(["state = running\n pid = 123\n", next_state])
+    monkeypatch.setattr(runtime.subprocess, "run", lambda args, **kwargs: subprocess.CompletedProcess(args, 0, stdout=(next(snapshots, next_state) if args[1] == "print" else "")))
+    monkeypatch.setattr(runtime, "_web_ready", lambda host, port: ready, raising=False)
+    monkeypatch.setattr(runtime.time, "sleep", lambda delay: None, raising=False)
+    ticks = iter(range(100))
+    monkeypatch.setattr(runtime.time, "monotonic", lambda: next(ticks), raising=False)
+    with pytest.raises((RuntimeError, TimeoutError), match="restart|readiness"):
+        runtime.restart_user_service("chatarch-glance.service", root)
 
 
 @pytest.fixture
@@ -48,7 +282,7 @@ def configure_fake_collection(monkeypatch, module, *, failing=(), partial=()):
         return module.PageUpdate(key, {"generated_at": "fresh", "counts": {}}, {"name": names[key], "slug": key, "columns": []}, partial=key in partial)
     monkeypatch.setattr(module, "_collect_page", collect)
     monkeypatch.setattr(module, "validate_glance_config", lambda *a: None)
-    monkeypatch.setattr(module, "_restart", lambda service: restarts.append(service))
+    monkeypatch.setattr(module, "_restart", lambda service, root: restarts.append(service))
     return calls, restarts
 
 

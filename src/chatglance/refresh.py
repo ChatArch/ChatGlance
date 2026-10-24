@@ -18,7 +18,7 @@ from typing import Any, Sequence
 import yaml
 from chatenv import get_paths
 from .glance_config import replace_projects_page
-from .runtime import validate_glance_config
+from .runtime import restart_user_service, validate_glance_config
 
 PAGE_SPECS = {
     "projects": ("项目", "chatarch-projects.json", "projects-page.yml"),
@@ -176,9 +176,10 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
         from .codex_collector import collect_account_limits, parse_profiles
         from .config import collection_settings
         from .account_limits import build_account_limits_page
-        configured = collection_settings().get("profiles", "")
-        selected = list(profiles or parse_profiles(configured) or [item["profile"] for item in previous.get("codex", []) if item.get("profile")])
-        if not selected:
+        from .subscriptions import parse_subscriptions, selected_profiles
+        settings = collection_settings()
+        selected = selected_profiles(settings, explicit=profiles, fallback=[item["profile"] for item in previous.get("codex", []) if item.get("profile")])
+        if not selected and parse_subscriptions(settings.get("subscriptions")) is None:
             raise RefreshError("no configured account profiles")
         data = collect_account_limits(
             profiles=selected, output_path=stage / "account-limits.json",
@@ -231,8 +232,8 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
     return PageUpdate(key, data, build_projects_page(data), {"project-cli-tree-report.tsv": _cli_report(data)})
 
 
-def _restart(service: str) -> None:
-    subprocess.run(["systemctl", "--user", "restart", service], check=True, capture_output=True, text=True, timeout=45)
+def _restart(service: str, runtime_home: Path) -> None:
+    restart_user_service(service, runtime_home)
 
 
 def _publish(root: Path, stage: Path, payloads: dict[Path, str]) -> str | None:
@@ -471,8 +472,8 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
                         backup_id=Path(result["backup_dir"]).name,
                     )
                     try:
-                        _restart(service_name)
-                    except (OSError, subprocess.SubprocessError) as exc:
+                        _restart(service_name, root)
+                    except (OSError, subprocess.SubprocessError, ValueError, RuntimeError) as exc:
                         raise RefreshError("artifacts published, but service restart failed") from exc
                     result["restarted"] = True
                     restart_status = "completed"

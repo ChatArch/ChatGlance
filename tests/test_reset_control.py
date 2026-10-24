@@ -301,6 +301,40 @@ def test_upstream_error_is_not_evidence_of_an_auth_challenge(tmp_path, monkeypat
     assert app.authorized(COOKIE) is False
 
 
+@pytest.mark.parametrize("host", ["192.168.1.7", "127.0.0.1"])
+def test_glance_login_delegate_uses_reviewed_native_host_and_both_cookie_probes(tmp_path, monkeypatch, host):
+    import io
+    from chatglance import reset_control
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config/glance.yml").write_text(
+        f"server: {{host: {host}, port: 15678}}\nauth: {{users: {{demo: {{}}}}, secret-key: synthetic}}\n"
+    )
+    seen = []
+    class Upstream:
+        def open(self, request, timeout):
+            seen.append((request.full_url, request.get_header("Cookie"), timeout))
+            if not request.get_header("Cookie"):
+                raise urllib.error.HTTPError(request.full_url, 303, "login", {}, io.BytesIO())
+            return type("Reply", (), {"status": 200, "__enter__": lambda self: self, "__exit__": lambda self, *args: None})()
+    monkeypatch.setattr(reset_control, "build_opener", lambda *args: Upstream())
+    app = reset_control.ControlApp(runtime_home=tmp_path, public_origin=ORIGIN)
+    assert app.authorized(COOKIE) is True
+    assert seen == [(f"http://{host}:15678/account-limits", None, 3),
+                    (f"http://{host}:15678/account-limits", COOKIE, 3)]
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "203.0.113.7", "example.invalid"])
+def test_glance_login_delegate_rejects_unsupported_host_before_probe(tmp_path, monkeypatch, host):
+    from chatglance import reset_control
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config/glance.yml").write_text(
+        f"server: {{host: {host}, port: 15678}}\nauth: {{users: {{demo: {{}}}}, secret-key: synthetic}}\n"
+    )
+    monkeypatch.setattr(reset_control, "build_opener", lambda *args: pytest.fail("unexpected probe"))
+    with pytest.raises(reset_control.ControlError):
+        reset_control.glance_authenticator(tmp_path)
+
+
 def test_live_switch_writes_change_unified_readiness_not_business_facts(control):
     server, _, base = control
 
@@ -324,12 +358,33 @@ def test_live_switch_writes_change_unified_readiness_not_business_facts(control)
     assert 'data-automation="ready"' in request(base)[1]
 
 
-def test_wildcard_bind_is_not_supported(tmp_path):
+def test_explicit_private_bind_keeps_the_same_authenticator(tmp_path, monkeypatch):
+    api = importlib.import_module("chatglance.reset_control")
+    monkeypatch.setattr(api.ThreadingHTTPServer, "server_bind", lambda self: None)
+    monkeypatch.setattr(api.ThreadingHTTPServer, "server_activate", lambda self: None)
+
+    server = api.make_control_server(
+        runtime_home=tmp_path,
+        public_origin=ORIGIN,
+        host="192.168.88.1",
+        port=0,
+        authenticate=lambda cookie: cookie == COOKIE,
+    )
+    try:
+        assert server.server_address[0] == "192.168.88.1"
+        assert server.control_app.authorized(COOKIE) is True
+        assert server.control_app.authorized("forged") is False
+    finally:
+        server.server_close()
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "203.0.113.8", "localhost"])
+def test_wildcard_public_and_hostname_binds_are_not_supported(tmp_path, host):
     assert importlib.util.find_spec("chatglance.reset_control"), (
         "control server missing"
     )
     api = importlib.import_module("chatglance.reset_control")
     with pytest.raises(api.ControlError):
         api.make_control_server(
-            runtime_home=tmp_path, public_origin=ORIGIN, host="0.0.0.0", port=0
+            runtime_home=tmp_path, public_origin=ORIGIN, host=host, port=0
         )

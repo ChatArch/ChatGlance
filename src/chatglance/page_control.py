@@ -163,7 +163,7 @@ def publish_notes(root, alias, note, revision):
                     root / "data/server-page.yml": yaml.safe_dump(page, allow_unicode=True, sort_keys=False),
                 })
             if changed:
-                _restart("chatarch-glance.service")
+                _restart("chatarch-glance.service", root)
     return note_entry(root, alias)
 
 
@@ -363,6 +363,7 @@ class PageControlApp:
         try:
             result = refresh_runtime(runtime_home=self.root, pages=[page], scheduled=False, actual_cli_tree=False,
                                      source="browser", run_id=run_id,
+                                     service_name="chatarch-glance.service",
                                      allow_offline_regression=True if page == "servers" else None)
             row = result["pages"][0]
             state = "success" if result["ok"] else "partial" if row["status"] == "partial" else "error"

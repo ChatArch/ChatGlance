@@ -19,7 +19,8 @@ class ChatGlanceConfig(BaseEnvConfig):
     CHATGLANCE_LOGIN_ACCOUNTS = EnvField("CHATGLANCE_LOGIN_ACCOUNTS", default="{}", desc="Private indexed Go login account/hash map; never printed.", is_sensitive=True)
     CHATGLANCE_PUBLIC_ORIGIN = EnvField("CHATGLANCE_PUBLIC_ORIGIN", desc="Reviewed public origin for optional authenticated controls.")
     CHATGLANCE_WEB_PORT = EnvField("CHATGLANCE_WEB_PORT", default="8080", desc="Loopback Go web port.")
-    CHATGLANCE_CONTROL_PORT = EnvField("CHATGLANCE_CONTROL_PORT", default="5679", desc="Optional loopback controls port.")
+    CHATGLANCE_CONTROL_HOST = EnvField("CHATGLANCE_CONTROL_HOST", default="127.0.0.1", desc="Explicit IPv4 loopback or private-interface controls bind.")
+    CHATGLANCE_CONTROL_PORT = EnvField("CHATGLANCE_CONTROL_PORT", default="5679", desc="Optional controls port.")
     CHATGLANCE_PROJECTS_OWNER = EnvField("CHATGLANCE_PROJECTS_OWNER", default="", desc="Optional project inventory owner.")
     CHATGLANCE_REFRESH_PAGES = EnvField("CHATGLANCE_REFRESH_PAGES", default="", desc="Explicit non-consuming scheduled page names.")
     CHATGLANCE_REFRESH_INTERVAL = EnvField("CHATGLANCE_REFRESH_INTERVAL", default="30min", desc="Scheduled refresh interval.")
@@ -57,6 +58,11 @@ class ChatGlanceConfig(BaseEnvConfig):
         desc="Space- or comma-separated Codex profiles for manual refresh; empty uses the current snapshot.",
     )
 
+    CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS = EnvField(
+        "CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS", default="",
+        desc="Explicit tracking registry: label to CRS profile, account_id and enabled. Empty object disables all tracking.",
+        is_sensitive=True,
+    )
     CHATGLANCE_ACCOUNT_LIMITS_CRS_PROFILE = EnvField(
         "CHATGLANCE_ACCOUNT_LIMITS_CRS_PROFILE", default="",
         desc="Named CRS profile with a dedicated management Key; empty keeps local Codex mode.",
@@ -104,6 +110,7 @@ def collection_settings(*, home=None) -> dict:
     if legacy in values or legacy in os.environ:
         raise ValueError("Legacy global execution setting requires per-account migration before scanning")
     return {"profiles": resolve("CHATGLANCE_ACCOUNT_LIMITS_PROFILES", ""),
+            "subscriptions": resolve("CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS", ""),
             "crs_profile": resolve("CHATGLANCE_ACCOUNT_LIMITS_CRS_PROFILE", ""),
             "crs_accounts": resolve("CHATGLANCE_ACCOUNT_LIMITS_CRS_ACCOUNTS", "{}"),
             "reset_policies": resolve("CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES", "{}"),

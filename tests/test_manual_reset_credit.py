@@ -284,7 +284,7 @@ def test_force_concurrent_normal_share_pending_barrier(manual):
         results = list(pool.map(lambda values: request(app, "/use-credit", values=values),
                                 (action(app), force_action(app))))
     assert len(accounts["alpha"].posts) == 1
-    assert {json.loads(body)["reason"] for _, body, _ in results} <= {"uncertain", "blocked_pending", "state_error"}
+    assert {json.loads(body)["reason"] for _, body, _ in results} <= {"uncertain", "blocked_pending", "state_error", "busy"}
 
 
 @pytest.mark.parametrize("profile", ["alpha", "beta"])
@@ -385,7 +385,7 @@ def test_uncertain_and_concurrent_requests_share_ledger(manual):
         results = list(pool.map(lambda val: request(base, "/use-credit", values=val), values))
     assert len(accounts["alpha"].posts) == 1
     assert "uncertain" in {json.loads(body)["reason"] for _, body, _ in results}
-    assert {json.loads(body)["reason"] for _, body, _ in results} <= {"uncertain", "blocked_pending", "state_error"}
+    assert {json.loads(body)["reason"] for _, body, _ in results} <= {"uncertain", "blocked_pending", "state_error", "busy"}
     assert "DO_NOT_RENDER" not in str(results)
     from chatglance.codex_resets import ResetPolicy, scan_profile
     scheduled = scan_profile("alpha", client=accounts["alpha"], home=base.home,

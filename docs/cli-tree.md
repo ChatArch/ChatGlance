@@ -17,9 +17,15 @@ chatglance
 │   └── render-single-origin-optional-login [--config CONFIG-PATH] [--inventory INVENTORY-PATH] [--output OUTPUT-PATH]  # Write a private single-instance optional-login candidate without publishing it.
 ├── account-limits  # Render the `订阅详情` Glance page.
 │   ├── collect [--profiles PROFILES] [--output OUTPUT-PATH] [--history HISTORY-PATH] [--timeout TIMEOUT] [--reset-timeout RESET-TIMEOUT] [--no-public-reset] [--reset-policies RESET-POLICIES] [--reset-base-url RESET-BASE-URL] [--execute-resets] [--fail-on-profile-error]  # Scan usage/reset cards without model requests and write a safe snapshot.
-│   ├── control-serve [--runtime-home RUNTIME-HOME] [--public-origin PUBLIC-ORIGIN] [--port PORT]  # Serve authenticated reset switches on loopback; never redeem cards.
+│   ├── control-serve [--runtime-home RUNTIME-HOME] [--public-origin PUBLIC-ORIGIN] [--host HOST] [--port PORT]  # Serve authenticated reset switches on a reviewed bind; never redeem cards.
 │   ├── json [--data DATA-PATH] [--output OUTPUT-PATH]  # Write normalized, redacted account/quota JSON.
 │   ├── render-page [--data DATA-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME] [--page-slug PAGE-SLUG] [--widget-title WIDGET-TITLE]  # Write the `订阅详情` page YAML from account-limits JSON.
+│   ├── subscriptions [--env-profile ENV-PROFILE] [--home HOME]  # Manage explicit CRS account tracking; not credential or reset permissions.
+│   │   ├── add <NAME> [--crs-profile CRS-PROFILE] [--account-id ACCOUNT-ID] [--enabled] [--execute] [--json-output]  # Register an account through an existing profile; never rewrite its Key.
+│   │   ├── disable <NAME> [--execute] [--json-output]  # Pause tracking and deny stale account controls.
+│   │   ├── enable <NAME> [--execute] [--json-output]  # Resume tracking without enabling automatic card use.
+│   │   ├── list [--all] [--json-output]  # List tracked account/profile references without reading credentials.
+│   │   └── remove <NAME> [--execute] [--json-output]  # Stop tracking; retain history, policy and the label identity fence.
 │   └── update-config [--data DATA-PATH] [--config CONFIG-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME] [--page-slug PAGE-SLUG] [--widget-title WIDGET-TITLE]  # Write a config copy with the generated account-limits page replaced.
 ├── disks  # Patch Glance server-stats disk display.
 │   └── root-only [--config CONFIG-PATH] [--output OUTPUT-PATH] [--mountpoint MOUNTPOINT] [--name MOUNT-NAME]  # Write a config copy that hides default snap/loop mountpoints.
@@ -33,7 +39,7 @@ chatglance
 ├── runtime  # Maintain a durable Glance service runtime.
 │   ├── adopt [--runtime-home RUNTIME-HOME] [--public-origin PUBLIC-ORIGIN] [--control-port CONTROL-PORT] [--replace-provider] [--apply]  # Import existing login accounts into typed ChatEnv without losing pages.
 │   ├── check [--runtime-home RUNTIME-HOME] [--live]  # Validate Go config and report installed-code, binary and owned-file evidence.
-│   ├── controls [--runtime-home RUNTIME-HOME]  # Run explicitly provisioned authenticated loopback controls.
+│   ├── controls [--runtime-home RUNTIME-HOME] [--host HOST]  # Run explicitly provisioned authenticated controls.
 │   ├── history  # Inspect and prune package-owned refresh run history.
 │   │   ├── list [--runtime-home RUNTIME-HOME] [--limit LIMIT]  # List newest refresh runs without changing journal state.
 │   │   ├── prune [--runtime-home RUNTIME-HOME] [--retention-days RETENTION-DAYS] [--max-bytes MAX-BYTES] [--apply]  # Preview age/size pruning, or apply it explicitly.
@@ -84,9 +90,15 @@ chatglance
 │   └── render-single-origin-optional-login  # Write a private single-instance optional-login candidate without publishing it.
 ├── account-limits  # Render the `订阅详情` Glance page.
 │   ├── collect  # Scan usage/reset cards without model requests and write a safe snapshot.
-│   ├── control-serve  # Serve authenticated reset switches on loopback; never redeem cards.
+│   ├── control-serve  # Serve authenticated reset switches on a reviewed bind; never redeem cards.
 │   ├── json  # Write normalized, redacted account/quota JSON.
 │   ├── render-page  # Write the `订阅详情` page YAML from account-limits JSON.
+│   ├── subscriptions  # Manage explicit CRS account tracking; not credential or reset permissions.
+│   │   ├── add  # Register an account through an existing profile; never rewrite its Key.
+│   │   ├── disable  # Pause tracking and deny stale account controls.
+│   │   ├── enable  # Resume tracking without enabling automatic card use.
+│   │   ├── list  # List tracked account/profile references without reading credentials.
+│   │   └── remove  # Stop tracking; retain history, policy and the label identity fence.
 │   └── update-config  # Write a config copy with the generated account-limits page replaced.
 ├── disks  # Patch Glance server-stats disk display.
 │   └── root-only  # Write a config copy that hides default snap/loop mountpoints.
@@ -100,7 +112,7 @@ chatglance
 ├── runtime  # Maintain a durable Glance service runtime.
 │   ├── adopt  # Import existing login accounts into typed ChatEnv without losing pages.
 │   ├── check  # Validate Go config and report installed-code, binary and owned-file evidence.
-│   ├── controls  # Run explicitly provisioned authenticated loopback controls.
+│   ├── controls  # Run explicitly provisioned authenticated controls.
 │   ├── history  # Inspect and prune package-owned refresh run history.
 │   │   ├── list  # List newest refresh runs without changing journal state.
 │   │   ├── prune  # Preview age/size pruning, or apply it explicitly.
@@ -140,6 +152,6 @@ chatglance
 
 - `access render-public` 只读取显式 full config/inventory，并把 detached public candidates 写到同一个预先存在的非 symlink 目录内的两个不同路径；它以 mode `0600` stage/fsync 后成对原子替换，失败时回滚，但不发布到 live config、不触发 refresh。
 - `access render-single-origin-optional-login` 从既有私有 config 和完整 inventory 生成**同一实例**私有候选配置；输出必须是显式安全路径，不是公开下载文件，不能用旧双实例候选代替。
-- `projects`、`servers`、`sites`、`account-limits`、`disks` 和 `home` 命令只写显式传入的输出路径，不应输出 GitHub token、代理凭据或账户敏感值。
+- 页面采集/渲染命令只写显式输出路径；`account-limits subscriptions` 管理 ChatEnv 中的跟踪引用，写操作默认预览、`--execute` 才保存，不签发凭据或消费卡片。所有命令均不得输出 Token、代理凭据或密码。
 - `runtime maintain` 可替换 runtime config，并可按显式选项重启 service。
 - `runtime install-systemd` 与 `runtime start` 会修改或启动 user-level systemd 状态；`runtime status` 只回读安全状态字段。

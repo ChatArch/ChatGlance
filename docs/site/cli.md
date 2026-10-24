@@ -78,7 +78,13 @@ chatglance
     ├── control-serve
     ├── json
     ├── render-page
+    ├── subscriptions
+    │   ├── add
+    │   ├── disable
+    │   ├── enable
+    │   ├── list
+    │   └── remove
     └── update-config
 ```
 
-`collect` 处理账号用量与重置日历，`control-serve` 是现有受认证保护的本地开关服务；是否执行计划内重置由显式 `refresh --scheduled` 与每账号策略决定，不能从渲染页面推断可以消费。运行真实账号前核查权限与当前配置。
+`subscriptions` 通过 ChatEnv 管理明确的 CRS profile/账号引用，写操作默认预览、`--execute` 保存；跟踪开关不改变自动用卡政策。`collect` 处理账号用量与重置日历，缺省选择启用的跟踪记录；`control-serve` 是受认证保护的本地开关服务。是否执行计划内重置由显式 `refresh --scheduled` 与每账号策略决定，不能从渲染页面推断可以消费。运行真实账号前核查权限与当前配置。

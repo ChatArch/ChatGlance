@@ -39,10 +39,11 @@ def replace_projects_page(config: dict[str, Any], inventory: dict[str, Any], *, 
             raise ValueError("optional-login project name cannot be changed")
         updated = deepcopy(config)
         updated["pages"] = [_project_page(inventory, page) if page.get("name") == PAGE_NAME else page for page in updated["pages"]]
-        from .access import build_public_home_page
         for page in updated["pages"]:
             if page.get("name") == "ChatArch":
-                page["columns"] = build_public_home_page(projects_slug=PAGE_SLUG)["columns"]
+                # Keep reviewed guest bookmarks; only canonicalize the project
+                # link if an older optional-login project slug is replaced.
+                page["columns"][0]["widgets"][0]["groups"][0]["links"][0]["url"] = f"/{PAGE_SLUG}"
         return updated
     updated = deepcopy(config)
     pages = updated.setdefault("pages", [])

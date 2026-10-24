@@ -28,6 +28,22 @@ Subscription cards collapse reset information by default. Forecast details live 
 
 An explicit CRS profile containing a dedicated management Key and fixed account-ID mapping can route subscription collection entirely through the CRS service, keeping upstream OAuth server-owned. This mode requires the corresponding native CRS API and ChatCRS 0.3.5 or a newer compatible client; missing configuration, capabilities or authorization never fall back to local OAuth. Existing mode is not switched automatically, and manual refresh remains non-consuming. See [Codex reset policy](docs/codex-reset-policy.md) for configuration and migration boundaries.
 
+## Multiple tracked accounts (0.4.0)
+
+ChatEnv can store multiple named CRS profiles. Each tracking record now pins its own `crs_profile + account_id`; adding accounts no longer requires rewriting an existing shared Key. Provision scoped profiles through ChatCRS/CRS administration, then register their references:
+
+```bash
+# Mutations preview by default; --execute persists. New automatic use stays off.
+chatglance account-limits subscriptions add work --crs-profile reader-work --account-id account-01
+chatglance account-limits subscriptions add work --crs-profile reader-work --account-id account-01 --execute
+chatglance account-limits subscriptions list --json-output
+chatglance account-limits subscriptions disable work --execute
+chatglance account-limits subscriptions enable work --execute
+chatglance account-limits subscriptions remove work --execute
+```
+
+The typed `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` registry selects explicit accounts; it never scans credentials or adopts all remote accounts. Unset configuration preserves legacy behavior; the first managed write migrates the old records without changing their policies. An explicit `{}` means no tracking, with no snapshot fallback. Removal retains the identity fence, policy and ledger, and never revokes a Key. A label cannot silently change account. `subscriptions --env-profile NAME` edits a named ChatGlance profile without activating it. See [operations](docs/site/operations.en.md#multiple-tracked-accounts).
+
 ## Repository contents
 
 - `src/chatglance/`: helper code for project, server, and website-service card page generation, Glance YAML patching, runtime maintenance, and user-level systemd unit rendering/installation.
@@ -81,7 +97,7 @@ chatglance runtime check
 # Explicit start: runtime start --runtime-home "$CHATARCH_HOME/glance" --apply
 ```
 
-`runtime init --runtime-home DIR` honors `CHATARCH_HOME`, preserves existing files and refuses to silently upgrade an existing unauthenticated config on `--with-auth`. Login requires typed ChatEnv `CHATGLANCE_LOGIN_USER` (email accepted), `CHATGLANCE_LOGIN_SECRET` (**strict base64 decoding to exactly 64 bytes**) and bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH`. Managed login uses the selected typed EnvStore profile, ignoring inherited login/indexed-auth environment; non-auth process settings override typed defaults. Sensitive values enter only Go child environment, never YAML, scripts, units or argv. `CHATGLANCE_PROJECTS_OWNER`, `CHATGLANCE_REFRESH_PAGES` and `CHATGLANCE_REFRESH_INTERVAL` supply actual owner/page/timer defaults. Non-secret validated history defaults are `CHATGLANCE_REFRESH_HISTORY_RETENTION_DAYS=30` and `CHATGLANCE_REFRESH_HISTORY_MAX_BYTES=268435456`; explicit CLI options override applicable defaults. Controls require reviewed `CHATGLANCE_PUBLIC_ORIGIN`, `CHATGLANCE_CONTROL_PORT` and a private `/account-limits` page. CRS and GitHub keep their existing shared resolvers. See the [self-contained deployment guide](docs/site/deployment.en.md) for the full tree, proxy, managed activation, and migration boundaries.
+`runtime init --runtime-home DIR` honors `CHATARCH_HOME`, preserves existing files and refuses to silently upgrade an existing unauthenticated config on `--with-auth`. Login requires typed ChatEnv `CHATGLANCE_LOGIN_USER` (email accepted), `CHATGLANCE_LOGIN_SECRET` (**strict base64 decoding to exactly 64 bytes**) and bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH`. Managed login uses the selected typed EnvStore profile, ignoring inherited login/indexed-auth environment; non-auth process settings override typed defaults. Sensitive values enter only Go child environment, never YAML, scripts, units or argv. `CHATGLANCE_PROJECTS_OWNER`, `CHATGLANCE_REFRESH_PAGES` and `CHATGLANCE_REFRESH_INTERVAL` supply actual owner/page/timer defaults. Non-secret validated history defaults are `CHATGLANCE_REFRESH_HISTORY_RETENTION_DAYS=30` and `CHATGLANCE_REFRESH_HISTORY_MAX_BYTES=268435456`; explicit CLI options override applicable defaults. Controls require reviewed `CHATGLANCE_PUBLIC_ORIGIN`, `CHATGLANCE_CONTROL_HOST=127.0.0.1`, `CHATGLANCE_CONTROL_PORT` and a private `/account-limits` page; a non-loopback bind must be an explicit RFC1918 IPv4 address. CRS and GitHub keep their existing shared resolvers. See the [self-contained deployment guide](docs/site/deployment.en.md) for the full tree, proxy, managed activation, and migration boundaries.
 
 For a new machine that should host a similar but still customizable Glance site, start with the [quickstart](docs/site/quickstart.en.md): `glance.yml` / widgets / HTML/CSS remain the primary frontend configuration surface, while `chatglance` only manages collection, rendering, validation, backup, and replacement.
 

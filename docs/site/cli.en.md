@@ -78,7 +78,13 @@ chatglance
     ├── control-serve
     ├── json
     ├── render-page
+    ├── subscriptions
+    │   ├── add
+    │   ├── disable
+    │   ├── enable
+    │   ├── list
+    │   └── remove
     └── update-config
 ```
 
-`collect` handles account usage and the reset calendar. `control-serve` is an existing authenticated local toggle endpoint. Scheduled reset execution requires explicit `refresh --scheduled` and per-account policy; rendering a page does not authorize consumption. Review access controls before using real accounts.
+`subscriptions` manages explicit CRS profile/account references through ChatEnv; mutations preview unless `--execute` persists them, and tracking does not change automatic-use policy. `collect` handles account usage and the reset calendar, selecting enabled subscriptions by default. `control-serve` is an authenticated local toggle endpoint. Scheduled reset execution requires explicit `refresh --scheduled` and per-account policy; rendering a page does not authorize consumption. Review access controls before using real accounts.

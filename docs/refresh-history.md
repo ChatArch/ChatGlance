@@ -138,6 +138,12 @@ known completion immediately afterward. Recovery marks only the in-flight
 phase interrupted and later untouched phases not started. `list` and `show` calculate an
 `effective_status` without repairing or writing records.
 
+Process birth identity is kernel-backed on both supported hosts: Linux retains
+field 22 from `/proc/<pid>/stat`, while macOS reads the PID and microsecond start
+time from `libproc`. A dead PID, short/error result, changed birth time, or
+missing lock evidence fails closed; process existence alone is never accepted
+as PID-reuse proof.
+
 ## Retention, CLI, and APIs
 
 Typed ChatEnv/process settings are non-secret:

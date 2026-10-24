@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import ipaddress
 import os
 from pathlib import Path
+import re
 from typing import Any, Mapping
+from urllib.parse import urlsplit
 
 from .access import CandidateWriteError, _absolute_path, _safe_output_directory, _regular_target_or_missing, _stage_bytes, _fsync_directory, build_public_home_page
 from .projects import PAGE_NAME, PAGE_SLUG, build_projects_page
@@ -20,6 +23,61 @@ def _pages(config: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     if len(homes) != 1 or len(projects) != 1:
         raise ValueError("optional login requires exactly one ChatArch and one 项目 page")
     return homes[0], projects[0]
+
+
+def _reviewed_guest_home(home: Mapping[str, Any], projects_slug: str) -> bool:
+    """Accept only the static home or its existing four safe bookmarks."""
+
+    canonical = build_public_home_page(projects_slug=projects_slug)["columns"]
+    columns = home.get("columns")
+    if columns == canonical:
+        return True
+    try:
+        links = columns[0]["widgets"][0]["groups"][0]["links"]
+    except (IndexError, KeyError, TypeError):
+        return False
+    if (not isinstance(links, list) or len(links) != 4
+            or set(home) - set(_page_metadata(home)) - {"public", "columns", "authenticated-columns"}):
+        return False
+    shape = deepcopy(canonical)
+    shape[0]["widgets"][0]["groups"][0]["links"] = links
+    if columns != shape or links[0] != canonical[0]["widgets"][0]["groups"][0]["links"][0]:
+        return False
+    for link in links[1:]:
+        if not isinstance(link, dict) or set(link) != {"title", "url", "description", "icon"}:
+            return False
+        if any(not isinstance(link[key], str) or not 1 <= len(link[key]) <= 200
+               or not link[key].strip() or link[key] != link[key].strip()
+               or any(ord(char) < 32 or ord(char) == 127 or char in "<>\\" for char in link[key])
+               for key in ("title", "description", "icon")):
+            return False
+        if not re.fullmatch(r"si:[A-Za-z0-9-]+", link["icon"]):
+            return False
+        url = link["url"]
+        if (not isinstance(url, str) or len(url) > 2048
+                or any(char.isspace() or ord(char) < 32 or ord(char) == 127 or char in "<>\\" for char in url)):
+            return False
+        try:
+            parsed = urlsplit(url)
+            host = parsed.hostname
+            if (parsed.scheme != "https" or not host or parsed.username is not None
+                    or parsed.password is not None or parsed.port is not None
+                    or parsed.query or parsed.fragment or parsed.netloc.lower() != host):
+                return False
+        except ValueError:
+            return False
+        labels = host.split(".")
+        if (len(labels) < 2 or not any(char.isalpha() for char in labels[-1])
+                or labels[-1].lower() in {"local", "localhost", "internal", "lan", "home"}
+                or any(not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label) for label in labels)):
+            return False
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            pass
+        else:
+            return False
+    return True
 
 
 def optional_login_enabled(config: Mapping[str, Any]) -> bool:
@@ -41,7 +99,7 @@ def optional_login_enabled(config: Mapping[str, Any]) -> bool:
             raise ValueError("optional-login shared global content is not reviewed")
         if any(page.get("head-widgets") for page in (home, projects)):
             raise ValueError("public page head-widgets cannot be retained safely")
-        if home.get("columns") != build_public_home_page(projects_slug=projects.get("slug") or PAGE_NAME)["columns"]:
+        if not _reviewed_guest_home(home, projects.get("slug") or PAGE_NAME):
             raise ValueError("optional-login guest home layout is not reviewed")
         if any(page.get("public") is True for page in pages if page not in (home, projects)):
             raise ValueError("additional public pages require explicit review")
@@ -95,7 +153,8 @@ def build_single_origin_optional_login_config(config: Mapping[str, Any], invento
                 raise ValueError("home needs authenticated columns")
             page.clear()
             page.update(_page_metadata(home))
-            page["columns"] = build_public_home_page(projects_slug=PAGE_SLUG)["columns"]
+            page["columns"] = deepcopy(home["columns"]) if existing_mode else build_public_home_page(projects_slug=PAGE_SLUG)["columns"]
+            page["columns"][0]["widgets"][0]["groups"][0]["links"][0]["url"] = f"/{PAGE_SLUG}"
             page["authenticated-columns"] = deepcopy(original_columns)
             page["public"] = True
             page.pop("head-widgets", None)

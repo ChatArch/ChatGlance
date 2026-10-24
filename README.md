@@ -28,6 +28,22 @@
 
 可显式选择包含专用管理 Key 的 CRS 配置与固定账号映射，让订阅采集只调用 CRS 服务、上游 OAuth 留在服务端。该模式需要配套原生 CRS API 和 ChatCRS 0.3.5 或更新的兼容客户端；缺配置/能力/权限时不会回退到本地 OAuth，旧模式不被自动切换。手动刷新仍不消费。配置与迁移边界见 [Codex 重置策略](docs/codex-reset-policy.md)。
 
+## 多账号跟踪订阅（0.4.0）
+
+ChatEnv 可以保存多个 CRS 命名 profile；每条跟踪记录现在独立绑定 `crs_profile + account_id`，不再要求所有账号共用同一把 Key。先通过 ChatCRS/CRS 管理面准备受限的命名 profile，再用原生命令管理跟踪：
+
+```bash
+# 默认只预览，--execute 才保存；新账号自动用卡默认关闭
+chatglance account-limits subscriptions add work --crs-profile reader-work --account-id account-01
+chatglance account-limits subscriptions add work --crs-profile reader-work --account-id account-01 --execute
+chatglance account-limits subscriptions list --json-output
+chatglance account-limits subscriptions disable work --execute
+chatglance account-limits subscriptions enable work --execute
+chatglance account-limits subscriptions remove work --execute
+```
+
+typed `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` 是显式选择层，不自动扫描 Env 或收编全部远程账号。未配置时兼容旧映射；首次管理写入会迁移旧记录，保留原策略。明确 `{}` 表示停止全部跟踪，不回退旧快照。移除保留身份引用、策略和台账，不撤销 Key；同名不得换绑账号。`subscriptions --env-profile NAME` 可编辑指定 ChatGlance profile 而不全局激活。配置与权限边界见 [运行与验收](docs/site/operations.md#多账号跟踪订阅)。
+
 ## Repo 内容
 
 - `src/chatglance/`：项目页、服务器页、网站服务卡片页生成，Glance YAML patch、runtime maintenance、user-level systemd unit 渲染/安装等辅助代码。
@@ -81,7 +97,7 @@ chatglance runtime check
 # 显式启动：runtime start --runtime-home "$CHATARCH_HOME/glance" --apply
 ```
 
-`runtime init --runtime-home DIR` 遵循 `CHATARCH_HOME` 并保留已有文件；重复运行 `--with-auth` 遇到旧无登录配置时拒绝，绝不隐式升级。登录需要 typed ChatEnv 的 `CHATGLANCE_LOGIN_USER`（可为 email）、`CHATGLANCE_LOGIN_SECRET`（**严格 base64 解码后 64 bytes**）及 bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH`。托管登录只信任选定 typed EnvStore profile，忽略继承的登录/索引认证环境；非认证进程配置优先于 typed 默认值。敏感值只进入 Go 子进程环境，不写入 YAML、unit、脚本或 argv。`CHATGLANCE_PROJECTS_OWNER`、`CHATGLANCE_REFRESH_PAGES`、`CHATGLANCE_REFRESH_INTERVAL` 实际提供 owner/页面/定时默认值；`CHATGLANCE_REFRESH_HISTORY_RETENTION_DAYS=30` 与 `CHATGLANCE_REFRESH_HISTORY_MAX_BYTES=268435456` 是非敏感、受校验的 history 默认值。显式 CLI 参数覆盖；不自动用卡。`CHATGLANCE_PUBLIC_ORIGIN`、`CHATGLANCE_CONTROL_PORT` 用于可选 controls（需私有 `/account-limits`）；CRS 与 GitHub 继续共享各自既有 resolver。完整安装、目录树、反向代理、托管启停与迁移边界见 [自包含运行指南](docs/site/deployment.md)。
+`runtime init --runtime-home DIR` 遵循 `CHATARCH_HOME` 并保留已有文件；重复运行 `--with-auth` 遇到旧无登录配置时拒绝，绝不隐式升级。登录需要 typed ChatEnv 的 `CHATGLANCE_LOGIN_USER`（可为 email）、`CHATGLANCE_LOGIN_SECRET`（**严格 base64 解码后 64 bytes**）及 bcrypt `CHATGLANCE_LOGIN_PASSWORD_HASH`。托管登录只信任选定 typed EnvStore profile，忽略继承的登录/索引认证环境；非认证进程配置优先于 typed 默认值。敏感值只进入 Go 子进程环境，不写入 YAML、unit、脚本或 argv。`CHATGLANCE_PROJECTS_OWNER`、`CHATGLANCE_REFRESH_PAGES`、`CHATGLANCE_REFRESH_INTERVAL` 实际提供 owner/页面/定时默认值；`CHATGLANCE_REFRESH_HISTORY_RETENTION_DAYS=30` 与 `CHATGLANCE_REFRESH_HISTORY_MAX_BYTES=268435456` 是非敏感、受校验的 history 默认值。显式 CLI 参数覆盖；不自动用卡。`CHATGLANCE_PUBLIC_ORIGIN`、`CHATGLANCE_CONTROL_HOST=127.0.0.1`、`CHATGLANCE_CONTROL_PORT` 用于可选 controls（需私有 `/account-limits`）；非回环 bind 必须是显式 RFC1918 IPv4。CRS 与 GitHub 继续共享各自既有 resolver。完整安装、目录树、反向代理、托管启停与迁移边界见 [自包含运行指南](docs/site/deployment.md)。
 
 新机器配置类似当前站点时，先看 [快速开始](docs/site/quickstart.md)：它把 `glance.yml` / widgets / HTML/CSS 作为主要前端配置入口，`chatglance` 只负责采集、渲染、校验、备份和替换这些管理动作。
 

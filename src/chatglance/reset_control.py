@@ -7,6 +7,7 @@ import hashlib
 import hmac
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from ipaddress import IPv4Address, ip_address, ip_network
 import json
 import os
 from pathlib import Path
@@ -25,6 +26,21 @@ from .codex_forecast import forecast_snapshot
 from .reset_control_view import CONTROL_CSP, render_control_page
 
 POLICIES = "CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES"
+PRIVATE_CONTROL_NETWORKS = tuple(
+    ip_network(value) for value in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
+)
+
+
+def validated_private_host(host):
+    try:
+        address = ip_address(host)
+    except (TypeError, ValueError):
+        raise ValueError("host must be a literal private IPv4 address") from None
+    if not isinstance(address, IPv4Address) or not (
+        address.is_loopback or any(address in network for network in PRIVATE_CONTROL_NETWORKS)
+    ):
+        raise ValueError("host must be a literal private IPv4 address")
+    return str(address)
 
 
 
@@ -55,13 +71,12 @@ def glance_authenticator(runtime_home):
                 port = int(bridge_environment()["CHATGLANCE_WEB_PORT"])
         if not auth.get("users") or not auth.get("secret-key"):
             raise ValueError
-        if server.get("host", "127.0.0.1") not in ("127.0.0.1", "localhost"):
-            raise ValueError
+        host = validated_private_host(server.get("host", "127.0.0.1"))
         if type(port) is not int or not 1 <= port <= 65535:
             raise ValueError
     except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError):
         raise ControlError("Glance 本地登录配置不可用", 503) from None
-    url = f"http://127.0.0.1:{port}/account-limits"
+    url = f"http://{host}:{port}/account-limits"
     opener = build_opener(ProxyHandler({}), _NoRedirect())
 
     def authenticate(cookie):
@@ -93,6 +108,29 @@ def read_status_account(profile, policy, home):
                 if policy.skip_if_forecast_24h_above is not None else None)
     return scan_profile(profile, policy=policy, execute=False, home=home,
                         timeout=8, forecast=forecast, **options)
+
+
+def _subscription_guard(operation):
+    """Serialize tracked-account writes and re-read selection after ownership."""
+    from functools import wraps
+    @wraps(operation)
+    def guarded(self, values, cookie, origin):
+        if origin != self.public_origin:
+            raise ControlError("拒绝跨站操作", 403)
+        from .subscriptions import parse_subscriptions, subscription_lock
+        from .refresh import RefreshError
+        try:
+            parse_subscriptions(collection_settings(home=self.home).get("subscriptions"))
+        except ValueError:
+            raise ControlError("账号跟踪配置不可用", 503) from None
+        try:
+            with subscription_lock(self.home):
+                return operation(self, values, cookie, origin)
+        except RefreshError:
+            if operation.__name__ == "use_credit":
+                return {"state": "unmet", "reason": "busy", "checked_at": _iso_time()}
+            raise ControlError("账号设置或采集正在使用配置锁，请稍后重试", 409) from None
+    return guarded
 
 
 class ControlApp:
@@ -139,6 +177,12 @@ class ControlApp:
         try:
             values = self.store.load_active(ChatGlanceConfig)
             settings = collection_settings(home=self.home)
+            from .subscriptions import parse_subscriptions, selected_profiles
+            if parse_subscriptions(settings.get("subscriptions")) is not None:
+                try:
+                    selected_profiles(settings, explicit=[profile])
+                except ValueError:
+                    raise ControlError("此账号已停止跟踪", 404) from None
             policies = parse_policies(settings["reset_policies"])
             if profile not in policies:
                 raise ControlError("未知账号", 404)
@@ -293,6 +337,7 @@ class ControlApp:
             refresh_token=self.token(cookie),
         )
 
+    @_subscription_guard
     def change(self, values, cookie, origin):
         if origin != self.public_origin:
             raise ControlError("拒绝跨站操作", 403)
@@ -343,6 +388,7 @@ class ControlApp:
                 flush=True,
             )
 
+    @_subscription_guard
     def use_credit(self, values, cookie, origin):
         if origin != self.public_origin:
             raise ControlError("拒绝跨站操作", 403)
@@ -410,8 +456,12 @@ def make_control_server(
     authenticate=None,
     diagnose=None,
 ):
-    if host != "127.0.0.1" or type(port) is not int or not 0 <= port <= 65535:
-        raise ControlError("控制服务只能监听 IPv4 loopback")
+    try:
+        host = validated_private_host(host)
+    except ValueError:
+        raise ControlError("控制服务只能监听 IPv4 loopback 或显式私有接口") from None
+    if type(port) is not int or not 0 <= port <= 65535:
+        raise ControlError("控制服务只能监听 IPv4 loopback 或显式私有接口")
     app = ControlApp(
         runtime_home=runtime_home,
         public_origin=public_origin,
@@ -592,9 +642,13 @@ def make_control_server(
     return server
 
 
-def serve_controls(*, runtime_home, public_origin, port=5679, home=None):
+def serve_controls(*, runtime_home, public_origin, host="127.0.0.1", port=5679, home=None):
     server = make_control_server(
-        runtime_home=runtime_home, public_origin=public_origin, port=port, home=home
+        runtime_home=runtime_home,
+        public_origin=public_origin,
+        host=host,
+        port=port,
+        home=home,
     )
     try:
         server.serve_forever()
