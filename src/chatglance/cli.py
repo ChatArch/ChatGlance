@@ -573,6 +573,10 @@ def account_limits() -> None:
     """Render the `订阅详情` Glance page."""
 
 
+from .subscriptions_cli import register_subscriptions_cli
+register_subscriptions_cli(account_limits)
+
+
 @account_limits.command("control-serve")
 @click.option("--runtime-home", type=click.Path(path_type=Path, file_okay=False), default=None)
 @click.option("--public-origin", required=True, help="Exact HTTPS origin used for CSRF protection; no path.")
@@ -592,7 +596,7 @@ def serve_reset_controls(runtime_home: Path | None, public_origin: str, host: st
 
 
 @account_limits.command("collect")
-@click.option("--profiles", required=True, help="Space/comma-separated Codex profile names to scan.")
+@click.option("--profiles", default=None, help="Explicit enabled subscription subset; defaults to the tracking registry.")
 @click.option("--output", "output_path", type=click.Path(path_type=Path, dir_okay=False), required=True)
 @click.option("--history", "history_path", type=click.Path(path_type=Path, dir_okay=False))
 @click.option("--timeout", type=click.FloatRange(min=0.1), default=20.0, show_default=True)

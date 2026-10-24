@@ -36,9 +36,13 @@ def test_refresh_and_notes_update_owning_page_in_browser(tmp_path, monkeypatch):
     monkeypatch.setattr(refresh, "validate_glance_config", lambda *args: None)
     monkeypatch.setattr(refresh, "_restart", lambda *args: None)
     monkeypatch.setattr("chatglance.runtime.validate_glance_config", lambda *args: None)
-    monkeypatch.setattr(refresh, "_collect_page", lambda key, *args, **kwargs: refresh.PageUpdate(
-        key, {"generated_at": "fresh-observation", "repositories": []},
-        build_projects_page({"generated_at": "fresh-observation", "repositories": []})))
+    release_collection = threading.Event()
+    def collect_after_running_state(key, *args, **kwargs):
+        assert release_collection.wait(8), "test did not release its collection fixture"
+        return refresh.PageUpdate(
+            key, {"generated_at": "fresh-observation", "repositories": []},
+            build_projects_page({"generated_at": "fresh-observation", "repositories": []}))
+    monkeypatch.setattr(refresh, "_collect_page", collect_after_running_state)
     app = page_control.PageControlApp(root, "https://example.invalid")
 
     class Handler(BaseHTTPRequestHandler):
@@ -120,11 +124,13 @@ def test_refresh_and_notes_update_owning_page_in_browser(tmp_path, monkeypatch):
         driver.refresh()
         driver.switch_to.frame(driver.find_element(By.CSS_SELECTOR, "iframe"))
         driver.find_element(By.ID, "refresh-button").click()
-        WebDriverWait(driver, 2).until(lambda current: "正在刷新" in current.find_element(By.ID, "refresh-button").get_attribute("title"))
+        WebDriverWait(driver, 2).until(lambda current: current.find_element(By.ID, "refresh-button").get_attribute("aria-busy") == "true")
+        assert "刷新中" in driver.find_element(By.ID, "refresh-button").get_attribute("title")
+        release_collection.set()
         driver.switch_to.default_content()
         WebDriverWait(driver, 6).until(lambda current: current.find_element(By.ID, "snapshot").text == "fresh-observation")
         driver.switch_to.frame(driver.find_element(By.CSS_SELECTOR, "iframe"))
-        assert "刷新成功" in driver.find_element(By.ID, "refresh-button").get_attribute("title")
+        assert "刷新完成" in driver.find_element(By.ID, "refresh-button").get_attribute("title")
         driver.switch_to.default_content()
         driver.get(base + "/servers")
         driver.find_element(By.CSS_SELECTOR, '[popovertarget="fixture-note"]').click()
@@ -136,6 +142,7 @@ def test_refresh_and_notes_update_owning_page_in_browser(tmp_path, monkeypatch):
         driver.switch_to.default_content()
         WebDriverWait(driver, 5).until(lambda current: current.find_element(By.ID, "note").text == "Browser note")
     finally:
+        release_collection.set()
         if driver is not None:
             driver.quit()
         server.shutdown()

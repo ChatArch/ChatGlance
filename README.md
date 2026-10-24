@@ -28,6 +28,22 @@
 
 可显式选择包含专用管理 Key 的 CRS 配置与固定账号映射，让订阅采集只调用 CRS 服务、上游 OAuth 留在服务端。该模式需要配套原生 CRS API 和 ChatCRS 0.3.5 或更新的兼容客户端；缺配置/能力/权限时不会回退到本地 OAuth，旧模式不被自动切换。手动刷新仍不消费。配置与迁移边界见 [Codex 重置策略](docs/codex-reset-policy.md)。
 
+## 多账号跟踪订阅（0.4.0）
+
+ChatEnv 可以保存多个 CRS 命名 profile；每条跟踪记录现在独立绑定 `crs_profile + account_id`，不再要求所有账号共用同一把 Key。先通过 ChatCRS/CRS 管理面准备受限的命名 profile，再用原生命令管理跟踪：
+
+```bash
+# 默认只预览，--execute 才保存；新账号自动用卡默认关闭
+chatglance account-limits subscriptions add work --crs-profile reader-work --account-id account-01
+chatglance account-limits subscriptions add work --crs-profile reader-work --account-id account-01 --execute
+chatglance account-limits subscriptions list --json-output
+chatglance account-limits subscriptions disable work --execute
+chatglance account-limits subscriptions enable work --execute
+chatglance account-limits subscriptions remove work --execute
+```
+
+typed `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` 是显式选择层，不自动扫描 Env 或收编全部远程账号。未配置时兼容旧映射；首次管理写入会迁移旧记录，保留原策略。明确 `{}` 表示停止全部跟踪，不回退旧快照。移除保留身份引用、策略和台账，不撤销 Key；同名不得换绑账号。`subscriptions --env-profile NAME` 可编辑指定 ChatGlance profile 而不全局激活。配置与权限边界见 [运行与验收](docs/site/operations.md#多账号跟踪订阅)。
+
 ## Repo 内容
 
 - `src/chatglance/`：项目页、服务器页、网站服务卡片页生成，Glance YAML patch、runtime maintenance、user-level systemd unit 渲染/安装等辅助代码。

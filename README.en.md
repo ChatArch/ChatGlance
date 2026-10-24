@@ -28,6 +28,22 @@ Subscription cards collapse reset information by default. Forecast details live 
 
 An explicit CRS profile containing a dedicated management Key and fixed account-ID mapping can route subscription collection entirely through the CRS service, keeping upstream OAuth server-owned. This mode requires the corresponding native CRS API and ChatCRS 0.3.5 or a newer compatible client; missing configuration, capabilities or authorization never fall back to local OAuth. Existing mode is not switched automatically, and manual refresh remains non-consuming. See [Codex reset policy](docs/codex-reset-policy.md) for configuration and migration boundaries.
 
+## Multiple tracked accounts (0.4.0)
+
+ChatEnv can store multiple named CRS profiles. Each tracking record now pins its own `crs_profile + account_id`; adding accounts no longer requires rewriting an existing shared Key. Provision scoped profiles through ChatCRS/CRS administration, then register their references:
+
+```bash
+# Mutations preview by default; --execute persists. New automatic use stays off.
+chatglance account-limits subscriptions add work --crs-profile reader-work --account-id account-01
+chatglance account-limits subscriptions add work --crs-profile reader-work --account-id account-01 --execute
+chatglance account-limits subscriptions list --json-output
+chatglance account-limits subscriptions disable work --execute
+chatglance account-limits subscriptions enable work --execute
+chatglance account-limits subscriptions remove work --execute
+```
+
+The typed `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` registry selects explicit accounts; it never scans credentials or adopts all remote accounts. Unset configuration preserves legacy behavior; the first managed write migrates the old records without changing their policies. An explicit `{}` means no tracking, with no snapshot fallback. Removal retains the identity fence, policy and ledger, and never revokes a Key. A label cannot silently change account. `subscriptions --env-profile NAME` edits a named ChatGlance profile without activating it. See [operations](docs/site/operations.en.md#multiple-tracked-accounts).
+
 ## Repository contents
 
 - `src/chatglance/`: helper code for project, server, and website-service card page generation, Glance YAML patching, runtime maintenance, and user-level systemd unit rendering/installation.

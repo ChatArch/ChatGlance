@@ -25,6 +25,29 @@ Token/Cookie、配置或整份账号快照。
 
 无 `--scheduled` 的手动调用不兑换重置卡；订阅页面只是展示当前快照。定时刷新应仍在既有调度链中显式使用 `--scheduled` 和逐账号策略，不能通过阅读按钮状态代替授权。刷新项目若识别到同址可选登录模式，访客列会重新从 Public allowlist 生成，认证列保留全量视图；不匹配布局会拒绝而非覆写私有行。
 
+## 多账号跟踪订阅
+
+跟踪与凭据分开管理：ChatEnv 的 `CRS` 命名 profile 保存 CRS Base URL 和专用管理 Key；ChatGlance 的 `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` 只保存明确的账号引用。例如：
+
+```json
+{"work":{"crs_profile":"reader-work","account_id":"account-01","enabled":true},"personal":{"crs_profile":"reader-personal","account_id":"account-02","enabled":true}}
+```
+
+不同记录可指向不同的 CRS profile 或服务。没有账号数为二的限制，也不会自动遍历所有 Env/远程账号。管理 Key 的读取范围必须覆盖对应账号；新监控账号应仅授读取权限，上游 OAuth 始终留在 CRS。注册跟踪不签发或修改 Key。
+
+```bash
+chatglance account-limits subscriptions list --json-output
+chatglance account-limits subscriptions add work --crs-profile reader-work --account-id account-01 --execute
+chatglance account-limits subscriptions disable work --execute
+chatglance account-limits subscriptions enable work --execute
+chatglance account-limits subscriptions remove work --execute
+chatglance refresh account-limits --json-output
+```
+
+省略 `--execute` 只预览配置变更。`subscriptions --env-profile dashboard-a` 只编辑该命名 ChatGlance profile，不激活它；`--home` 选择明确的 ChatArch home。跟踪启用与自动用卡是两个概念：新账号政策默认关闭，启用跟踪不会开启用卡；已有政策不变。移除停止跟踪和旧小窗访问，但保留策略、台账及身份墓碑，不撤销可能共享的凭据。`list --all` 可查看移除引用；同名不得换绑另一账号。
+
+未配置新字段时兼容原 `PROFILES`、单个 `CRS_PROFILE` 和 `CRS_ACCOUNTS`；首次管理写入会无损迁移明确的旧映射。显式 `{}`、全部停用或全部移除表示零条有效跟踪，不从旧快照复活账号。批次结构错误在任何账号/公共来源请求和采集输出前拒绝；单账号上游失败如实显示 partial/error，不回退本机 OAuth，也不遮蔽其他健康账号。
+
 ## 页面操作反馈
 
 项目保留原图标；服务器保留同一原位置的可点击 **刷新** 控件，运行时明确显示**刷新中**。点击遇到一个确实包含本页的既有刷新时，按钮会附着并跟踪该次 `run_id` 到结束，再更新父页；不会把这种情形记成无效 busy 点击。若另一项刷新并不包含本页，才明确提示忙碌且不会伪称已开始。短时状态读取失败不会误作刷新失败或放开重复点击，同一浏览器标签页重载后继续跟踪自己启动或已附着的运行。成功后显示**刷新完成**及该次运行的真实完成时间；部分成功、失败和占锁如实显示。打开页面不随后台定时任务自行旋转，完成时间与数据观测时间分别保留。

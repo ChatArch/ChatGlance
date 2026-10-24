@@ -58,6 +58,11 @@ class ChatGlanceConfig(BaseEnvConfig):
         desc="Space- or comma-separated Codex profiles for manual refresh; empty uses the current snapshot.",
     )
 
+    CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS = EnvField(
+        "CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS", default="",
+        desc="Explicit tracking registry: label to CRS profile, account_id and enabled. Empty object disables all tracking.",
+        is_sensitive=True,
+    )
     CHATGLANCE_ACCOUNT_LIMITS_CRS_PROFILE = EnvField(
         "CHATGLANCE_ACCOUNT_LIMITS_CRS_PROFILE", default="",
         desc="Named CRS profile with a dedicated management Key; empty keeps local Codex mode.",
@@ -105,6 +110,7 @@ def collection_settings(*, home=None) -> dict:
     if legacy in values or legacy in os.environ:
         raise ValueError("Legacy global execution setting requires per-account migration before scanning")
     return {"profiles": resolve("CHATGLANCE_ACCOUNT_LIMITS_PROFILES", ""),
+            "subscriptions": resolve("CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS", ""),
             "crs_profile": resolve("CHATGLANCE_ACCOUNT_LIMITS_CRS_PROFILE", ""),
             "crs_accounts": resolve("CHATGLANCE_ACCOUNT_LIMITS_CRS_ACCOUNTS", "{}"),
             "reset_policies": resolve("CHATGLANCE_ACCOUNT_LIMITS_RESET_POLICIES", "{}"),

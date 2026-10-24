@@ -176,9 +176,10 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
         from .codex_collector import collect_account_limits, parse_profiles
         from .config import collection_settings
         from .account_limits import build_account_limits_page
-        configured = collection_settings().get("profiles", "")
-        selected = list(profiles or parse_profiles(configured) or [item["profile"] for item in previous.get("codex", []) if item.get("profile")])
-        if not selected:
+        from .subscriptions import parse_subscriptions, selected_profiles
+        settings = collection_settings()
+        selected = selected_profiles(settings, explicit=profiles, fallback=[item["profile"] for item in previous.get("codex", []) if item.get("profile")])
+        if not selected and parse_subscriptions(settings.get("subscriptions")) is None:
             raise RefreshError("no configured account profiles")
         data = collect_account_limits(
             profiles=selected, output_path=stage / "account-limits.json",

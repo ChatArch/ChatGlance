@@ -29,6 +29,29 @@ user notes are overlaid only while rendering.
 
 Manual calls without `--scheduled` never redeem reset cards; account pages only display snapshots. Existing scheduling must use explicit `--scheduled` with per-account policy, not infer authority from a rendered toggle. When refreshing projects in optional-login mode, guest columns are rebuilt from the Public allowlist and authenticated columns retain full rows. A broken layout is rejected rather than overwritten with private guest content.
 
+## Multiple tracked accounts
+
+Tracking is separate from credentials: named ChatEnv `CRS` profiles own the service Base URL and scoped management Key. ChatGlance's `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` stores explicit references only:
+
+```json
+{"work":{"crs_profile":"reader-work","account_id":"account-01","enabled":true},"personal":{"crs_profile":"reader-personal","account_id":"account-02","enabled":true}}
+```
+
+Entries may use different profiles or CRS services; there is no two-account limit or automatic credential/account enumeration. Each Key must grant reads for its exact account. Newly monitored accounts should receive read-only scope, while upstream OAuth stays in CRS. Registering tracking never issues or rewrites a Key.
+
+```bash
+chatglance account-limits subscriptions list --json-output
+chatglance account-limits subscriptions add work --crs-profile reader-work --account-id account-01 --execute
+chatglance account-limits subscriptions disable work --execute
+chatglance account-limits subscriptions enable work --execute
+chatglance account-limits subscriptions remove work --execute
+chatglance refresh account-limits --json-output
+```
+
+Omitting `--execute` previews the configuration change. `subscriptions --env-profile dashboard-a` edits that named ChatGlance profile without activation; `--home` selects an explicit ChatArch home. Tracking enablement does not enable card use: new policies stay off and old policies remain unchanged. Removal stops collection and stale-popup access but retains policy, ledger and the identity tombstone, without revoking potentially shared credentials. `list --all` includes removed references; a label cannot silently change account.
+
+Unset registry configuration preserves legacy `PROFILES`, shared `CRS_PROFILE` and `CRS_ACCOUNTS` behavior. The first managed write migrates complete explicit legacy bindings. An explicit `{}`, all-disabled registry or all-removed registry means no active tracking, with no snapshot resurrection. Invalid batch structure fails before account/public-source requests or collector output. Individual provider failures remain truthful partial/error rows without local OAuth fallback or hiding healthy accounts.
+
 ## Page action feedback
 
 Projects retain their original icon; servers retain the same original-position, labeled **Refresh** control and show **Refreshing** while work runs. If a click finds an existing run that truly includes that page, the control attaches to and tracks that exact `run_id` until it finishes, then reloads the parent data instead of recording a no-op busy click. A lock for an unrelated page remains an explicit busy result. Transient status-read failures do not falsely finish work or enable duplicates; the same tab resumes its own started or attached run after reload. Success shows Refresh completed with that invocation's real completion time; partial, failure and busy results remain truthful. Opening a page never spins for an unrelated scheduled run, and completion and observation times remain separate.

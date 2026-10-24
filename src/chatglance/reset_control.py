@@ -110,6 +110,29 @@ def read_status_account(profile, policy, home):
                         timeout=8, forecast=forecast, **options)
 
 
+def _subscription_guard(operation):
+    """Serialize tracked-account writes and re-read selection after ownership."""
+    from functools import wraps
+    @wraps(operation)
+    def guarded(self, values, cookie, origin):
+        if origin != self.public_origin:
+            raise ControlError("拒绝跨站操作", 403)
+        from .subscriptions import parse_subscriptions
+        from .refresh import _refresh_lock, RefreshError
+        try:
+            registry = parse_subscriptions(collection_settings(home=self.home).get("subscriptions"))
+        except ValueError:
+            raise ControlError("账号跟踪配置不可用", 503) from None
+        if registry is None:
+            return operation(self, values, cookie, origin)
+        try:
+            with _refresh_lock(get_paths(self.home).home_dir / "glance"):
+                return operation(self, values, cookie, origin)
+        except RefreshError:
+            raise ControlError("刷新正在占用发布锁，请稍后重试", 409) from None
+    return guarded
+
+
 class ControlApp:
     def __init__(
         self,
@@ -154,6 +177,12 @@ class ControlApp:
         try:
             values = self.store.load_active(ChatGlanceConfig)
             settings = collection_settings(home=self.home)
+            from .subscriptions import parse_subscriptions, selected_profiles
+            if parse_subscriptions(settings.get("subscriptions")) is not None:
+                try:
+                    selected_profiles(settings, explicit=[profile])
+                except ValueError:
+                    raise ControlError("此账号已停止跟踪", 404) from None
             policies = parse_policies(settings["reset_policies"])
             if profile not in policies:
                 raise ControlError("未知账号", 404)
@@ -308,6 +337,7 @@ class ControlApp:
             refresh_token=self.token(cookie),
         )
 
+    @_subscription_guard
     def change(self, values, cookie, origin):
         if origin != self.public_origin:
             raise ControlError("拒绝跨站操作", 403)
@@ -358,6 +388,7 @@ class ControlApp:
                 flush=True,
             )
 
+    @_subscription_guard
     def use_credit(self, values, cookie, origin):
         if origin != self.public_origin:
             raise ControlError("拒绝跨站操作", 403)

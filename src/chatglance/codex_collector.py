@@ -475,6 +475,18 @@ def merge_history(current: list[dict[str, Any]], previous: list[dict[str, Any]])
 
 def _managed_client_options(settings: dict, profiles: list[str]) -> dict:
     """Choose one credential owner for the whole collection, never a fallback."""
+    from .subscriptions import parse_subscriptions, selected_profiles
+    registry = parse_subscriptions(settings.get('subscriptions'))
+    if registry is not None:
+        selected_profiles(settings, explicit=profiles)
+        def subscription_factory(label, *, home=None, timeout=20):
+            from chatcrs.managed_codex import CrsManagedCodexClient
+            row = registry[label]
+            return CrsManagedCodexClient.from_profile(
+                row['crs_profile'], account_id=row['account_id'], home=home,
+                timeout=timeout, require_management_key=True,
+            )
+        return {'client_factory': subscription_factory, 'token_service': 'CRS'}
     crs_profile = settings.get('crs_profile') or ''
     if not crs_profile:
         return {}
@@ -513,7 +525,7 @@ def _managed_client_options(settings: dict, profiles: list[str]) -> dict:
     return {'client_factory': factory, 'token_service': 'CRS'}
 
 
-def collect_account_limits(*, profiles, output_path: str | Path, history_path: str | Path | None = None,
+def collect_account_limits(*, profiles=None, output_path: str | Path, history_path: str | Path | None = None,
                            timeout: float = 20, reset_timeout: float = 20, no_public_reset: bool = False,
                            reset_policies: str | None = None, reset_base_url: str | None = None,
                            execute_resets: bool | None = None, home: str | Path | None = None) -> dict:
@@ -532,8 +544,9 @@ def collect_account_limits(*, profiles, output_path: str | Path, history_path: s
     if type(execute_resets) is not bool:
         raise ValueError('execute_resets must be boolean')
     policies = parse_policies(reset_policies)
-    profiles = parse_profiles(profiles if isinstance(profiles, str) else ' '.join(profiles))
-    if not profiles:
+    from .subscriptions import parse_subscriptions, selected_profiles
+    profiles = selected_profiles(settings, explicit=profiles)
+    if not profiles and parse_subscriptions(settings.get('subscriptions')) is None:
         raise ValueError('At least one explicit Codex profile is required')
     client_options = _managed_client_options(settings, profiles)
     output_path = Path(output_path)
@@ -543,7 +556,7 @@ def collect_account_limits(*, profiles, output_path: str | Path, history_path: s
     # Fetch fresh forecast before any account may authorize a consuming request.
     # History cache is still applied only after decisions and never supplies it.
     public_reset = ({'source': PUBLIC_RESET_SOURCE, 'status': 'skipped', 'events': [], 'forecast': None}
-                    if no_public_reset else fetch_public_codex_reset(reset_timeout))
+                    if no_public_reset or not profiles else fetch_public_codex_reset(reset_timeout))
     payloads = [profile_payload(profile, timeout, policy=policies.get(profile, ResetPolicy()),
                 execute=execute_resets, reset_base_url=reset_base_url or None, home=home,
                 forecast=public_reset.get('forecast'), **client_options) for profile in profiles]
