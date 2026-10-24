@@ -48,7 +48,7 @@ def test_darwin_restart_uses_owned_plist_new_pid_and_http_readiness(tmp_path, mo
     calls = []
     states = ["state = running\n pid = 123\n", "state = running\n pid = 456\n", "state = running\n pid = 456\n"]
     monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.setattr(runtime.os, "getuid", lambda: 501)
+    monkeypatch.setattr(runtime.os, "getuid", lambda: plist.stat().st_uid)
     monkeypatch.setattr(runtime.Path, "home", lambda: tmp_path)
     def command(args, **kwargs):
         calls.append(args)
@@ -59,11 +59,11 @@ def test_darwin_restart_uses_owned_plist_new_pid_and_http_readiness(tmp_path, mo
     module._restart("chatarch-glance.service", root)
 
     assert calls == [
-        ["/bin/launchctl", "print", "gui/501/chatarch-glance.service"],
-        ["/bin/launchctl", "bootout", "--wait", "gui/501/chatarch-glance.service"],
-        ["/bin/launchctl", "bootstrap", "gui/501", str(plist)],
-        ["/bin/launchctl", "print", "gui/501/chatarch-glance.service"],
-        ["/bin/launchctl", "print", "gui/501/chatarch-glance.service"],
+        ["/bin/launchctl", "print", f"gui/{runtime.os.getuid()}/chatarch-glance.service"],
+        ["/bin/launchctl", "bootout", "--wait", f"gui/{runtime.os.getuid()}/chatarch-glance.service"],
+        ["/bin/launchctl", "bootstrap", f"gui/{runtime.os.getuid()}", str(plist)],
+        ["/bin/launchctl", "print", f"gui/{runtime.os.getuid()}/chatarch-glance.service"],
+        ["/bin/launchctl", "print", f"gui/{runtime.os.getuid()}/chatarch-glance.service"],
     ]
 
     with pytest.raises(ValueError, match="Glance launchd label"):
@@ -85,7 +85,7 @@ def darwin_job(tmp_path, monkeypatch):
         sys.executable, "-m", "chatglance.cli", "runtime", "serve", "--runtime-home", str(root),
     ]}))
     monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.setattr(runtime.os, "getuid", lambda: 501)
+    monkeypatch.setattr(runtime.os, "getuid", lambda: plist.stat().st_uid)
     monkeypatch.setattr(runtime.Path, "home", lambda: tmp_path)
     monkeypatch.setattr(runtime.time, "sleep", lambda delay: None)
     return runtime, root, plist
@@ -103,7 +103,7 @@ def test_darwin_bootout_wait_is_bounded_and_never_bootstraps_while_stopping(darw
     with pytest.raises(subprocess.TimeoutExpired):
         runtime.restart_user_service("chatarch-glance.service", root)
     assert [call[0][1] for call in calls] == ["print", "bootout"]
-    assert calls[1][0] == ["/bin/launchctl", "bootout", "--wait", "gui/501/chatarch-glance.service"]
+    assert calls[1][0] == ["/bin/launchctl", "bootout", "--wait", f"gui/{runtime.os.getuid()}/chatarch-glance.service"]
     assert 0 < calls[1][1]["timeout"] <= 10
 
 
@@ -124,7 +124,7 @@ def test_darwin_bootstrap_failure_retries_owned_plist_but_reports_original_failu
         runtime.restart_user_service("chatarch-glance.service", root)
     assert isinstance(error.value.__cause__, subprocess.CalledProcessError)
     assert [call for call in calls if call[1] == "bootstrap"] == [
-        ["/bin/launchctl", "bootstrap", "gui/501", str(plist)],
+        ["/bin/launchctl", "bootstrap", f"gui/{runtime.os.getuid()}", str(plist)],
     ] * 2
 
 
@@ -144,7 +144,7 @@ def test_darwin_readiness_failure_retries_once_and_requires_stable_pid(darwin_jo
     with pytest.raises(RuntimeError, match="recovered"):
         runtime.restart_user_service("chatarch-glance.service", root)
     assert [call for call in calls if call[1] == "bootstrap"] == [
-        ["/bin/launchctl", "bootstrap", "gui/501", str(plist)],
+        ["/bin/launchctl", "bootstrap", f"gui/{runtime.os.getuid()}", str(plist)],
     ] * 2
 
 
