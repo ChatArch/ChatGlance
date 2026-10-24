@@ -435,6 +435,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#multiple-tracked-accounts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multiple tracked accounts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#page-action-feedback" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -595,6 +606,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#multiple-tracked-accounts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multiple tracked accounts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#page-action-feedback" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -697,6 +719,20 @@ shows last success plus this attempt. A new or changed identity says no history.
 Last-good and the visible snapshot share one validation/publication transaction;
 user notes are overlaid only while rendering.</p>
 <p>Manual calls without <code>--scheduled</code> never redeem reset cards; account pages only display snapshots. Existing scheduling must use explicit <code>--scheduled</code> with per-account policy, not infer authority from a rendered toggle. When refreshing projects in optional-login mode, guest columns are rebuilt from the Public allowlist and authenticated columns retain full rows. A broken layout is rejected rather than overwritten with private guest content.</p>
+<h2 id="multiple-tracked-accounts">Multiple tracked accounts</h2>
+<p>Tracking is separate from credentials: named ChatEnv <code>CRS</code> profiles own the service Base URL and scoped management Key. ChatGlance's <code>CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS</code> stores explicit references only:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">"work"</span><span class="p">:{</span><span class="nt">"crs_profile"</span><span class="p">:</span><span class="s2">"reader-work"</span><span class="p">,</span><span class="nt">"account_id"</span><span class="p">:</span><span class="s2">"account-01"</span><span class="p">,</span><span class="nt">"enabled"</span><span class="p">:</span><span class="kc">true</span><span class="p">},</span><span class="nt">"personal"</span><span class="p">:{</span><span class="nt">"crs_profile"</span><span class="p">:</span><span class="s2">"reader-personal"</span><span class="p">,</span><span class="nt">"account_id"</span><span class="p">:</span><span class="s2">"account-02"</span><span class="p">,</span><span class="nt">"enabled"</span><span class="p">:</span><span class="kc">true</span><span class="p">}}</span>
+</code></pre></div>
+<p>Entries may use different profiles or CRS services; there is no two-account limit or automatic credential/account enumeration. Each Key must grant reads for its exact account. Newly monitored accounts should receive read-only scope, while upstream OAuth stays in CRS. Registering tracking never issues or rewrites a Key.</p>
+<div class="highlight"><pre><span></span><code>chatglance<span class="w"> </span>account-limits<span class="w"> </span>subscriptions<span class="w"> </span>list<span class="w"> </span>--json-output
+chatglance<span class="w"> </span>account-limits<span class="w"> </span>subscriptions<span class="w"> </span>add<span class="w"> </span>work<span class="w"> </span>--crs-profile<span class="w"> </span>reader-work<span class="w"> </span>--account-id<span class="w"> </span>account-01<span class="w"> </span>--execute
+chatglance<span class="w"> </span>account-limits<span class="w"> </span>subscriptions<span class="w"> </span>disable<span class="w"> </span>work<span class="w"> </span>--execute
+chatglance<span class="w"> </span>account-limits<span class="w"> </span>subscriptions<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>work<span class="w"> </span>--execute
+chatglance<span class="w"> </span>account-limits<span class="w"> </span>subscriptions<span class="w"> </span>remove<span class="w"> </span>work<span class="w"> </span>--execute
+chatglance<span class="w"> </span>refresh<span class="w"> </span>account-limits<span class="w"> </span>--json-output
+</code></pre></div>
+<p>Omitting <code>--execute</code> previews the configuration change. <code>subscriptions --env-profile dashboard-a</code> edits that named ChatGlance profile without activation; <code>--home</code> selects an explicit ChatArch home. Tracking enablement does not enable card use: new policies stay off and old policies remain unchanged. Removal stops collection and stale-popup access but retains policy, ledger and the identity tombstone, without revoking potentially shared credentials. <code>list --all</code> includes removed references; a label cannot silently change account.</p>
+<p>Unset registry configuration preserves legacy <code>PROFILES</code>, shared <code>CRS_PROFILE</code> and <code>CRS_ACCOUNTS</code> behavior. The first managed write migrates complete explicit legacy bindings. An explicit <code>{}</code>, all-disabled registry or all-removed registry means no active tracking, with no snapshot resurrection. Invalid batch structure fails before account/public-source requests or collector output. Individual provider failures remain truthful partial/error rows without local OAuth fallback or hiding healthy accounts. Collection, first migration, tracking writes and consuming controls share a per-ChatArch-home configuration owner, independent of runtime location; busy operations do not execute. A label with an orphan historical policy cannot bind a new account without a provable identity; choose a fresh label.</p>
 <h2 id="page-action-feedback">Page action feedback</h2>
 <p>Projects retain their original icon; servers retain the same original-position, labeled <strong>Refresh</strong> control and show <strong>Refreshing</strong> while work runs. If a click finds an existing run that truly includes that page, the control attaches to and tracks that exact <code>run_id</code> until it finishes, then reloads the parent data instead of recording a no-op busy click. A lock for an unrelated page remains an explicit busy result. Transient status-read failures do not falsely finish work or enable duplicates; the same tab resumes its own started or attached run after reload. Success shows Refresh completed with that invocation's real completion time; partial, failure and busy results remain truthful. Opening a page never spins for an unrelated scheduled run, and completion and observation times remain separate.</p>
 <p>Subscriptions do not gain another header button. The account popup's original <strong>刷新状态</strong> (Refresh status) button reads only the selected account's latest quota, credits and conditions through its authenticated same-origin endpoint, without consuming credits or changing switches. The clicked button shows running; success updates <strong>Latest status refresh</strong>, rerenders the popup and leaves a success receipt; failure stops and preserves old data. <strong>Last scheduled check</strong> retains the actual scheduled snapshot time. The latest read-only row lives in a private per-account runtime cache, superseded by a later scheduled snapshot, without waiting behind full-site project collection.</p>

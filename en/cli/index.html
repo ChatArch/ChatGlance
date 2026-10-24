@@ -664,9 +664,15 @@
     ├── control-serve
     ├── json
     ├── render-page
+    ├── subscriptions
+    │   ├── add
+    │   ├── disable
+    │   ├── enable
+    │   ├── list
+    │   └── remove
     └── update-config
 </code></pre></div>
-<p><code>collect</code> handles account usage and the reset calendar. <code>control-serve</code> is an existing authenticated local toggle endpoint. Scheduled reset execution requires explicit <code>refresh --scheduled</code> and per-account policy; rendering a page does not authorize consumption. Review access controls before using real accounts.</p>
+<p><code>subscriptions</code> manages explicit CRS profile/account references through ChatEnv; mutations preview unless <code>--execute</code> persists them, and tracking does not change automatic-use policy. <code>collect</code> handles account usage and the reset calendar, selecting enabled subscriptions by default. <code>control-serve</code> is an authenticated local toggle endpoint. Scheduled reset execution requires explicit <code>refresh --scheduled</code> and per-account policy; rendering a page does not authorize consumption. Review access controls before using real accounts.</p>
 
 
 

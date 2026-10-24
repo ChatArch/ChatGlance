@@ -605,7 +605,7 @@
 </tr>
 </tbody>
 </table>
-<p>首页同样有访客的固定书签列和原有私有首页的认证列；服务器、网站服务、订阅等页面不能因为入口公开而放宽。访客导航不包含这些页面，直访和内容接口要由 Glance 验证会话。<code>auth</code> 与受信的 <code>server</code> 路由不变；共享 <code>document.head</code>、<code>head-widgets</code> 和可访问的私有资产不被悄悄复制：不安全时直接拒绝候选。读者需在实际部署时核验缓存的 <code>no-store</code> / <code>Vary: Cookie</code> 及注销后的行为。</p>
+<p>首页同样有访客的受限书签列和原有私有首页的认证列；首次转换仍生成固定的两条公开书签，现有成对可选登录首页若符合已审查的四条安全书签结构，后续项目刷新和维护则保留其访客列及认证列。额外链接只接受无凭据、无端口或查询参数的公开 HTTPS 域名，不接受私网地址、其它 widget 或新增公开页面。服务器、网站服务、订阅等页面不能因为入口公开而放宽。访客导航不包含这些页面，直访和内容接口要由 Glance 验证会话。<code>auth</code> 与受信的 <code>server</code> 路由不变；共享 <code>document.head</code>、<code>head-widgets</code> 和可访问的私有资产不被悄悄复制：不安全时直接拒绝候选。读者需在实际部署时核验缓存的 <code>no-store</code> / <code>Vary: Cookie</code> 及注销后的行为。</p>
 <h2 id="_3">候选与后续刷新</h2>
 <div class="highlight"><pre><span></span><code>chatglance<span class="w"> </span>access<span class="w"> </span>render-single-origin-optional-login<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--config<span class="w"> </span>private.yml<span class="w"> </span>--inventory<span class="w"> </span>inventory.json<span class="w"> </span>--output<span class="w"> </span>candidate.yml

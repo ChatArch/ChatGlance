@@ -438,7 +438,7 @@
   <a href="#_3" class="md-nav__link">
     <span class="md-ellipsis">
       
-        页面操作反馈
+        多账号跟踪订阅
       
     </span>
   </a>
@@ -449,7 +449,7 @@
   <a href="#_4" class="md-nav__link">
     <span class="md-ellipsis">
       
-        手动检查并用卡
+        页面操作反馈
       
     </span>
   </a>
@@ -458,6 +458,17 @@
       
         <li class="md-nav__item">
   <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        手动检查并用卡
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
     <span class="md-ellipsis">
       
         服务边界
@@ -469,7 +480,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#_6" class="md-nav__link">
+  <a href="#_7" class="md-nav__link">
     <span class="md-ellipsis">
       
         强制使用一张卡
@@ -485,7 +496,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#_7" class="md-nav__link">
+  <a href="#_8" class="md-nav__link">
     <span class="md-ellipsis">
       
         部署后的阅读与安全验收
@@ -598,7 +609,7 @@
   <a href="#_3" class="md-nav__link">
     <span class="md-ellipsis">
       
-        页面操作反馈
+        多账号跟踪订阅
       
     </span>
   </a>
@@ -609,7 +620,7 @@
   <a href="#_4" class="md-nav__link">
     <span class="md-ellipsis">
       
-        手动检查并用卡
+        页面操作反馈
       
     </span>
   </a>
@@ -618,6 +629,17 @@
       
         <li class="md-nav__item">
   <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        手动检查并用卡
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
     <span class="md-ellipsis">
       
         服务边界
@@ -629,7 +651,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#_6" class="md-nav__link">
+  <a href="#_7" class="md-nav__link">
     <span class="md-ellipsis">
       
         强制使用一张卡
@@ -645,7 +667,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#_7" class="md-nav__link">
+  <a href="#_8" class="md-nav__link">
     <span class="md-ellipsis">
       
         部署后的阅读与安全验收
@@ -693,15 +715,29 @@ Token/Cookie、配置或整份账号快照。</p>
 磁盘/系统字段，同时显示最后成功和本次尝试；新机或身份变化明确显示无
 历史。last-good 与可见快照参加同一校验/发布事务，用户备注仅在渲染时覆盖。</p>
 <p>无 <code>--scheduled</code> 的手动调用不兑换重置卡；订阅页面只是展示当前快照。定时刷新应仍在既有调度链中显式使用 <code>--scheduled</code> 和逐账号策略，不能通过阅读按钮状态代替授权。刷新项目若识别到同址可选登录模式，访客列会重新从 Public allowlist 生成，认证列保留全量视图；不匹配布局会拒绝而非覆写私有行。</p>
-<h2 id="_3">页面操作反馈</h2>
+<h2 id="_3">多账号跟踪订阅</h2>
+<p>跟踪与凭据分开管理：ChatEnv 的 <code>CRS</code> 命名 profile 保存 CRS Base URL 和专用管理 Key；ChatGlance 的 <code>CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS</code> 只保存明确的账号引用。例如：</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">"work"</span><span class="p">:{</span><span class="nt">"crs_profile"</span><span class="p">:</span><span class="s2">"reader-work"</span><span class="p">,</span><span class="nt">"account_id"</span><span class="p">:</span><span class="s2">"account-01"</span><span class="p">,</span><span class="nt">"enabled"</span><span class="p">:</span><span class="kc">true</span><span class="p">},</span><span class="nt">"personal"</span><span class="p">:{</span><span class="nt">"crs_profile"</span><span class="p">:</span><span class="s2">"reader-personal"</span><span class="p">,</span><span class="nt">"account_id"</span><span class="p">:</span><span class="s2">"account-02"</span><span class="p">,</span><span class="nt">"enabled"</span><span class="p">:</span><span class="kc">true</span><span class="p">}}</span>
+</code></pre></div>
+<p>不同记录可指向不同的 CRS profile 或服务。没有账号数为二的限制，也不会自动遍历所有 Env/远程账号。管理 Key 的读取范围必须覆盖对应账号；新监控账号应仅授读取权限，上游 OAuth 始终留在 CRS。注册跟踪不签发或修改 Key。</p>
+<div class="highlight"><pre><span></span><code>chatglance<span class="w"> </span>account-limits<span class="w"> </span>subscriptions<span class="w"> </span>list<span class="w"> </span>--json-output
+chatglance<span class="w"> </span>account-limits<span class="w"> </span>subscriptions<span class="w"> </span>add<span class="w"> </span>work<span class="w"> </span>--crs-profile<span class="w"> </span>reader-work<span class="w"> </span>--account-id<span class="w"> </span>account-01<span class="w"> </span>--execute
+chatglance<span class="w"> </span>account-limits<span class="w"> </span>subscriptions<span class="w"> </span>disable<span class="w"> </span>work<span class="w"> </span>--execute
+chatglance<span class="w"> </span>account-limits<span class="w"> </span>subscriptions<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>work<span class="w"> </span>--execute
+chatglance<span class="w"> </span>account-limits<span class="w"> </span>subscriptions<span class="w"> </span>remove<span class="w"> </span>work<span class="w"> </span>--execute
+chatglance<span class="w"> </span>refresh<span class="w"> </span>account-limits<span class="w"> </span>--json-output
+</code></pre></div>
+<p>省略 <code>--execute</code> 只预览配置变更。<code>subscriptions --env-profile dashboard-a</code> 只编辑该命名 ChatGlance profile，不激活它；<code>--home</code> 选择明确的 ChatArch home。跟踪启用与自动用卡是两个概念：新账号政策默认关闭，启用跟踪不会开启用卡；已有政策不变。移除停止跟踪和旧小窗访问，但保留策略、台账及身份墓碑，不撤销可能共享的凭据。<code>list --all</code> 可查看移除引用；同名不得换绑另一账号。</p>
+<p>未配置新字段时兼容原 <code>PROFILES</code>、单个 <code>CRS_PROFILE</code> 和 <code>CRS_ACCOUNTS</code>；首次管理写入会无损迁移明确的旧映射。显式 <code>{}</code>、全部停用或全部移除表示零条有效跟踪，不从旧快照复活账号。批次结构错误在任何账号/公共来源请求和采集输出前拒绝；单账号上游失败如实显示 partial/error，不回退本机 OAuth，也不遮蔽其他健康账号。采集、首次迁移、跟踪修改和用卡控制共享同一 ChatArch home 下的配置锁，不依赖 runtime 放置路径；忙碌时本次操作不执行。已有孤立策略但无可证明身份的 label 不能绑定新账号，应使用新 label。</p>
+<h2 id="_4">页面操作反馈</h2>
 <p>项目保留原图标；服务器保留同一原位置的可点击 <strong>刷新</strong> 控件，运行时明确显示<strong>刷新中</strong>。点击遇到一个确实包含本页的既有刷新时，按钮会附着并跟踪该次 <code>run_id</code> 到结束，再更新父页；不会把这种情形记成无效 busy 点击。若另一项刷新并不包含本页，才明确提示忙碌且不会伪称已开始。短时状态读取失败不会误作刷新失败或放开重复点击，同一浏览器标签页重载后继续跟踪自己启动或已附着的运行。成功后显示<strong>刷新完成</strong>及该次运行的真实完成时间；部分成功、失败和占锁如实显示。打开页面不随后台定时任务自行旋转，完成时间与数据观测时间分别保留。</p>
 <p>订阅不额外添加顶部按钮。账号小窗原有<strong>刷新状态</strong>按钮会只读当前选中账号的最新额度、卡片与条件状态，使用受保护的同源接口，不消费、不改开关。点击后原按钮显示刷新中，成功更新<strong>最近状态刷新</strong>时间与小窗内容，并显示成功结果；失败停止并保留旧数据。<strong>上次计划检查</strong>仍显示实际计划快照时间。最新只读结果保存在 runtime 私有单账号缓存，后续更晚的计划快照优先；无需等待全站项目采集锁。</p>
 <p>点击服务器名称编辑备注。按钮为<strong>保存、取消、清空</strong>；保存成功或取消关闭窗口，取消丢弃未保存的输入，清空先清空输入，点击保存才删除已保存备注。冲突或保存失败会保留窗口与输入。</p>
-<h2 id="_4">手动检查并用卡</h2>
+<h2 id="_5">手动检查并用卡</h2>
 <p>登录后打开订阅详情中的账号控制小窗，点击 <strong>检查并用卡</strong>。接受二次确认后，服务端重新读取该账号的当前策略、真实额度和可用卡；达到配置阈值且其余时间窗、预测、账号及幂等条件全部满足，才尝试使用至多一张明确的卡。它不必等待下一次定时扫描，也不会降低现有保护条件。</p>
 <p>取消确认、查看页面、普通刷新和未运行 JavaScript 的原生表单都不会兑换。结果显示为成功、条件未满足或结果待确认，并标注本次检查时间；上方执行清单仍明确标识为上次计划检查的快照。结果待确认时不要重复操作，应先核实账本和额度。生产验收只查看或取消确认；消费路径用合成账号和卡片验证。</p>
-<h2 id="_5">服务边界</h2>
-<h3 id="_6">强制使用一张卡</h3>
+<h2 id="_6">服务边界</h2>
+<h3 id="_7">强制使用一张卡</h3>
 <p>账号控制小窗的 <strong>强制用一张卡</strong> 不检查自动开关、用量阈值、剩余时间、预测或业务冷却。接受独立的二次确认后，服务端针对当前账号使用至多一张确切可用卡，并回读卡数和用量；设置本身不变。登录、同源CSRF和防重复保护仍执行：正在处理或当前结果未知时不能再用，超时不会自动重试。已结束旧额度窗的未知记录仅在force授权下归档，不改写为“未消费”。管理Key必须对所选账号具有消费权限。</p>
 <ul>
 <li><code>projects update-config</code> 写<strong>显式输出路径</strong>，不是直接部署；同址候选输出不能别名覆盖输入。</li>
@@ -709,7 +745,7 @@ Token/Cookie、配置或整份账号快照。</p>
 <li><code>runtime render-systemd</code> 可审查模板；<code>runtime install-systemd</code> 和 <code>runtime start</code> 会更改 user-level service/timer。本站文档<strong>不会</strong>启动它们。</li>
 <li>服务器采集只读取明确列出的 SSH 别名；网站服务清单由运维审定，不自动扫描域名。<code>server-stats</code> 只显示有意义的磁盘挂载点。</li>
 </ul>
-<h2 id="_7">部署后的阅读与安全验收</h2>
+<h2 id="_8">部署后的阅读与安全验收</h2>
 <ol>
 <li>在目标<strong>同一网址</strong>匿名读公开首页和 <code>/projects</code>，检查导航、内容接口、HTML/JSON/缓存均没有 Private 标识、URL、计数或 CLI/Env；验证旧 <code>/项目</code> 精确重定向。</li>
 <li>用现有 Glance 账号登录，读同一路径确认全量 Public/Private/Unknown；直访未授权页面和内容接口应受服务器保护。</li>
