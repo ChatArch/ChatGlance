@@ -143,6 +143,9 @@ class ControlApp:
         authenticate=None,
         diagnose=None,
     ):
+        from .instances import load_instance
+        if load_instance(runtime_home, required=False):
+            raise ControlError("read-only instance controls are unavailable", 403)
         origin = urlsplit(public_origin)
         if (
             origin.scheme != "https"

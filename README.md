@@ -44,6 +44,20 @@ chatglance account-limits subscriptions remove work --execute
 
 typed `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` 是显式选择层，不自动扫描 Env 或收编全部远程账号。未配置时兼容旧映射；首次管理写入会迁移旧记录，保留原策略。明确 `{}` 表示停止全部跟踪，不回退旧快照。移除保留身份引用、策略和台账，不撤销 Key；同名不得换绑账号。`subscriptions --env-profile NAME` 可编辑指定 ChatGlance profile 而不全局激活。配置与权限边界见 [运行与验收](docs/site/operations.md#多账号跟踪订阅)。
 
+## 可选页面的只读实例（0.5.0）
+
+同一安装版 Python 和 Glance Go 二进制可服务多个独立 runtime。先在 ChatEnv 创建显式命名的 ChatGlance profile，其中订阅表绑定已有的逐账号 CRS profile；实例清单只保存 profile 名、启用页面、固定账号标签、监听地址、ChatEnv home、共享二进制路径与所属服务身份，不保存 Key。以下命令默认预览，`--apply` 才写入：
+
+```bash
+chatglance runtime instance init --runtime-home "$CHATARCH_HOME/glance-reader" --name reader --env-profile reader --page account-limits --account alpha --host 127.0.0.1 --port 11080 --origin https://reader.example.invalid --glance-bin "$HOME/.local/bin/glance"
+chatglance runtime instance init --runtime-home "$CHATARCH_HOME/glance-reader" --name reader --env-profile reader --page account-limits --account alpha --host 127.0.0.1 --port 11080 --origin https://reader.example.invalid --glance-bin "$HOME/.local/bin/glance" --apply
+chatglance runtime instance set-login --runtime-home "$CHATARCH_HOME/glance-reader" --username reader@example.invalid --password-stdin --apply
+chatglance runtime instance show --runtime-home "$CHATARCH_HOME/glance-reader"
+chatglance runtime instance render-launchd --runtime-home "$CHATARCH_HOME/glance-reader"
+```
+
+密码由安全标准输入、指定环境变量名或隐藏交互提示提供，不作为命令参数；仅 bcrypt hash 和新生成的独立 64 字节会话密钥写入该命名 ChatEnv profile。`runtime instance configure --page ... --account ... --apply` 可在同一个命名 profile 内重新选择完整页面和已启用账号集合，既能停用也能重新启用；普通 `refresh` 参数不能扩展已保存的集合。实例保留原生 Glance 的 `server.proxied: true` HTTPS 代理登录语境。安装 Go 二进制及 launchd 模板由操作者另行完成。实例刷新仍走 `chatglance refresh --runtime-home ...` 的 JSON 快照 → Glance YAML → 原生 Go 服务链；只采集允许页面和账号，定时调用也不消费重置卡。`runtime controls`、`runtime maintain` 与配置外页面均被拒绝；未选择实例的原站行为不变。详见[部署说明](docs/site/deployment.md)与[运行说明](docs/site/operations.md)。
+
 ## Repo 内容
 
 - `src/chatglance/`：项目页、服务器页、网站服务卡片页生成，Glance YAML patch、runtime maintenance、user-level systemd unit 渲染/安装等辅助代码。

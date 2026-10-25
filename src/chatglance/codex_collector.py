@@ -530,7 +530,7 @@ def _tracking_collection_guard(operation):
     @wraps(operation)
     def guarded(**kwargs):
         from .subscriptions import parse_subscriptions, selected_profiles, subscription_lock
-        settings = collection_settings(home=kwargs.get('home'))
+        settings = collection_settings(home=kwargs.get('home'), env_profile=kwargs.get('env_profile'))
         override = kwargs.get('reset_policies')
         parse_policies(settings['reset_policies'] if override is None else override)
         execute = kwargs.get('execute_resets')
@@ -551,14 +551,15 @@ def _tracking_collection_guard(operation):
 def collect_account_limits(*, profiles=None, output_path: str | Path, history_path: str | Path | None = None,
                            timeout: float = 20, reset_timeout: float = 20, no_public_reset: bool = False,
                            reset_policies: str | None = None, reset_base_url: str | None = None,
-                           execute_resets: bool | None = None, home: str | Path | None = None) -> dict:
+                           execute_resets: bool | None = None, home: str | Path | None = None,
+                           env_profile: str | None = None) -> dict:
     """Collect fresh usage/credits and apply policy, then write the safe snapshot.
 
     This importable API is also used by the published CLI. No model smoke or
     package-local token refresh is performed; ChatCRS uses its standard token
     lifecycle. Last-known values are display-only.
     """
-    settings = collection_settings(home=home)
+    settings = collection_settings(home=home, env_profile=env_profile)
     reset_policies = settings['reset_policies'] if reset_policies is None else reset_policies
     reset_base_url = settings['reset_base_url'] if reset_base_url is None else reset_base_url
     # A configured account's enabled flag is its only persistent permission.

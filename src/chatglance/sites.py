@@ -222,12 +222,13 @@ def _recount(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-def load_sites_inventory(path: str | Path, *, generated_at: str | None = None) -> dict[str, Any]:
+def load_sites_inventory(path: str | Path, *, generated_at: str | None = None,
+                         env_profile: str | None = None, home: str | Path | None = None) -> dict[str, Any]:
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
         raise ValueError("site inventory config must be a YAML object")
     page = raw.get("page") if isinstance(raw.get("page"), dict) else {}
-    settings = site_settings()
+    settings = site_settings(env_profile=env_profile, home=home) if env_profile else site_settings()
     defaults = {key: text_value(page[key]) if key in page else value for key, value in settings.items()}
     validate_site_settings(defaults)
     uptime_base_url = defaults["uptime_base_url"]

@@ -96,18 +96,40 @@ class ChatGlanceConfig(BaseEnvConfig):
         print("Site defaults validated; no network test is required.")
 
 
-def collection_settings(*, home=None) -> dict:
+def named_profile_values(name: str, *, home=None) -> dict[str, str]:
+    """Load exactly one existing named profile, without active/process fallback."""
+    from chatenv import EnvStore, get_paths
+    if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,47}", name)
+            or name == "default"):
+        raise ValueError("invalid named ChatGlance profile")
+    store = EnvStore(get_paths(home).envs_dir)
+    path = store.profile_path(ChatGlanceConfig, name)
+    if any(part.is_symlink() for part in (path, *path.parents)) or not path.is_file():
+        raise ValueError("named ChatGlance profile is unavailable")
+    try:
+        values = store.load_profile(ChatGlanceConfig, name)
+    except (ValueError, OSError) as exc:
+        raise ValueError("named ChatGlance profile is unavailable") from exc
+    if not isinstance(values, dict):
+        raise ValueError("named ChatGlance profile is unavailable")
+    return values
+
+
+def collection_settings(*, home=None, env_profile: str | None = None) -> dict:
     """Resolve only non-secret collector settings: process env then ChatEnv."""
     import os
     from chatenv import EnvStore, get_paths
-    try:
-        values = EnvStore(get_paths(home).envs_dir).load_active(ChatGlanceConfig)
-    except (ValueError, OSError):
-        values = {}
+    if env_profile is not None:
+        values = named_profile_values(env_profile, home=home)
+    else:
+        try:
+            values = EnvStore(get_paths(home).envs_dir).load_active(ChatGlanceConfig)
+        except (ValueError, OSError):
+            values = {}
     def resolve(key, default):
-        return os.environ[key] if key in os.environ else values.get(key, default)
+        return os.environ[key] if env_profile is None and key in os.environ else values.get(key, default)
     legacy = "CHATGLANCE_ACCOUNT_LIMITS_RESET_EXECUTE"
-    if legacy in values or legacy in os.environ:
+    if legacy in values or (env_profile is None and legacy in os.environ):
         raise ValueError("Legacy global execution setting requires per-account migration before scanning")
     return {"profiles": resolve("CHATGLANCE_ACCOUNT_LIMITS_PROFILES", ""),
             "subscriptions": resolve("CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS", ""),
@@ -119,19 +141,22 @@ def collection_settings(*, home=None) -> dict:
             "control_path": resolve("CHATGLANCE_ACCOUNT_LIMITS_CONTROL_PATH", "") or ""}
 
 
-def history_settings(*, home=None) -> dict[str, int]:
+def history_settings(*, home=None, env_profile: str | None = None) -> dict[str, int]:
     """Resolve and validate bounded non-secret refresh-history settings."""
 
     import os
     from chatenv import EnvStore, get_paths
 
-    try:
-        values = EnvStore(get_paths(home).envs_dir).load_active(ChatGlanceConfig)
-    except (ValueError, OSError):
-        values = {}
+    if env_profile is not None:
+        values = named_profile_values(env_profile, home=home)
+    else:
+        try:
+            values = EnvStore(get_paths(home).envs_dir).load_active(ChatGlanceConfig)
+        except (ValueError, OSError):
+            values = {}
 
     def bounded(key: str, default: str, minimum: int, maximum: int) -> int:
-        raw = os.environ[key] if key in os.environ else values.get(key, default)
+        raw = os.environ[key] if env_profile is None and key in os.environ else values.get(key, default)
         if isinstance(raw, bool):
             raise ValueError(f"{key} must be a whole number")
         try:
@@ -153,16 +178,19 @@ def history_settings(*, home=None) -> dict[str, int]:
     }
 
 
-def site_settings(*, home=None) -> dict[str, str]:
+def site_settings(*, home=None, env_profile: str | None = None) -> dict[str, str]:
     """Resolve site defaults from process env, then the active ChatEnv profile."""
     import os
     from chatenv import EnvStore, get_paths
 
-    values = EnvStore(get_paths(home).envs_dir).load_active(ChatGlanceConfig)
+    if env_profile is not None:
+        values = named_profile_values(env_profile, home=home)
+    else:
+        values = EnvStore(get_paths(home).envs_dir).load_active(ChatGlanceConfig)
     result = {}
     for field in ("public_domain", "local_domain", "uptime_base_url"):
         key = "CHATGLANCE_SITES_" + field.upper()
-        value = os.environ[key] if key in os.environ else values.get(key, "")
+        value = os.environ[key] if env_profile is None and key in os.environ else values.get(key, "")
         result[field] = str(value or "").strip()
     return result
 
@@ -189,4 +217,4 @@ def validate_site_settings(settings: dict[str, str]) -> None:
             raise ValueError("CHATGLANCE_SITES_UPTIME_BASE_URL must be an HTTP(S) base URL without credentials, query or fragment")
 
 
-__all__ = ["ChatGlanceConfig", "collection_settings", "history_settings", "site_settings", "validate_site_settings"]
+__all__ = ["ChatGlanceConfig", "collection_settings", "history_settings", "site_settings", "validate_site_settings", "named_profile_values"]

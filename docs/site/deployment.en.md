@@ -3,7 +3,7 @@
 ## Five layers and compatibility
 
 1. Git-tracked source owns public templates, Python APIs and documentation.
-2. The installed **ChatGlance 0.3.4** wheel owns all executable business logic. No unit points at a checkout.
+2. The installed **ChatGlance 0.5.0** wheel owns all executable business logic. No unit points at a checkout.
 3. A separately maintained **ChatArch/glance chatarch-v0.2.1** binary owns web/login/session handling. The maintained 0.1.0 fork is compatible when no new Go feature is needed; unmodified upstream is not an interchangeable login backend.
 4. Typed ChatEnv owns credentials; its `glance/` runtime owns private configuration, inventories, generated snapshots and verified binaries.
 5. Optional Linux user-systemd units are thin installed-package entrypoints; nginx is separately operator-managed.
@@ -11,6 +11,22 @@
 The native project overview refresh icon requires `header-controls-url` support from the maintained Go `chatarch-v0.2.1` or newer. Older binaries cannot display this entry. Python and Go versions are independent: deploy the verified Go binary before regenerating pages.
 
 The full managed installer remains Linux user-systemd by default. macOS does not reuse the Linux ownership manifest: an operator may supply thin LaunchAgents invoking installed native `chatglance refresh` / `runtime maintain` entrypoints with explicit pages and scheduled policy. The Mac web job uses the canonical `chatarch-glance.service` label and matching `~/Library/LaunchAgents/chatarch-glance.service.plist`, whose `ProgramArguments` must invoke the installed Python `-m chatglance.cli runtime serve --runtime-home <reviewed absolute path>`. On changed content, the package checks this plist and runtime, waits boundedly for bootout before bootstrapping only that job, and requires a stable new launchd PID plus bounded guest-home readiness at the configured web host/port before recording success. A failed bootstrap/readiness check attempts bounded recovery of the same job and still reports the initial failure. No raw signals, generic service manager, or LaunchAgent installation is added. Rendering/init does not require systemd. No automatic release, production migration, service activation, SSH discovery or account redemption occurs on installation. This guide describes operator-authorized actions, not a completed production cutover.
+
+Version 0.5.0 can also render separate `chatarch-glance.<name>.service` web and `chatarch-glance.<name>.refresh` launchd templates for a read-only instance. The private instance manifest binds its label, runtime, interpreter and exact native `runtime serve` arguments. A changed page restarts only that instance's web job after the same owner/mode/PID/readiness/recovery checks. The main label remains `chatarch-glance.service`. Rendering is for review only; the CLI does not install LaunchAgents. The Linux managed installer continues to serve the legacy main runtime.
+
+## Named read-only instances
+
+First create a non-default named ChatGlance profile in ChatEnv and set `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` to explicit scoped CRS account references. An account-limits instance needs at least one enabled label from that profile. The example uses synthetic names and a reserved domain:
+
+```bash
+chatglance runtime instance init --runtime-home "$CHATARCH_HOME/glance-reader" --name reader --env-profile reader --page account-limits --account alpha --host 127.0.0.1 --port 11080 --origin https://reader.example.invalid --glance-bin "$HOME/.local/bin/glance"
+chatglance runtime instance init --runtime-home "$CHATARCH_HOME/glance-reader" --name reader --env-profile reader --page account-limits --account alpha --host 127.0.0.1 --port 11080 --origin https://reader.example.invalid --glance-bin "$HOME/.local/bin/glance" --apply
+chatglance runtime instance set-login --runtime-home "$CHATARCH_HOME/glance-reader" --username reader@example.invalid --password-stdin --apply
+chatglance runtime instance render-launchd --runtime-home "$CHATARCH_HOME/glance-reader"
+chatglance runtime instance show --runtime-home "$CHATARCH_HOME/glance-reader"
+```
+
+`init`, `configure`, `set-login` and template writes preview until `--apply`. The manifest binds the ChatEnv home used at initialization and an optional absolute shared Go binary path, so a separate job does not depend on its process active profile or `CHATARCH_HOME`. Passwords come only from standard input, a named environment variable or a hidden prompt; EnvStore saves a bcrypt hash and independently generated session key. An instance assembles YAML only from its own snapshots and enabled modules, retaining native `server.proxied: true` for HTTPS proxy login. `configure --page ... --account ... --apply` explicitly changes the owner's saved definition: modules can be disabled or re-enabled and accounts can be selected from enabled subscriptions in the same named profile. Instance identity and profile cannot change in place. Ordinary `refresh` and `serve` remain bound to the saved manifest. Operators separately review/install the same verified Go binary and rendered LaunchAgents, then use native `refresh` and `runtime serve`. Instance refresh remains read-only even with `--scheduled`; controls, maintenance and extra config pages are rejected. A main runtime without an instance manifest keeps its legacy behavior.
 
 ## Generic source and runtime tree
 

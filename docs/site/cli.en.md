@@ -46,6 +46,12 @@ chatglance
 │   ├── import-env
 │   ├── install-binary
 │   ├── install-systemd
+│   ├── instance
+│   │   ├── configure
+│   │   ├── init
+│   │   ├── render-launchd
+│   │   ├── set-login
+│   │   └── show
 │   ├── maintain
 │   ├── maintain-managed
 │   ├── paths
@@ -66,6 +72,8 @@ chatglance
 ```
 
 `refresh` updates configured pages from existing runtime inventories; manual mode never redeems reset cards. `runtime history list/show` are read-only, while `prune` previews unless `--apply` explicitly removes confirmed-owned history. `runtime init` creates loopback configuration and empty snapshots only; `install-binary` requires a local archive and SHA256. `render-portable` prints or writes review units without registering them; `serve` and `controls` require explicit execution. `runtime maintain` may rewrite runtime config; legacy `install-systemd` and `start` change user-level units and require separate review. See [Refresh and operations](operations.md).
+
+`runtime instance init/configure/set-login/render-launchd` preview by default. They create a private read-only runtime, disable or re-enable pages and enabled accounts in the same named profile, provision native Go login and render macOS review templates; `--apply` writes. `instance show` displays only non-secret selection and ownership. Instance `refresh` and `serve` use the same native runtime path and obey the saved manifest; extra pages, controls and maintenance writes are rejected. See [named instance deployment](deployment.md#named-read-only-instances).
 
 ## Account limits and reset controls
 

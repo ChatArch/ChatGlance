@@ -57,11 +57,21 @@ def restart_user_service(service: str, runtime_home: str | Path | None = None) -
     """Restart the selected Glance user service through the native manager."""
 
     if sys.platform == "darwin":
-        if service != "chatarch-glance.service":
-            raise ValueError("restart target must be a Glance launchd label")
         if runtime_home is None:
             raise ValueError("Glance runtime home is required for launchd restart")
-        root = Path(runtime_home).expanduser().resolve(strict=True)
+        from .instances import load_instance, service_identity, verify_config_pages
+        requested_root = Path(runtime_home).expanduser().absolute()
+        instance = load_instance(requested_root, required=False)
+        root = requested_root.resolve(strict=True)
+        if instance:
+            verify_config_pages(root, instance)
+            if service != instance.web_label:
+                raise ValueError("restart target is not owned by this instance")
+            owned_python = service_identity(root)["python_bin"]
+        elif service != "chatarch-glance.service":
+            raise ValueError("restart target must be a Glance launchd label")
+        else:
+            owned_python = None
         plist = Path.home() / "Library/LaunchAgents" / f"{service}.plist"
         if (plist.is_symlink() or plist.parent.is_symlink() or not plist.is_file()
                 or plist.stat().st_uid != os.getuid() or plist.stat().st_mode & 0o022
@@ -79,6 +89,7 @@ def restart_user_service(service: str, runtime_home: str | Path | None = None) -
         ) else None
         executable = Path(arguments[0]) if expected else None
         if (definition.get("Label") != service or arguments != expected
+                or (owned_python is not None and arguments[0] != owned_python)
                 or executable is None or not executable.is_absolute() or not executable.is_file()):
             raise ValueError("Glance LaunchAgent topology does not match the runtime")
         config = yaml.safe_load((root / "config/glance.yml").read_text(encoding="utf-8"))
@@ -134,6 +145,11 @@ def restart_user_service(service: str, runtime_home: str | Path | None = None) -
             detail = type(recovery_error).__name__ if recovery_error else "readiness unconfirmed"
             raise RuntimeError(f"Glance web restart failed; recovery failed ({detail})") from original_error
     else:
+        if runtime_home is not None:
+            from .instances import load_instance
+            instance = load_instance(runtime_home, required=False)
+            if instance and service != instance.web_label:
+                raise ValueError("restart target is not owned by this instance")
         subprocess.run(
             ["systemctl", "--user", "restart", service],
             check=True, capture_output=True, text=True, timeout=45,
@@ -195,9 +211,13 @@ def validate_glance_config(glance_bin: str | Path, config_path: str | Path) -> N
     from .portable import authenticated_environment, bridge_environment
 
     text = Path(config_path).read_text(encoding="utf-8")
-    if "CHATGLANCE_AUTH_USER_" in text:
+    ancestors = Path(config_path).absolute().parents
+    instance_root = next((parent for parent in ancestors if (parent / "private/instance.json").is_file()), None)
+    if instance_root is not None:
         from .managed import runtime_environment
-        ancestors = Path(config_path).absolute().parents
+        environment = runtime_environment(instance_root, auth=True)
+    elif "CHATGLANCE_AUTH_USER_" in text:
+        from .managed import runtime_environment
         root = next((parent for parent in ancestors if (parent / "private/managed.json").is_file()), None)
         root = root or (Path(config_path).parent.parent if Path(config_path).parent.name == "config" else None)
         root = root or Path(glance_bin).absolute().parent.parent
@@ -236,6 +256,10 @@ def maintain_config(
     """
 
     source = Path(config_path)
+    from .instances import load_instance
+    effective_root = runtime_home or (source.parent.parent if source.parent.name == "config" else None)
+    if effective_root is not None and load_instance(effective_root, required=False):
+        raise ValueError("runtime maintain is unavailable for read-only instances")
     output = Path(output_path) if output_path is not None else source
     config = load_yaml(source)
     inventory = load_inventory(data_path)

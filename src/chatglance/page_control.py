@@ -24,6 +24,12 @@ class PageControlError(ValueError):
         self.status = status
 
 
+def _require_writable(root):
+    from .instances import load_instance
+    if load_instance(root, required=False):
+        raise PageControlError("read-only instance controls are unavailable", 403)
+
+
 def _private_dir(root):
     path = Path(root) / "private"
     try:
@@ -92,6 +98,7 @@ def note_entry(root, alias):
 
 
 def save_note(root, alias, note, revision):
+    _require_writable(root)
     if not isinstance(alias, str) or alias not in _aliases(root):
         raise PageControlError("服务器不在当前配置中", 404)
     if not isinstance(note, str) or len(note) > 2000 or len(note.encode("utf-8")) > 4096 or "\x00" in note:
@@ -117,6 +124,7 @@ def overlay_notes(root, data):
 
 
 def publish_notes(root, alias, note, revision):
+    _require_writable(root)
     from .refresh import _json, _publish, _refresh_lock, _restart
     from .runtime import validate_glance_config
     from .servers import build_servers_page, load_server_inventory_config, page_options_from_inventory_config
@@ -169,6 +177,7 @@ def publish_notes(root, alias, note, revision):
 
 class PageControlApp:
     def __init__(self, root, public_origin):
+        _require_writable(root)
         self.root = Path(root)
         self.public_origin = public_origin
         self.lock = threading.RLock()

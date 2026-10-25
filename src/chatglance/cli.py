@@ -795,9 +795,12 @@ def portable_controls(runtime_home: Path | None, host: str | None) -> None:
     """Run explicitly provisioned authenticated controls."""
     from chatglance.portable import runtime_home as resolve
     from chatglance.managed import runtime_environment, effective_home
+    from chatglance.instances import load_instance
     from chatglance.reset_control import ControlError, serve_controls
     from urllib.parse import urlsplit
     try:
+        if load_instance(resolve(runtime_home), required=False):
+            raise ValueError("read-only instance controls are unavailable")
         environment = runtime_environment(resolve(runtime_home), auth=True)
         origin = environment.get("CHATGLANCE_PUBLIC_ORIGIN", "")
         parsed = urlsplit(origin)
@@ -849,6 +852,9 @@ def maintain_runtime(runtime_home: Path, config_path: Path, data_path: Path, bac
     """Update runtime config atomically and optionally restart a service."""
 
     runtime_home = runtime_home.expanduser()
+    from chatglance.instances import load_instance
+    if load_instance(runtime_home, required=False):
+        raise click.ClickException("runtime maintain is unavailable for read-only instances")
     config = runtime_path(runtime_home, config_path)
     data = runtime_path(runtime_home, data_path)
     backups = runtime_path(runtime_home, backup_dir) if backup_dir else None
@@ -1015,6 +1021,9 @@ def status_runtime(service_name: str, timer_name: str, runtime_home: Path | None
 from chatglance.managed_cli import register as register_managed_runtime
 
 register_managed_runtime(runtime)
+from chatglance.instance_cli import register as register_instance_runtime
+
+register_instance_runtime(runtime)
 
 
 if __name__ == "__main__":

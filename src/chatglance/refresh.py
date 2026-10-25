@@ -18,14 +18,10 @@ from typing import Any, Sequence
 import yaml
 from chatenv import get_paths
 from .glance_config import replace_projects_page
+from .page_modules import MODULES, render_page
 from .runtime import restart_user_service, validate_glance_config
 
-PAGE_SPECS = {
-    "projects": ("项目", "chatarch-projects.json", "projects-page.yml"),
-    "servers": ("服务器", "server-status.json", "server-page.yml"),
-    "sites": ("网站服务", "site-services.json", "site-services-page.yml"),
-    "account-limits": ("订阅详情", "account-limits.json", "account-limits-page.yml"),
-}
+PAGE_SPECS = {key: (module.name, module.snapshot, module.page_file) for key, module in MODULES.items()}
 PAGE_KEYS = tuple(PAGE_SPECS)
 
 
@@ -168,7 +164,7 @@ def _cli_report(data: dict) -> str:
     return output.getvalue()
 
 
-def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] | None, actual_cli_tree: bool, allow_offline_regression: bool, scheduled: bool = False, collection: CollectionOptions | None = None, run_id: str | None = None) -> PageUpdate:
+def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] | None, actual_cli_tree: bool, allow_offline_regression: bool, scheduled: bool = False, collection: CollectionOptions | None = None, run_id: str | None = None, instance=None) -> PageUpdate:
     collection = collection or CollectionOptions()
     previous_path = root / "data" / PAGE_SPECS[key][1]
     previous = _json(previous_path)
@@ -177,8 +173,11 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
         from .config import collection_settings
         from .account_limits import build_account_limits_page
         from .subscriptions import parse_subscriptions, selected_profiles
-        settings = collection_settings()
-        selected = selected_profiles(settings, explicit=profiles, fallback=[item["profile"] for item in previous.get("codex", []) if item.get("profile")])
+        from .instances import instance_home
+        bound_home = instance_home(root) if instance else None
+        settings = collection_settings(home=bound_home, env_profile=instance.env_profile if instance else None)
+        selected = selected_profiles(settings, explicit=instance.accounts if instance else profiles,
+                                     fallback=[] if instance else [item["profile"] for item in previous.get("codex", []) if item.get("profile")])
         if not selected and parse_subscriptions(settings.get("subscriptions")) is None:
             raise RefreshError("no configured account profiles")
         data = collect_account_limits(
@@ -186,17 +185,25 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
             history_path=previous_path if previous_path.exists() else None,
             timeout=collection.account_timeout, reset_timeout=collection.reset_timeout,
             no_public_reset=collection.no_public_reset, reset_base_url=collection.reset_base_url,
-            execute_resets=scheduled,
+            execute_resets=scheduled and instance is None,
+            **({"home": bound_home} if instance else {}),
+            **({"env_profile": instance.env_profile} if instance else {}),
         )
+        if instance:
+            from .instances import scope_account_data
+            data = scope_account_data(data, instance.accounts)
         partial = bool(data.get("refresh_status", {}).get("failed_count")) or data.get("codex_reset", {}).get("status") not in {"ok", "skipped"}
-        return PageUpdate(key, data, build_account_limits_page(data), partial=partial)
+        return PageUpdate(key, data, render_page(key, data, allow_controls=instance is None), partial=partial)
     if key == "sites":
         from .sites import load_sites_inventory, apply_gatus_status, build_sites_page
-        data = load_sites_inventory(collection.sites_inventory or root / "config/site-services.yml")
-        database = collection.gatus_db or root.parent / "uptime-gatus/data/gatus.db"
-        if database.exists():
+        inventory_path = collection.sites_inventory or root / "config/site-services.yml"
+        from .instances import instance_home
+        data = (load_sites_inventory(inventory_path, env_profile=instance.env_profile, home=instance_home(root))
+                if instance else load_sites_inventory(inventory_path))
+        database = collection.gatus_db if instance else collection.gatus_db or root.parent / "uptime-gatus/data/gatus.db"
+        if database is not None and database.exists():
             data = apply_gatus_status(data, database)
-        return PageUpdate(key, data, build_sites_page(data))
+        return PageUpdate(key, data, render_page(key, data, allow_controls=instance is None))
     if key == "servers":
         from .servers import (load_server_inventory_config, aliases_from_inventory_config, collection_options_from_inventory_config, host_connection_overrides_from_inventory_config, collect_server_status, apply_server_inventory_config, page_options_from_inventory_config, build_servers_page, server_status_regressions)
         from .server_cache import LAST_GOOD_RELATIVE, dump_last_good, prepare_server_refresh
@@ -216,20 +223,34 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
         return PageUpdate(
             key,
             data,
-            build_servers_page(overlay_notes(root, data), **page_options_from_inventory_config(inventory)),
+            build_servers_page(overlay_notes(root, data), allow_controls=instance is None, **page_options_from_inventory_config(inventory)),
             state_files={str(LAST_GOOD_RELATIVE): dump_last_good(cache_plan.last_good)},
             partial=partial,
         )
     from .project_inventory import RefreshOptions, refresh_project_inventory
     from .projects import build_projects_page
     from .portable import portable_settings
-    owner = collection.projects_owner or portable_settings()["owner"] or (previous.get("source") or {}).get("owner") or "ChatArch"
+    if instance:
+        from .instances import _profile, instance_home
+        profile_values = _profile(instance, home=instance_home(root))
+        owner = collection.projects_owner or profile_values.get("CHATGLANCE_PROJECTS_OWNER") or (previous.get("source") or {}).get("owner")
+        if not owner:
+            raise RefreshError("instance projects require an explicit owner")
+        github_token = str(profile_values.get("CHATGLANCE_GITHUB_TOKEN") or "").strip() or None
+    else:
+        owner = collection.projects_owner or portable_settings()["owner"] or (previous.get("source") or {}).get("owner") or "ChatArch"
     overrides = root / "config/project-category-overrides.json"
     baseline = overrides if overrides.exists() else previous_path if previous_path.exists() else None
-    data = refresh_project_inventory(output_path=stage / "projects.json", baseline_data=baseline, options=RefreshOptions(owner=owner, workers=collection.project_workers, collect_actual_cli_trees=actual_cli_tree, uvx_bin=collection.uvx_bin, cli_tree_timeout=collection.cli_tree_timeout))
+    data = refresh_project_inventory(output_path=stage / "projects.json", baseline_data=baseline,
+                                     options=RefreshOptions(owner=owner, workers=collection.project_workers,
+                                                            collect_actual_cli_trees=actual_cli_tree,
+                                                            uvx_bin=collection.uvx_bin,
+                                                            cli_tree_timeout=collection.cli_tree_timeout,
+                                                            strict_token=instance is not None,
+                                                            github_token=github_token if instance else None))
     if not actual_cli_tree:
         _preserve_same_version_trees(data, previous)
-    return PageUpdate(key, data, build_projects_page(data), {"project-cli-tree-report.tsv": _cli_report(data)})
+    return PageUpdate(key, data, build_projects_page(data, allow_controls=instance is None), {"project-cli-tree-report.tsv": _cli_report(data)})
 
 
 def _restart(service: str, runtime_home: Path) -> None:
@@ -300,8 +321,34 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
     # retained.  The explicit negative option remains available for operators
     # who still want the legacy regression gate.
     allow_offline_regression = True if allow_offline_regression is None else allow_offline_regression
-    root = Path(runtime_home).expanduser().resolve() if runtime_home is not None else default_runtime_home()
+    requested_root = Path(runtime_home).expanduser().absolute() if runtime_home is not None else default_runtime_home()
+    from .instances import load_instance, verify_config_pages, instance_environment, instance_binary
+    instance = load_instance(requested_root, required=False)
+    root = requested_root.resolve()
     config_path = root / "config/glance.yml"
+    if instance:
+        expected_binary = instance_binary(root, instance)
+        if glance_bin is not None and Path(glance_bin).expanduser().absolute() != expected_binary:
+            raise RefreshError("instance validator must be its owned Go binary")
+        if selected and not set(selected) <= set(instance.pages):
+            raise RefreshError("requested pages exceed instance allowlist")
+        if profiles is not None and tuple(profiles) != instance.accounts:
+            raise RefreshError("requested accounts do not match instance allowlist")
+        if service_name not in ("chatarch-glance.service", instance.web_label):
+            raise RefreshError("restart target is not owned by this instance")
+        if collection.reset_base_url is not None:
+            raise RefreshError("instance account backend cannot be overridden")
+        for candidate in (collection.server_inventory, collection.sites_inventory, collection.gatus_db):
+            if candidate is not None:
+                candidate = Path(candidate).expanduser()
+                if (not candidate.is_absolute() or ".." in candidate.parts or root not in candidate.parents
+                        or any(part.is_symlink() for part in (candidate, *candidate.parents))):
+                    raise RefreshError("instance inventory path must stay inside its runtime")
+        service_name = instance.web_label
+        if not selected:
+            selected = list(instance.pages)
+        verify_config_pages(root, instance)
+        instance_environment(root, auth=True)
 
     from .refresh_history import RefreshHistory, RefreshHistoryError
 
@@ -311,7 +358,8 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
     except RefreshHistoryError as exc:
         raise RefreshError("refresh history is unavailable") from exc
 
-    validator = Path(glance_bin).expanduser() if glance_bin is not None else root / "bin/glance"
+    validator = (expected_binary if instance else Path(glance_bin).expanduser() if glance_bin is not None
+                 else root / "bin/glance")
     rows: list[dict[str, Any]] = []
     result = {
         "ok": False,
@@ -322,7 +370,7 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
         "changed": False,
         "published": False,
         "restarted": False,
-        "reset_execution": scheduled and "account-limits" in selected,
+        "reset_execution": scheduled and instance is None and "account-limits" in selected,
         "backup_dir": None,
     }
     journal_finished = False
@@ -357,6 +405,8 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
             raise RefreshError("runtime config is malformed") from exc
         if not isinstance(initial, dict) or not isinstance(initial.get("pages"), list):
             raise RefreshError("runtime config must contain pages")
+        if instance:
+            verify_config_pages(root, instance)
         if not selected:
             try:
                 selected = _configured_pages(initial, root, collection)
@@ -364,10 +414,12 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
                 raise RefreshError("configured page discovery failed") from exc
         if not selected:
             raise RefreshError("no configured generated pages to refresh")
-        result["reset_execution"] = scheduled and "account-limits" in selected
+        result["reset_execution"] = scheduled and instance is None and "account-limits" in selected
         history.checkpoint(journal_id, requested_pages=selected)
         from .config import history_settings
-        history_settings()
+        from .instances import instance_home
+        history_settings(home=instance_home(root) if instance else None,
+                         env_profile=instance.env_profile if instance else None)
         if not validator.is_file():
             raise RefreshError("Glance validator is missing; pass --glance-bin")
         phase = "lock"
@@ -391,6 +443,7 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
                             scheduled=scheduled,
                             collection=collection,
                             run_id=journal_id,
+                            instance=instance,
                         )
                         counts = update.data.get("counts", {})
                         details = {}
@@ -417,6 +470,8 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
                 config = yaml.safe_load(before)
                 if not isinstance(config, dict) or not isinstance(config.get("pages"), list):
                     raise RefreshError("runtime config must contain pages")
+                if instance:
+                    verify_config_pages(root, instance)
                 payloads = {}
                 for update in updates:
                     _replace_page(config, update.page, inventory=update.data if update.key == "projects" else None)

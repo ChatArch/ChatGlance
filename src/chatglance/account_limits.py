@@ -645,7 +645,7 @@ def _render_quota_windows(profile: dict[str, Any]) -> str:
     return "".join(rendered)
 
 
-def render_account_limits_html(data: dict[str, Any]) -> str:
+def render_account_limits_html(data: dict[str, Any], *, allow_controls: bool = True) -> str:
     normalized = normalize_account_limits_data(data)
     counts = normalized["counts"]
 
@@ -679,7 +679,7 @@ def render_account_limits_html(data: dict[str, Any]) -> str:
     {_render_quota_windows(profile)}
     <details class="reset-card-panel"><summary>重置卡 <span>展开 / 收起</span></summary>
     {_render_reset_policy(profile)}
-    {_render_policy_control(profile, normalized['reset_control_path'])}
+    {_render_policy_control(profile, normalized['reset_control_path']) if allow_controls else ''}
     </details>
     {error_html}
   </div>
@@ -810,6 +810,7 @@ def build_account_limits_page(
     page_name: str = ACCOUNT_LIMITS_PAGE_NAME,
     page_slug: str = DEFAULT_PAGE_SLUG,
     widget_title: str = DEFAULT_WIDGET_TITLE,
+    allow_controls: bool = True,
 ) -> dict[str, Any]:
     return {
         "name": page_name,
@@ -819,7 +820,7 @@ def build_account_limits_page(
             {
                 "size": "full",
                 "widgets": [
-                    {"type": "html", "title": widget_title, "source": render_account_limits_html(data)}
+                    {"type": "html", "title": widget_title, "source": render_account_limits_html(data, allow_controls=allow_controls)}
                 ],
             }
         ],

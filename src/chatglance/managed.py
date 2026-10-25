@@ -133,6 +133,11 @@ def effective_home(root: str | Path):
 
 def runtime_environment(root: str | Path, *, auth: bool = False, values: dict | None = None) -> dict[str, str]:
     root = runtime_home(root)
+    from .instances import load_instance, instance_environment
+    if load_instance(root, required=False):
+        if values is not None:
+            raise ValueError("instance environment cannot be overridden")
+        return instance_environment(root, auth=auth)
     home = _home(root)
     environment = bridge_environment(home=home)
     for key in tuple(environment):

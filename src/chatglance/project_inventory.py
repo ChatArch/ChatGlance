@@ -50,6 +50,9 @@ class RefreshOptions:
     collect_actual_cli_trees: bool = False
     uvx_bin: str = "uvx"
     token_env: tuple[str, ...] = ("CHATGLANCE_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN")
+    # Opted-in instances provide one token from their named profile.
+    github_token: str | None = None
+    strict_token: bool = False
     generated_at: str | None = None
 
 
@@ -160,14 +163,18 @@ def resolve_token(env_names: Sequence[str] = ("CHATGLANCE_GITHUB_TOKEN", "GITHUB
     return read_token_from_chatgh_chatenv()
 
 
-def run_chatgh_repo_list(*, owner: str, limit: int) -> list[JsonDict]:
+_TOKEN_UNSET = object()
+
+
+def run_chatgh_repo_list(*, owner: str, limit: int, token: str | None | object = _TOKEN_UNSET) -> list[JsonDict]:
     """Return repositories through ChatGH's importable Python API."""
 
     try:
         from chatgh.github.commands import list_repos
     except Exception as exc:  # pragma: no cover - exercised only when ChatGH is not installed.
         raise RuntimeError("ChatGH Python API is required for project inventory refresh") from exc
-    payload = list_repos(owner=owner, limit=limit, sort="name", direction="asc", token=resolve_token())
+    payload = list_repos(owner=owner, limit=limit, sort="name", direction="asc",
+                         token=resolve_token() if token is _TOKEN_UNSET else token)
     if not isinstance(payload, list):
         raise ValueError("ChatGH repo list API must return a JSON array")
     return [item for item in payload if isinstance(item, dict)]
@@ -962,8 +969,15 @@ def build_project_inventory(
 def refresh_project_inventory(*, output_path: str | Path, options: RefreshOptions = RefreshOptions(), repo_list_json: str | Path | None = None, baseline_data: str | Path | None = None) -> JsonDict:
     """Refresh and write the project inventory JSON."""
 
-    rows = load_repo_rows(repo_list_json) if repo_list_json else run_chatgh_repo_list(owner=options.owner, limit=options.limit)
-    token = resolve_token(options.token_env)
+    if options.strict_token:
+        token = options.github_token
+        if not token or not token.strip():
+            raise ValueError("projects instance requires a GitHub token in its named profile")
+        rows = load_repo_rows(repo_list_json) if repo_list_json else run_chatgh_repo_list(
+            owner=options.owner, limit=options.limit, token=token)
+    else:
+        rows = load_repo_rows(repo_list_json) if repo_list_json else run_chatgh_repo_list(owner=options.owner, limit=options.limit)
+        token = resolve_token(options.token_env)
     fetcher = make_github_fetcher(token=token, timeout=options.timeout)
     baseline_inventory = load_baseline_inventory(baseline_data)
     actual_cli_tree_fetcher = make_actual_cli_tree_fetcher(uvx_bin=options.uvx_bin) if options.collect_actual_cli_trees else None
