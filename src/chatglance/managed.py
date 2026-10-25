@@ -36,7 +36,7 @@ DEFAULT_NAMES = {
     "maintenance_timer": "chatarch-glance-maintenance.timer",
 }
 BUSY_STATES = {"activating", "active", "reloading", "deactivating"}
-AUTH_KEYS = {"CHATGLANCE_LOGIN_SECRET", "CHATGLANCE_LOGIN_USER", "CHATGLANCE_LOGIN_PASSWORD_HASH", "CHATGLANCE_LOGIN_ACCOUNTS"}
+AUTH_KEYS = {"CHATGLANCE_LOGIN_SECRET", "CHATGLANCE_LOGIN_USER", "CHATGLANCE_LOGIN_PASSWORD", "CHATGLANCE_LOGIN_PASSWORD_HASH", "CHATGLANCE_LOGIN_ACCOUNTS"}
 
 
 def _safe_path(path: Path) -> None:
@@ -141,7 +141,7 @@ def runtime_environment(root: str | Path, *, auth: bool = False, values: dict | 
     home = _home(root)
     environment = bridge_environment(home=home)
     for key in tuple(environment):
-        if key in AUTH_KEYS or re.fullmatch(r"CHATGLANCE_AUTH_(?:USER|HASH)_[0-9]+", key):
+        if key in AUTH_KEYS or key == "CHATGLANCE_LOGIN_PASSWORD_YAML" or re.fullmatch(r"CHATGLANCE_AUTH_(?:USER|HASH)_[0-9]+", key):
             environment.pop(key)
     provider = EnvStore(get_paths(home).envs_dir).load_active(ChatGlanceConfig)
     environment.update({key: provider[key] for key in AUTH_KEYS if provider.get(key)})
@@ -152,17 +152,20 @@ def runtime_environment(root: str | Path, *, auth: bool = False, values: dict | 
     accounts = json.loads(account_text)
     if not isinstance(accounts, dict) or len(accounts) > 100:
         raise ValueError("invalid typed login account map")
+    if accounts:
+        environment.pop("CHATGLANCE_LOGIN_PASSWORD", None)
     for index, entry in accounts.items():
         if not re.fullmatch(r"[0-9]{1,3}", index) or not isinstance(entry, dict):
             raise ValueError("invalid typed login account entry")
         checked = authenticated_environment(home=home, environ={
-            **environment, "CHATGLANCE_LOGIN_USER": entry.get("username", ""),
+            **{key: value for key, value in environment.items() if key not in ("CHATGLANCE_LOGIN_PASSWORD", "CHATGLANCE_LOGIN_PASSWORD_YAML")},
+            "CHATGLANCE_LOGIN_USER": entry.get("username", ""),
             "CHATGLANCE_LOGIN_PASSWORD_HASH": entry.get("password_hash", ""),
-        })
+        }, strict=True)
         environment[f"CHATGLANCE_AUTH_USER_{index}"] = checked["CHATGLANCE_LOGIN_USER"]
         environment[f"CHATGLANCE_AUTH_HASH_{index}"] = checked["CHATGLANCE_LOGIN_PASSWORD_HASH"]
     if auth and not accounts:
-        environment = authenticated_environment(home=home, environ=environment)
+        environment = authenticated_environment(home=home, environ=environment, strict=True)
     return environment
 
 

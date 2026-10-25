@@ -166,5 +166,5 @@ chatglance
 - `access render-single-origin-optional-login` 从既有私有 config 和完整 inventory 生成**同一实例**私有候选配置；输出必须是显式安全路径，不是公开下载文件，不能用旧双实例候选代替。
 - 页面采集/渲染命令只写显式输出路径；`account-limits subscriptions` 管理 ChatEnv 中的跟踪引用，写操作默认预览、`--execute` 才保存，不签发凭据或消费卡片。所有命令均不得输出 Token、代理凭据或密码。
 - `runtime maintain` 可替换 runtime config，并可按显式选项重启 service。
-- `runtime instance` 的 init/configure/set-login/render-launchd 默认只计划；`--apply` 分别创建私有只读实例、在同一命名 profile 内停用或重新启用页面与已启用账号、向命名 ChatEnv profile 保存 bcrypt 登录与独立会话密钥，或将 launchd 模板写入审核目录。`show` 只读。实例仍经原有 `refresh` / `runtime serve` 服务，执行时不能扩展已保存的清单。
+- `runtime instance` 的 init/configure/set-login/render-launchd 默认只计划；`--apply` 分别创建私有只读实例、在同一命名 profile 内停用或重新启用页面与已启用账号、向命名 ChatEnv profile 保存敏感真实密码与独立会话密钥，由原生 Go 内部生成 bcrypt hash，或将 launchd 模板写入审核目录。`show` 只读。实例仍经原有 `refresh` / `runtime serve` 服务，执行时不能扩展已保存的清单。
 - `runtime install-systemd` 与 `runtime start` 会修改或启动 user-level systemd 状态；`runtime status` 只回读安全状态字段。

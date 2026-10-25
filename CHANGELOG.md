@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.1 - 2026-10-25
+
+- Store new instance login passwords as sensitive real ChatEnv values with independent session keys. Pass an escaped YAML scalar through the private Go child environment and let native Go hash the password internally; generated config and CLI output retain references only.
+- Migrate an instance's legacy hash login template when `set-login --apply` configures a raw password, with publication/profile rollback on failure. Keep unchanged hash-only and indexed login configurations compatible.
+- Remove Python bcrypt from runtime dependencies; retain it only for development fixtures.
+
 ## 0.5.0 - 2026-10-25
 
 - Add secret-free, read-only instance manifests with selected projects, servers, sites and account-limits pages. Each instance assembles its own snapshots and Glance YAML through the existing collectors and renderers; the unconfigured main runtime retains its previous behavior.

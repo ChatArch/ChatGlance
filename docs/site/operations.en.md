@@ -35,7 +35,7 @@ Manual calls without `--scheduled` never redeem reset cards; account pages only 
 
 For a projects page, set its owner in the named profile or pass `--projects-owner`. Its GitHub token must also come from that profile; a missing token fails before ChatGH runs, without borrowing the main active profile, process or local Git credentials. Server and site inventories must belong to the instance runtime, not the main site.
 
-Even `refresh --scheduled` cannot consume cards or write policy/ledger state for an instance. Cards keep the existing quota/calendar presentation but render no control entry. `runtime controls`, legacy `account-limits control-serve` and `runtime maintain` reject the instance. Native Go login reads the bcrypt hash and independent 64-byte session key from exactly its named profile; missing fields fail without active, main or process login fallback. The main runtime without an instance manifest keeps its previous behavior.
+Even `refresh --scheduled` cannot consume cards or write policy/ledger state for an instance. Cards keep the existing quota/calendar presentation but render no control entry. `runtime controls`, legacy `account-limits control-serve` and `runtime maintain` reject the instance. Native Go login reads the sensitive real password and independent 64-byte session key from exactly its named profile. The password travels through a private child-environment YAML scalar reference and Go hashes it internally. Existing hash-only templates remain compatible; missing fields for the selected template fail without active, main or process login fallback. The main runtime without an instance manifest keeps its previous behavior.
 
 ## Multiple tracked accounts
 

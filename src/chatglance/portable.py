@@ -178,7 +178,7 @@ def install_verified_binary(archive: str | Path, sha256: str, home: str | Path |
 
 
 BRIDGE_KEYS = (
-    "CHATGLANCE_LOGIN_SECRET", "CHATGLANCE_LOGIN_PASSWORD_HASH", "CHATGLANCE_LOGIN_USER",
+    "CHATGLANCE_LOGIN_SECRET", "CHATGLANCE_LOGIN_PASSWORD", "CHATGLANCE_LOGIN_PASSWORD_HASH", "CHATGLANCE_LOGIN_USER",
     "CHATGLANCE_LOGIN_ACCOUNTS",
     "CHATGLANCE_PUBLIC_ORIGIN", "CHATGLANCE_WEB_PORT", "CHATGLANCE_CONTROL_HOST", "CHATGLANCE_CONTROL_PORT",
     "CHATGLANCE_PROJECTS_OWNER", "CHATGLANCE_REFRESH_PAGES", "CHATGLANCE_REFRESH_INTERVAL",
@@ -215,15 +215,31 @@ def portable_settings(*, home: str | Path | None = None, environ: dict[str, str]
     return {"owner": owner, "pages": pages, "interval": interval}
 
 
+def validate_native_password(password: str) -> None:
+    try:
+        length = len(password.encode("utf-8")) if isinstance(password, str) else 0
+    except UnicodeEncodeError:
+        length = 0
+    if not 6 <= length <= 72 or "\x00" in password:
+        raise ValueError("login password must be 6-72 UTF-8 bytes without NUL")
+
+
 def authenticated_environment(*, home: str | Path | None = None, environ: dict[str, str] | None = None,
                               strict: bool = False) -> dict[str, str]:
     result = dict(environ or {}) if strict else bridge_environment(home=home, environ=environ)
-    if not all(result.get(key) for key in ("CHATGLANCE_LOGIN_SECRET", "CHATGLANCE_LOGIN_PASSWORD_HASH", "CHATGLANCE_LOGIN_USER")):
-        raise ValueError("login requires configured signing secret, password hash and username")
-    if not result["CHATGLANCE_LOGIN_PASSWORD_HASH"].startswith(("$2a$", "$2b$", "$2y$")):
-        raise ValueError("login password hash must be bcrypt")
-    if not re.fullmatch(r"\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}", result["CHATGLANCE_LOGIN_PASSWORD_HASH"]):
-        raise ValueError("login password hash must be a complete bcrypt hash")
+    if not all(result.get(key) for key in ("CHATGLANCE_LOGIN_SECRET", "CHATGLANCE_LOGIN_USER")):
+        raise ValueError("login requires configured signing secret and username")
+    password = result.get("CHATGLANCE_LOGIN_PASSWORD")
+    if password is not None:
+        validate_native_password(password)
+        result["CHATGLANCE_LOGIN_PASSWORD_YAML"] = json.dumps(password, ensure_ascii=True)
+        result.pop("CHATGLANCE_LOGIN_PASSWORD", None)
+        result.pop("CHATGLANCE_LOGIN_PASSWORD_HASH", None)
+    else:
+        password_hash = result.get("CHATGLANCE_LOGIN_PASSWORD_HASH", "")
+        if not re.fullmatch(r"\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}", password_hash):
+            raise ValueError("login requires a complete bcrypt password hash or raw password")
+        result.pop("CHATGLANCE_LOGIN_PASSWORD_YAML", None)
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+@-]{2,49}", result["CHATGLANCE_LOGIN_USER"]):
         raise ValueError("login username must be a safe 3-50 character name or email")
     secret = result["CHATGLANCE_LOGIN_SECRET"]

@@ -31,7 +31,7 @@ Token/Cookie、配置或整份账号快照。
 
 若启用项目页，必须在命名 profile 设置项目 owner，或显式传入 `--projects-owner`；GitHub Token 也必须来自该命名 profile，缺失时在调用 ChatGH 前失败，不借用主站 active、进程或本地 Git 凭据。服务器/网站清单须属于实例目录，不能引用主站清单。
 
-实例即使接收 `refresh --scheduled` 也不执行自动/强制用卡或写策略台账。卡片保留原有用量和日历呈现，但不渲染控制入口；`runtime controls`、旧 `account-limits control-serve` 和 `runtime maintain` 均拒绝该实例。Go 原生登录从唯一命名 profile 读取 bcrypt hash 和独立 64 字节会话密钥，缺任何字段均失败，不读取 active/主站/进程登录值。主站没有实例清单时仍按旧规则运行。
+实例即使接收 `refresh --scheduled` 也不执行自动/强制用卡或写策略台账。卡片保留原有用量和日历呈现，但不渲染控制入口；`runtime controls`、旧 `account-limits control-serve` 和 `runtime maintain` 均拒绝该实例。Go 原生登录从唯一命名 profile 读取敏感真实密码与独立 64 字节会话密钥，密码通过私有子进程环境中的 YAML 标量引用传递并由 Go 内部生成 bcrypt hash；旧的仅 hash 模板仍兼容，缺少所选模板要求的字段即失败，不读取 active/主站/进程登录值。主站没有实例清单时仍按旧规则运行。
 
 ## 多账号跟踪订阅
 

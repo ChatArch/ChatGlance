@@ -243,12 +243,19 @@ def _server_definition(spec: InstanceSpec) -> dict:
     return {"host": spec.host, "port": spec.port, "proxied": True}
 
 
-def _auth_definition() -> dict:
+def _auth_definition(*, raw: bool = False) -> dict:
+    credential = ({"password": "${CHATGLANCE_LOGIN_PASSWORD_YAML}"} if raw else
+                  {"password-hash": "${CHATGLANCE_LOGIN_PASSWORD_HASH}"})
     return {"secret-key": "${CHATGLANCE_LOGIN_SECRET}",
-            "users": {"${CHATGLANCE_LOGIN_USER}": {"password-hash": "${CHATGLANCE_LOGIN_PASSWORD_HASH}"}}}
+            "users": {"${CHATGLANCE_LOGIN_USER}": credential}}
 
 
-def _assembled(root: Path, spec: InstanceSpec, *, existing: bool) -> tuple[dict, dict[str, dict]]:
+def _raw_auth(root: Path) -> bool:
+    config = yaml.safe_load((root / "config/glance.yml").read_text(encoding="utf-8"))
+    return config["auth"] == _auth_definition(raw=True)
+
+
+def _assembled(root: Path, spec: InstanceSpec, *, existing: bool, raw_auth: bool) -> tuple[dict, dict[str, dict]]:
     snapshots = {}
     for key in spec.pages:
         path = root / "data" / MODULES[key].snapshot
@@ -258,7 +265,7 @@ def _assembled(root: Path, spec: InstanceSpec, *, existing: bool) -> tuple[dict,
         snapshots[key] = scope_account_data(data, spec.accounts) if key == "account-limits" else data
     config = {"server": _server_definition(spec),
               "pages": [render_page(key, snapshots[key], allow_controls=False) for key in spec.pages],
-              "auth": _auth_definition()}
+              "auth": _auth_definition(raw=raw_auth)}
     return config, snapshots
 
 
@@ -281,7 +288,7 @@ def verify_config_pages(root: str | Path, spec: InstanceSpec | None = None) -> N
     if (not isinstance(server, dict) or set(server) != set(expected_server)
             or any(type(server[key]) is not type(value) or server[key] != value
                    for key, value in expected_server.items())
-            or config["auth"] != _auth_definition()):
+            or config["auth"] not in (_auth_definition(), _auth_definition(raw=True))):
         raise ValueError("instance config native server or login does not match its manifest")
 
 
@@ -295,12 +302,13 @@ def initialize_instance(root: str | Path, spec: InstanceSpec, *, apply: bool = F
         raise ValueError("instance runtime collides with the default site")
     if root.exists() or root.is_symlink() or not root.parent.is_dir():
         raise ValueError("instance runtime already exists or parent is unavailable")
-    config, snapshots = _assembled(root, spec, existing=False)
     result = {"applied": False, "runtime_home": str(root), "name": spec.name,
               "pages": list(spec.pages), "accounts": list(spec.accounts), "web_label": spec.web_label}
     if not apply:
         return result
-    _profile(spec)
+    values = _profile(spec)
+    config, snapshots = _assembled(root, spec, existing=False,
+                                   raw_auth="CHATGLANCE_LOGIN_PASSWORD" in values)
     stage = Path(tempfile.mkdtemp(prefix=".chatglance-instance-", dir=root.parent))
     try:
         for directory in ("private", "config", "data", "bin", "logs", "staging"):
@@ -344,9 +352,10 @@ def _configure_instance(root: Path, spec: InstanceSpec, *, apply: bool) -> dict:
     home = instance_home(root)
     if spec.name != old.name or spec.env_profile != old.env_profile:
         raise ValueError("instance identity and named profile cannot change in place")
-    _profile(spec, home=home)
+    values = _profile(spec, home=home)
     verify_config_pages(root, old)
-    config, snapshots = _assembled(root, spec, existing=True)
+    config, snapshots = _assembled(root, spec, existing=True,
+                                   raw_auth="CHATGLANCE_LOGIN_PASSWORD" in values)
     result = {"applied": False, "runtime_home": str(root), "pages": list(spec.pages), "accounts": list(spec.accounts)}
     if not apply:
         return result
@@ -384,46 +393,68 @@ def _configure_instance(root: Path, spec: InstanceSpec, *, apply: bool) -> dict:
 
 
 def set_instance_login(root: str | Path, *, username: str, password: str, apply: bool = False) -> dict:
-    from .portable import authenticated_environment
+    from .portable import authenticated_environment, validate_native_password
+    from .refresh import _publish, _refresh_lock
+    root = _safe_root(root)
     spec = load_instance(root)
     home = instance_home(root)
     if not isinstance(username, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+@-]{2,49}", username):
         raise ValueError("invalid login username")
-    if not isinstance(password, str) or not 1 <= len(password.encode("utf-8")) <= 72:
-        raise ValueError("password must be 1-72 UTF-8 bytes")
+    validate_native_password(password)
     values = _profile(spec, home=home)
-    result = {"applied": False, "runtime_home": str(_safe_root(root)), "env_profile": spec.env_profile,
+    result = {"applied": False, "runtime_home": str(root), "env_profile": spec.env_profile,
               "username": username}
     if not apply:
         return result
-    import bcrypt
-    updated = dict(values)
-    updated.update({"CHATGLANCE_LOGIN_USER": username,
-                    "CHATGLANCE_LOGIN_PASSWORD_HASH": bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("ascii"),
-                    "CHATGLANCE_LOGIN_SECRET": base64.b64encode(secrets.token_bytes(64)).decode("ascii"),
-                    "CHATGLANCE_LOGIN_ACCOUNTS": "{}"})
-    authenticated_environment(environ={"CHATGLANCE_WEB_PORT": str(spec.port), **updated}, strict=True)
-    EnvStore(get_paths(home).envs_dir).save_profile(ChatGlanceConfig, spec.env_profile, updated)
+    with _refresh_lock(root):
+        spec = load_instance(root)
+        verify_config_pages(root, spec)
+        values = _profile(spec, home=instance_home(root))
+        updated = dict(values)
+        updated.pop("CHATGLANCE_LOGIN_PASSWORD_HASH", None)
+        updated.pop("CHATGLANCE_LOGIN_PASSWORD_YAML", None)
+        updated.update({"CHATGLANCE_LOGIN_USER": username,
+                        "CHATGLANCE_LOGIN_PASSWORD": password,
+                        "CHATGLANCE_LOGIN_SECRET": base64.b64encode(secrets.token_bytes(64)).decode("ascii"),
+                        "CHATGLANCE_LOGIN_ACCOUNTS": "{}"})
+        authenticated_environment(environ={"CHATGLANCE_WEB_PORT": str(spec.port), **updated}, strict=True)
+        store = EnvStore(get_paths(home).envs_dir)
+        config_path = root / "config/glance.yml"
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        config["auth"] = _auth_definition(raw=True)
+        try:
+            store.save_profile(ChatGlanceConfig, spec.env_profile, updated)
+            if store.load_profile(ChatGlanceConfig, spec.env_profile).get("CHATGLANCE_LOGIN_PASSWORD") != password:
+                raise ValueError("login password did not round-trip through ChatEnv")
+            with tempfile.TemporaryDirectory(prefix=".instance-login-", dir=root / "staging") as temporary:
+                _publish(root, Path(temporary), {config_path: yaml.safe_dump(config, allow_unicode=True, sort_keys=False)}, instance=True)
+        except Exception:
+            store.save_profile(ChatGlanceConfig, spec.env_profile, values)
+            raise
     return {**result, "applied": True}
 
 
 def instance_environment(root: str | Path, *, auth: bool = True) -> dict[str, str]:
     from .portable import authenticated_environment
     spec = load_instance(root)
+    verify_config_pages(root, spec)
     home = instance_home(root)
     values = _profile(spec, home=home)
     environment = {key: os.environ[key] for key in ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR") if key in os.environ}
     environment["CHATARCH_HOME"] = str(home)
     environment["CHATGLANCE_WEB_PORT"] = str(spec.port)
     environment["CHATGLANCE_PUBLIC_ORIGIN"] = spec.origin
-    for key in ("CHATGLANCE_LOGIN_USER", "CHATGLANCE_LOGIN_PASSWORD_HASH", "CHATGLANCE_LOGIN_SECRET"):
+    raw = _raw_auth(_safe_root(root))
+    for key in ("CHATGLANCE_LOGIN_USER", "CHATGLANCE_LOGIN_PASSWORD_HASH", "CHATGLANCE_LOGIN_PASSWORD", "CHATGLANCE_LOGIN_SECRET"):
         if values.get(key):
             environment[key] = str(values[key])
     if values.get("CHATGLANCE_LOGIN_ACCOUNTS", "{}") not in ("", "{}"):
         raise ValueError("instance login must contain exactly one user")
-    if auth:
-        authenticated_environment(environ=environment, strict=True)
-    return environment
+    if raw and not values.get("CHATGLANCE_LOGIN_PASSWORD"):
+        raise ValueError("instance native raw login password is missing")
+    if not raw and values.get("CHATGLANCE_LOGIN_PASSWORD"):
+        raise ValueError("instance raw login requires its native password template")
+    return authenticated_environment(environ=environment, strict=True) if auth or raw else environment
 
 
 def render_launchd_instance(root: str | Path, *, python_bin: Path | None = None) -> dict[str, bytes]:
