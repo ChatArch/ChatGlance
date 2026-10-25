@@ -225,6 +225,66 @@ def test_child_only_secret_and_validator_bridge(tmp_path, monkeypatch):
     assert "test-secret" not in str(calls[-1][0])
 
 
+@pytest.mark.parametrize("raw", ("synthetic-raw-password", ""))
+def test_legacy_hash_template_ignores_extra_raw_for_serve_and_validation(tmp_path, monkeypatch, raw):
+    from chatglance import portable, runtime
+
+    root = tmp_path / "runtime"
+    (root / "config").mkdir(parents=True)
+    (root / "bin").mkdir()
+    (root / "bin/glance").write_text("synthetic executable")
+    config = root / "config/glance.yml"
+    config.write_text("auth:\n  secret-key: ${CHATGLANCE_LOGIN_SECRET}\n  users:\n"
+                      "    ${CHATGLANCE_LOGIN_USER}:\n      password-hash: ${CHATGLANCE_LOGIN_PASSWORD_HASH}\n")
+    legacy_hash = "$2b$12$" + "A" * 53
+    values = {"CHATGLANCE_LOGIN_USER": "reader", "CHATGLANCE_LOGIN_SECRET": base64.b64encode(b"X" * 64).decode(),
+              "CHATGLANCE_WEB_PORT": "18085", "CHATGLANCE_LOGIN_PASSWORD_HASH": legacy_hash,
+              "CHATGLANCE_LOGIN_PASSWORD": raw}
+    monkeypatch.setattr(portable, "bridge_environment", lambda **kwargs: dict(values))
+    served, validated = [], []
+    monkeypatch.setattr(portable.os, "execve", lambda binary, args, environment: served.append(environment))
+    monkeypatch.setattr(runtime.subprocess, "run", lambda args, **kwargs: validated.append(kwargs["env"]))
+
+    portable.serve(root)
+    runtime.validate_glance_config(root / "bin/glance", config)
+
+    assert len(served) == len(validated) == 1
+    for environment in (*served, *validated):
+        assert environment["CHATGLANCE_LOGIN_PASSWORD_HASH"] == legacy_hash
+        assert "CHATGLANCE_LOGIN_PASSWORD" not in environment
+        assert "CHATGLANCE_LOGIN_PASSWORD_YAML" not in environment
+
+
+def test_native_raw_template_requires_raw_even_with_stale_hash(tmp_path, monkeypatch):
+    from chatglance import portable, runtime
+
+    root = tmp_path / "runtime"
+    (root / "config").mkdir(parents=True)
+    (root / "bin").mkdir()
+    (root / "bin/glance").write_text("synthetic executable")
+    config = root / "config/glance.yml"
+    config.write_text("auth:\n  secret-key: ${CHATGLANCE_LOGIN_SECRET}\n  users:\n"
+                      "    ${CHATGLANCE_LOGIN_USER}:\n      password: ${CHATGLANCE_LOGIN_PASSWORD_YAML}\n")
+    values = {"CHATGLANCE_LOGIN_USER": "reader", "CHATGLANCE_LOGIN_SECRET": base64.b64encode(b"X" * 64).decode(),
+              "CHATGLANCE_WEB_PORT": "18085", "CHATGLANCE_LOGIN_PASSWORD_HASH": "$2b$12$" + "A" * 53}
+    monkeypatch.setattr(portable, "bridge_environment", lambda **kwargs: dict(values))
+    served, validated = [], []
+    monkeypatch.setattr(portable.os, "execve", lambda binary, args, environment: served.append(environment))
+    monkeypatch.setattr(runtime.subprocess, "run", lambda args, **kwargs: validated.append(kwargs["env"]))
+    with pytest.raises(ValueError, match="password"):
+        portable.serve(root)
+    with pytest.raises(ValueError, match="password"):
+        runtime.validate_glance_config(root / "bin/glance", config)
+    assert not served and not validated
+
+    values["CHATGLANCE_LOGIN_PASSWORD"] = "quoted:'\\\n雪-password"
+    portable.serve(root)
+    runtime.validate_glance_config(root / "bin/glance", config)
+    for environment in (*served, *validated):
+        assert json.loads(environment["CHATGLANCE_LOGIN_PASSWORD_YAML"]) == values["CHATGLANCE_LOGIN_PASSWORD"]
+        assert "CHATGLANCE_LOGIN_PASSWORD_HASH" not in environment
+
+
 def test_control_authenticator_resolves_port_without_bypassing_go(tmp_path, monkeypatch):
     from chatglance import portable, reset_control
 

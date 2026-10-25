@@ -15,6 +15,7 @@ import tarfile
 import tempfile
 
 from chatenv import EnvStore, get_paths
+import yaml
 
 from .config import ChatGlanceConfig
 
@@ -178,7 +179,7 @@ def install_verified_binary(archive: str | Path, sha256: str, home: str | Path |
 
 
 BRIDGE_KEYS = (
-    "CHATGLANCE_LOGIN_SECRET", "CHATGLANCE_LOGIN_PASSWORD_HASH", "CHATGLANCE_LOGIN_USER",
+    "CHATGLANCE_LOGIN_SECRET", "CHATGLANCE_LOGIN_PASSWORD", "CHATGLANCE_LOGIN_PASSWORD_HASH", "CHATGLANCE_LOGIN_USER",
     "CHATGLANCE_LOGIN_ACCOUNTS",
     "CHATGLANCE_PUBLIC_ORIGIN", "CHATGLANCE_WEB_PORT", "CHATGLANCE_CONTROL_HOST", "CHATGLANCE_CONTROL_PORT",
     "CHATGLANCE_PROJECTS_OWNER", "CHATGLANCE_REFRESH_PAGES", "CHATGLANCE_REFRESH_INTERVAL",
@@ -215,15 +216,52 @@ def portable_settings(*, home: str | Path | None = None, environ: dict[str, str]
     return {"owner": owner, "pages": pages, "interval": interval}
 
 
+def validate_native_password(password: str) -> None:
+    try:
+        length = len(password.encode("utf-8")) if isinstance(password, str) else 0
+    except UnicodeEncodeError:
+        length = 0
+    if not 6 <= length <= 72 or "\x00" in password:
+        raise ValueError("login password must be 6-72 UTF-8 bytes without NUL")
+
+
+def auth_credential_mode(config_text: str) -> str | None:
+    """Select the credential referenced by the actual native Go auth template."""
+    try:
+        config = yaml.safe_load(config_text)
+    except yaml.YAMLError:
+        return None
+    auth = config.get("auth") if isinstance(config, dict) else None
+    users = auth.get("users") if isinstance(auth, dict) else None
+    user = users.get("${CHATGLANCE_LOGIN_USER}") if isinstance(users, dict) else None
+    if not isinstance(user, dict):
+        return None
+    if user.get("password-hash") == "${CHATGLANCE_LOGIN_PASSWORD_HASH}" and "password" not in user:
+        return "hash"
+    if user.get("password") == "${CHATGLANCE_LOGIN_PASSWORD_YAML}" and "password-hash" not in user:
+        return "raw"
+    return None
+
+
 def authenticated_environment(*, home: str | Path | None = None, environ: dict[str, str] | None = None,
-                              strict: bool = False) -> dict[str, str]:
+                              strict: bool = False, credential_mode: str | None = None) -> dict[str, str]:
+    if credential_mode not in (None, "hash", "raw"):
+        raise ValueError("invalid native login credential mode")
     result = dict(environ or {}) if strict else bridge_environment(home=home, environ=environ)
-    if not all(result.get(key) for key in ("CHATGLANCE_LOGIN_SECRET", "CHATGLANCE_LOGIN_PASSWORD_HASH", "CHATGLANCE_LOGIN_USER")):
-        raise ValueError("login requires configured signing secret, password hash and username")
-    if not result["CHATGLANCE_LOGIN_PASSWORD_HASH"].startswith(("$2a$", "$2b$", "$2y$")):
-        raise ValueError("login password hash must be bcrypt")
-    if not re.fullmatch(r"\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}", result["CHATGLANCE_LOGIN_PASSWORD_HASH"]):
-        raise ValueError("login password hash must be a complete bcrypt hash")
+    if not all(result.get(key) for key in ("CHATGLANCE_LOGIN_SECRET", "CHATGLANCE_LOGIN_USER")):
+        raise ValueError("login requires configured signing secret and username")
+    password = result.get("CHATGLANCE_LOGIN_PASSWORD")
+    if credential_mode == "raw" or (credential_mode is None and password is not None):
+        validate_native_password(password)
+        result["CHATGLANCE_LOGIN_PASSWORD_YAML"] = json.dumps(password, ensure_ascii=True)
+        result.pop("CHATGLANCE_LOGIN_PASSWORD", None)
+        result.pop("CHATGLANCE_LOGIN_PASSWORD_HASH", None)
+    else:
+        result.pop("CHATGLANCE_LOGIN_PASSWORD", None)
+        password_hash = result.get("CHATGLANCE_LOGIN_PASSWORD_HASH", "")
+        if not re.fullmatch(r"\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}", password_hash):
+            raise ValueError("login requires a complete bcrypt password hash or raw password")
+        result.pop("CHATGLANCE_LOGIN_PASSWORD_YAML", None)
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+@-]{2,49}", result["CHATGLANCE_LOGIN_USER"]):
         raise ValueError("login username must be a safe 3-50 character name or email")
     secret = result["CHATGLANCE_LOGIN_SECRET"]
@@ -254,11 +292,14 @@ def serve(home: str | Path | None = None) -> None:
     if binary.is_symlink() or not binary.is_file() or config.is_symlink() or not config.is_file():
         raise ValueError("runtime binary/config missing or unsafe")
     content = config.read_text(encoding="utf-8")
+    credential_mode = auth_credential_mode(content) if "CHATGLANCE_LOGIN_SECRET" in content else None
     if instance or "CHATGLANCE_AUTH_USER_" in content or (root / "private/managed.json").exists():
         from .managed import runtime_environment
-        environment = runtime_environment(root, auth="CHATGLANCE_LOGIN_SECRET" in content)
+        environment = runtime_environment(root, auth="CHATGLANCE_LOGIN_SECRET" in content,
+                                          **({"auth_config": config} if not instance else {}))
     else:
-        environment = authenticated_environment() if "CHATGLANCE_LOGIN_SECRET" in content else bridge_environment()
+        environment = (authenticated_environment(credential_mode=credential_mode) if credential_mode else
+                       authenticated_environment()) if "CHATGLANCE_LOGIN_SECRET" in content else bridge_environment()
     try:
         port = int(environment["CHATGLANCE_WEB_PORT"])
     except ValueError as exc:

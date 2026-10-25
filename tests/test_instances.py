@@ -217,7 +217,8 @@ def test_safe_login_provisioning_preserves_active_profile(tmp_path):
     store=EnvStore(get_paths().envs_dir);store.save_active(ChatGlanceConfig,named_values(user="main@example.invalid",seed=b"M"));before=store.load_active(ChatGlanceConfig)
     result=set_instance_login(root,username="teacher@example.invalid",password="fixture-new-password",apply=True)
     values=store.load_profile(ChatGlanceConfig,"teacher")
-    assert bcrypt.checkpw(b"fixture-new-password",values["CHATGLANCE_LOGIN_PASSWORD_HASH"].encode())
+    assert values["CHATGLANCE_LOGIN_PASSWORD"]=="fixture-new-password"
+    assert "CHATGLANCE_LOGIN_PASSWORD_HASH" not in values
     assert len(base64.b64decode(values["CHATGLANCE_LOGIN_SECRET"]))==64
     assert "fixture-new-password" not in json.dumps(result)
     assert store.load_active(ChatGlanceConfig)==before
@@ -469,7 +470,8 @@ def test_login_cli_uses_named_env_value_without_echo(tmp_path):
     assert result.exit_code==0,result.output
     assert password not in result.output
     values=EnvStore(get_paths().envs_dir).load_profile(ChatGlanceConfig,"teacher")
-    assert bcrypt.checkpw(password.encode(),values["CHATGLANCE_LOGIN_PASSWORD_HASH"].encode())
+    assert values["CHATGLANCE_LOGIN_PASSWORD"]==password
+    assert "CHATGLANCE_LOGIN_PASSWORD_HASH" not in values
 
 
 @pytest.mark.parametrize("bad_registry", [None, "", "{}",
@@ -543,8 +545,7 @@ def test_set_login_does_not_prompt_from_pipe_when_auto_prompt_disabled(tmp_path,
     result=CliRunner().invoke(main,args+["--password-stdin"],input="synthetic-pipe-password\n")
     assert result.exit_code==0,result.output
     assert "synthetic-pipe-password" not in result.output
-    assert bcrypt.checkpw(b"synthetic-pipe-password",
-                          store.load_profile(ChatGlanceConfig,"teacher")["CHATGLANCE_LOGIN_PASSWORD_HASH"].encode())
+    assert store.load_profile(ChatGlanceConfig,"teacher")["CHATGLANCE_LOGIN_PASSWORD"]=="synthetic-pipe-password"
 
 
 def test_set_login_prompt_requires_matching_hidden_entries(tmp_path, monkeypatch):

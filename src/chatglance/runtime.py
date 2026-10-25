@@ -208,22 +208,26 @@ def _timestamp() -> str:
 def validate_glance_config(glance_bin: str | Path, config_path: str | Path) -> None:
     """Validate a config file with the upstream Glance binary."""
 
-    from .portable import authenticated_environment, bridge_environment
+    from .portable import auth_credential_mode, authenticated_environment, bridge_environment
 
     text = Path(config_path).read_text(encoding="utf-8")
+    credential_mode = auth_credential_mode(text) if "${CHATGLANCE_LOGIN_SECRET}" in text else None
     ancestors = Path(config_path).absolute().parents
     instance_root = next((parent for parent in ancestors if (parent / "private/instance.json").is_file()), None)
+    managed_root = next((parent for parent in ancestors if (parent / "private/managed.json").is_file()), None)
     if instance_root is not None:
         from .managed import runtime_environment
         environment = runtime_environment(instance_root, auth=True)
-    elif "CHATGLANCE_AUTH_USER_" in text:
+    elif managed_root is not None or "CHATGLANCE_AUTH_USER_" in text:
         from .managed import runtime_environment
-        root = next((parent for parent in ancestors if (parent / "private/managed.json").is_file()), None)
+        root = managed_root
         root = root or (Path(config_path).parent.parent if Path(config_path).parent.name == "config" else None)
         root = root or Path(glance_bin).absolute().parent.parent
-        environment = runtime_environment(root)
+        environment = runtime_environment(root, auth=managed_root is not None and "${CHATGLANCE_LOGIN_SECRET}" in text,
+                                          auth_config=config_path)
     else:
-        environment = (authenticated_environment() if "${CHATGLANCE_LOGIN_SECRET}" in text
+        environment = ((authenticated_environment(credential_mode=credential_mode) if credential_mode else
+                        authenticated_environment()) if "${CHATGLANCE_LOGIN_SECRET}" in text
                        else bridge_environment()) if "${CHATGLANCE_" in text else None
     subprocess.run(
         [str(glance_bin), "-config", str(config_path), "config:validate"],

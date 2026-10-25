@@ -16,7 +16,6 @@ dependencies = [
     "ChatCRS>=0.3.5,<0.4.0",
     "ChatGH>=0.2.12,<0.3.0",
     "PyYAML>=6.0,<7.0",
-    "bcrypt>=4.0,<6.0",
     "tomli>=1.1.0; python_version < '3.11'",
 ]
 authors = [{name = "ChatArch", email = "1073853456@qq.com"}]
@@ -38,7 +37,7 @@ chatglance = "chatglance.cli:main"
 chatglance = "chatglance.config"
 
 [project.optional-dependencies]
-dev = ["build", "pytest", "twine", "setuptools>=77,<83", "wheel>=0.45,<1"]
+dev = ["build", "pytest", "twine", "bcrypt>=4.0,<6.0", "setuptools>=77,<83", "wheel>=0.45,<1"]
 docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5,<10", "mkdocs-static-i18n>=1.2,<2", "mike>=2,<3"]
 
 [tool.setuptools.dynamic]

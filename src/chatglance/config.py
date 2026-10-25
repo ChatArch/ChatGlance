@@ -14,6 +14,7 @@ class ChatGlanceConfig(BaseEnvConfig):
     _storage_dir = "ChatGlance"
 
     CHATGLANCE_LOGIN_SECRET = EnvField("CHATGLANCE_LOGIN_SECRET", desc="Go login session signing secret.", is_sensitive=True)
+    CHATGLANCE_LOGIN_PASSWORD = EnvField("CHATGLANCE_LOGIN_PASSWORD", desc="Native Go login password.", is_sensitive=True)
     CHATGLANCE_LOGIN_PASSWORD_HASH = EnvField("CHATGLANCE_LOGIN_PASSWORD_HASH", desc="Go login bcrypt password hash (never plaintext).", is_sensitive=True)
     CHATGLANCE_LOGIN_USER = EnvField("CHATGLANCE_LOGIN_USER", desc="Explicit Go login username.", is_sensitive=True)
     CHATGLANCE_LOGIN_ACCOUNTS = EnvField("CHATGLANCE_LOGIN_ACCOUNTS", default="{}", desc="Private indexed Go login account/hash map; never printed.", is_sensitive=True)
