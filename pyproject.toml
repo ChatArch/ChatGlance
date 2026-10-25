@@ -16,6 +16,7 @@ dependencies = [
     "ChatCRS>=0.3.5,<0.4.0",
     "ChatGH>=0.2.12,<0.3.0",
     "PyYAML>=6.0,<7.0",
+    "bcrypt>=4.0,<6.0",
     "tomli>=1.1.0; python_version < '3.11'",
 ]
 authors = [{name = "ChatArch", email = "1073853456@qq.com"}]

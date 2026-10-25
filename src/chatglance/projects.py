@@ -850,6 +850,7 @@ def build_projects_page(
     *,
     page_name: str = PAGE_NAME,
     audience: Audience = "private",
+    allow_controls: bool = True,
 ) -> dict[str, Any]:
     """Build a private page, or project full data at the public trust boundary."""
 
@@ -878,7 +879,7 @@ def build_projects_page(
             },
         ],
     }
-    if audience == "private":
+    if audience == "private" and allow_controls:
         page["columns"][0]["widgets"][0]["header-controls-url"] = "/_chatglance/reset-policy/pages/?page=projects&view=icon"
     return page
 

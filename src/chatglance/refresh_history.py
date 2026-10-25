@@ -23,6 +23,14 @@ HISTORY_OWNER = "chatglance.refresh-history/v1"
 HISTORY_RELATIVE = Path("private/refresh-history")
 DEFAULT_RETENTION_DAYS = 30
 DEFAULT_MAX_BYTES = 256 * 1024 * 1024
+
+
+def _history_settings_for_runtime(runtime_home):
+    from .config import history_settings
+    from .instances import instance_home, load_instance
+    instance = load_instance(runtime_home, required=False)
+    return (history_settings(home=instance_home(runtime_home), env_profile=instance.env_profile)
+            if instance else history_settings())
 MAX_RECORD_BYTES = 8 * 1024 * 1024
 RUN_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 SOURCES = {"native", "manual", "scheduled", "browser"}
@@ -846,10 +854,8 @@ class RefreshHistory:
         return updated
 
     def _automatic_prune(self) -> None:
-        from .config import history_settings
-
         try:
-            settings = history_settings()
+            settings = _history_settings_for_runtime(self.runtime_home)
             prune_refresh_history(self.runtime_home, apply=True, **settings)
         except (OSError, ValueError, RefreshHistoryError):
             # The completed record remains durable.  Explicit CLI/API pruning
@@ -971,9 +977,7 @@ def prune_refresh_history(
     """
 
     if retention_days is None or max_bytes is None:
-        from .config import history_settings
-
-        settings = history_settings()
+        settings = _history_settings_for_runtime(runtime_home)
         retention_days = settings["retention_days"] if retention_days is None else retention_days
         max_bytes = settings["max_bytes"] if max_bytes is None else max_bytes
     if isinstance(retention_days, bool) or not isinstance(retention_days, int) or retention_days < 1:

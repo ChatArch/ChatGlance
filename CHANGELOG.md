@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-10-25
+
+- Add secret-free, read-only instance manifests with selected projects, servers, sites and account-limits pages. Each instance assembles its own snapshots and Glance YAML through the existing collectors and renderers; the unconfigured main runtime retains its previous behavior.
+- Pin instance collection and native Go login to one explicit named ChatGlance profile and a fixed enabled CRS subscription subset. Bind its ChatEnv home and optional shared Go binary path in the manifest. Scheduled refresh remains non-consuming, controls and maintenance are unavailable, and Go startup rejects a config with pages outside the manifest.
+- Add plan-first `runtime instance` commands for creation, enabling or disabling selected modules and accounts in the same named profile, inspection, safe bcrypt/session-key provisioning, and review-only macOS launchd template rendering. Preserve native Glance's proxied HTTPS login context and reject altered server/auth definitions before serving. Changed instance pages reload only their verified owned web label; Linux user-systemd legacy behavior remains intact.
+- Fail closed if an instance's explicit account registry disappears during collection or its backup directory becomes unsafe. Make `set-login` honor shared interactive controls and require an explicit source before reading piped passwords.
+
 ## 0.4.0 - 2026-10-25
 
 - Add explicit per-account subscriptions backed by independent named CRS ChatEnv profiles, with dry-run-first list/add/enable/disable/remove CLI and importable APIs. Keep the legacy shared-profile mapping compatible until the first managed migration.

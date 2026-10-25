@@ -25,6 +25,14 @@ Token/Cookie、配置或整份账号快照。
 
 无 `--scheduled` 的手动调用不兑换重置卡；订阅页面只是展示当前快照。定时刷新应仍在既有调度链中显式使用 `--scheduled` 和逐账号策略，不能通过阅读按钮状态代替授权。刷新项目若识别到同址可选登录模式，访客列会重新从 Public allowlist 生成，认证列保留全量视图；不匹配布局会拒绝而非覆写私有行。
 
+## 实例的固定页面与只读边界
+
+`runtime instance init` 将显式命名 ChatGlance profile、页面 allowlist 和已启用订阅标签写入私有 `private/instance.json`。所属操作者可用 `runtime instance configure --page ... --account ... --apply` 修改定义，在同一 profile 内停用或重新启用页面和账号。`refresh --runtime-home <实例目录>` 从该 profile 读取原生 collector 设置，只调用已保存的选定模块，并由自身快照重建 Go YAML；执行时的 `pages` / `--profiles` 不能增加清单外内容。account-limits 的 JSON、资源和页面只含选定标签；跟踪表变为空或标签停用时直接失败，不复活旧缓存账号。`runtime serve` 再次核对 YAML 页面、原生服务器与登录定义。
+
+若启用项目页，必须在命名 profile 设置项目 owner，或显式传入 `--projects-owner`；GitHub Token 也必须来自该命名 profile，缺失时在调用 ChatGH 前失败，不借用主站 active、进程或本地 Git 凭据。服务器/网站清单须属于实例目录，不能引用主站清单。
+
+实例即使接收 `refresh --scheduled` 也不执行自动/强制用卡或写策略台账。卡片保留原有用量和日历呈现，但不渲染控制入口；`runtime controls`、旧 `account-limits control-serve` 和 `runtime maintain` 均拒绝该实例。Go 原生登录从唯一命名 profile 读取 bcrypt hash 和独立 64 字节会话密钥，缺任何字段均失败，不读取 active/主站/进程登录值。主站没有实例清单时仍按旧规则运行。
+
 ## 多账号跟踪订阅
 
 跟踪与凭据分开管理：ChatEnv 的 `CRS` 命名 profile 保存 CRS Base URL 和专用管理 Key；ChatGlance 的 `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` 只保存明确的账号引用。例如：

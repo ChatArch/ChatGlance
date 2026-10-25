@@ -49,6 +49,12 @@ chatglance
 │   ├── install [--runtime-home RUNTIME-HOME] [--unit-dir UNIT-DIR] [--python-bin PYTHON-BIN] [--page PAGES] [--interval INTERVAL] [--scheduled] [--controls] [--maintenance] [--web-unit WEB-UNIT] [--refresh-unit REFRESH-UNIT] [--refresh-timer REFRESH-TIMER] [--controls-unit CONTROLS-UNIT] [--maintenance-unit MAINTENANCE-UNIT] [--maintenance-timer MAINTENANCE-TIMER] [--adopt-units] [--retire-dropins] [--apply] [--enable] [--start]  # Plan or atomically install the managed user-service bundle.
 │   ├── install-binary [--runtime-home RUNTIME-HOME] [--archive ARCHIVE] [--sha256 SHA256] [--binary-version BINARY-VERSION]  # Install a verified, reviewed local Go-fork tar archive without replacement.
 │   ├── install-systemd [--runtime-home RUNTIME-HOME] [--chatglance-bin CHATGLANCE-BIN] [--output-dir OUTPUT-DIR] [--service-name SERVICE-NAME] [--maintenance-service-name MAINTENANCE-SERVICE-NAME] [--timer-name TIMER-NAME] [--interval INTERVAL] [--verify] [--enable] [--start]  # Install, verify, enable, and optionally start user-level systemd units.
+│   ├── instance  # Plan and manage isolated read-only Glance runtimes.
+│   │   ├── configure [--runtime-home RUNTIME-HOME] [--page PAGES] [--account ACCOUNTS] [--host HOST] [--port PORT] [--origin ORIGIN] [--interval-seconds INTERVAL-SECONDS] [--python-bin PYTHON-BIN] [--glance-bin GLANCE-BIN] [--apply]  # Enable or disable modules and accounts in the same named profile.
+│   │   ├── init [--runtime-home RUNTIME-HOME] [--name NAME] [--env-profile ENV-PROFILE] [--page PAGES] [--account ACCOUNTS] [--host HOST] [--port PORT] [--origin ORIGIN] [--interval-seconds INTERVAL-SECONDS] [--python-bin PYTHON-BIN] [--glance-bin GLANCE-BIN] [--apply]  # Assemble selected native pages and a secret-free ownership manifest.
+│   │   ├── render-launchd [--runtime-home RUNTIME-HOME] [--python-bin PYTHON-BIN] [--output-dir OUTPUT-DIR] [--apply]  # Render owned native serve and refresh launchd templates for review.
+│   │   ├── set-login [--runtime-home RUNTIME-HOME] [--username USERNAME] [--password-env PASSWORD-ENV] [--password-stdin] [--apply] [--interactive]  # Provision native Go login without accepting a plaintext password argument.
+│   │   └── show [--runtime-home RUNTIME-HOME]  # Show the secret-free instance selection and owned service labels.
 │   ├── maintain [--runtime-home RUNTIME-HOME] [--config CONFIG-PATH] [--data DATA-PATH] [--backup-dir BACKUP-DIR] [--page-name PAGE-NAME] [--validate] [--glance-bin GLANCE-BIN] [--restart-service RESTART-SERVICE]  # Update runtime config atomically and optionally restart a service.
 │   ├── maintain-managed [--runtime-home RUNTIME-HOME]  # Run opt-in maintenance only while the native collector is idle.
 │   ├── paths [--runtime-home RUNTIME-HOME]  # Print effective portable runtime paths (never secret values).
@@ -122,6 +128,12 @@ chatglance
 │   ├── install  # Plan or atomically install the managed user-service bundle.
 │   ├── install-binary  # Install a verified, reviewed local Go-fork tar archive without replacement.
 │   ├── install-systemd  # Install, verify, enable, and optionally start user-level systemd units.
+│   ├── instance  # Plan and manage isolated read-only Glance runtimes.
+│   │   ├── configure  # Enable or disable modules and accounts in the same named profile.
+│   │   ├── init  # Assemble selected native pages and a secret-free ownership manifest.
+│   │   ├── render-launchd  # Render owned native serve and refresh launchd templates for review.
+│   │   ├── set-login  # Provision native Go login without accepting a plaintext password argument.
+│   │   └── show  # Show the secret-free instance selection and owned service labels.
 │   ├── maintain  # Update runtime config atomically and optionally restart a service.
 │   ├── maintain-managed  # Run opt-in maintenance only while the native collector is idle.
 │   ├── paths  # Print effective portable runtime paths (never secret values).
@@ -154,4 +166,5 @@ chatglance
 - `access render-single-origin-optional-login` 从既有私有 config 和完整 inventory 生成**同一实例**私有候选配置；输出必须是显式安全路径，不是公开下载文件，不能用旧双实例候选代替。
 - 页面采集/渲染命令只写显式输出路径；`account-limits subscriptions` 管理 ChatEnv 中的跟踪引用，写操作默认预览、`--execute` 才保存，不签发凭据或消费卡片。所有命令均不得输出 Token、代理凭据或密码。
 - `runtime maintain` 可替换 runtime config，并可按显式选项重启 service。
+- `runtime instance` 的 init/configure/set-login/render-launchd 默认只计划；`--apply` 分别创建私有只读实例、在同一命名 profile 内停用或重新启用页面与已启用账号、向命名 ChatEnv profile 保存 bcrypt 登录与独立会话密钥，或将 launchd 模板写入审核目录。`show` 只读。实例仍经原有 `refresh` / `runtime serve` 服务，执行时不能扩展已保存的清单。
 - `runtime install-systemd` 与 `runtime start` 会修改或启动 user-level systemd 状态；`runtime status` 只回读安全状态字段。

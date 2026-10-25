@@ -46,6 +46,12 @@ chatglance
 │   ├── import-env
 │   ├── install-binary
 │   ├── install-systemd
+│   ├── instance
+│   │   ├── configure
+│   │   ├── init
+│   │   ├── render-launchd
+│   │   ├── set-login
+│   │   └── show
 │   ├── maintain
 │   ├── maintain-managed
 │   ├── paths
@@ -66,6 +72,8 @@ chatglance
 ```
 
 `refresh` 使用运行时现有清单刷新已配置页面；手动模式不会兑换重置卡。`runtime history list/show` 只读，`prune` 默认 preview、`--apply` 才清理确认归属的历史。`runtime init` 仅创建 loopback 配置和空快照；`install-binary` 要求本地归档及 SHA256。`render-portable` 只打印或写入审核目录，不注册服务；`serve` 和 `controls` 需要显式执行。`runtime maintain` 可以改写指定 runtime 配置；旧的 `install-systemd`、`start` 会操作 user-level 服务/定时器，需要额外审核。详情见 [刷新与运行](operations.md)。
+
+`runtime instance init/configure/set-login/render-launchd` 默认仅计划，分别建立私有只读运行目录、在同一命名 profile 内停用或重新启用页面及已启用账号、设置原生 Go 登录和渲染 macOS 审核模板；`--apply` 才写入。`instance show` 只显示非密钥清单。实例的 `refresh` 和 `serve` 使用同一原生运行链并受已保存清单约束；额外页面、控制入口与维护写入会拒绝。详见[命名实例部署](deployment.md#命名只读实例)。
 
 ## 订阅与重置控制
 

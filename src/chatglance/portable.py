@@ -215,8 +215,9 @@ def portable_settings(*, home: str | Path | None = None, environ: dict[str, str]
     return {"owner": owner, "pages": pages, "interval": interval}
 
 
-def authenticated_environment(*, home: str | Path | None = None, environ: dict[str, str] | None = None) -> dict[str, str]:
-    result = bridge_environment(home=home, environ=environ)
+def authenticated_environment(*, home: str | Path | None = None, environ: dict[str, str] | None = None,
+                              strict: bool = False) -> dict[str, str]:
+    result = dict(environ or {}) if strict else bridge_environment(home=home, environ=environ)
     if not all(result.get(key) for key in ("CHATGLANCE_LOGIN_SECRET", "CHATGLANCE_LOGIN_PASSWORD_HASH", "CHATGLANCE_LOGIN_USER")):
         raise ValueError("login requires configured signing secret, password hash and username")
     if not result["CHATGLANCE_LOGIN_PASSWORD_HASH"].startswith(("$2a$", "$2b$", "$2y$")):
@@ -244,12 +245,16 @@ def authenticated_environment(*, home: str | Path | None = None, environ: dict[s
 def serve(home: str | Path | None = None) -> None:
     """Exec the installed Go server with secrets in child environment only."""
     root = runtime_home(home)
+    from .instances import instance_binary, load_instance, verify_config_pages
+    instance = load_instance(root, required=False)
+    if instance:
+        verify_config_pages(root, instance)
     config = root / "config/glance.yml"
-    binary = root / "bin/glance"
+    binary = instance_binary(root, instance) if instance else root / "bin/glance"
     if binary.is_symlink() or not binary.is_file() or config.is_symlink() or not config.is_file():
         raise ValueError("runtime binary/config missing or unsafe")
     content = config.read_text(encoding="utf-8")
-    if "CHATGLANCE_AUTH_USER_" in content or (root / "private/managed.json").exists():
+    if instance or "CHATGLANCE_AUTH_USER_" in content or (root / "private/managed.json").exists():
         from .managed import runtime_environment
         environment = runtime_environment(root, auth="CHATGLANCE_LOGIN_SECRET" in content)
     else:

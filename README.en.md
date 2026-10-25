@@ -44,6 +44,20 @@ chatglance account-limits subscriptions remove work --execute
 
 The typed `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` registry selects explicit accounts; it never scans credentials or adopts all remote accounts. Unset configuration preserves legacy behavior; the first managed write migrates the old records without changing their policies. An explicit `{}` means no tracking, with no snapshot fallback. Removal retains the identity fence, policy and ledger, and never revokes a Key. A label cannot silently change account. `subscriptions --env-profile NAME` edits a named ChatGlance profile without activating it. See [operations](docs/site/operations.en.md#multiple-tracked-accounts).
 
+## Read-only instances with selected pages (0.5.0)
+
+One installed Python implementation and Go Glance binary can serve separate runtimes. First create an explicit named ChatGlance profile in ChatEnv with subscriptions bound to existing per-account CRS profiles. The private instance manifest stores only the profile name, selected pages and labels, listener settings, ChatEnv home, shared binary path and owned service identity. Commands preview by default; `--apply` writes:
+
+```bash
+chatglance runtime instance init --runtime-home "$CHATARCH_HOME/glance-reader" --name reader --env-profile reader --page account-limits --account alpha --host 127.0.0.1 --port 11080 --origin https://reader.example.invalid --glance-bin "$HOME/.local/bin/glance"
+chatglance runtime instance init --runtime-home "$CHATARCH_HOME/glance-reader" --name reader --env-profile reader --page account-limits --account alpha --host 127.0.0.1 --port 11080 --origin https://reader.example.invalid --glance-bin "$HOME/.local/bin/glance" --apply
+chatglance runtime instance set-login --runtime-home "$CHATARCH_HOME/glance-reader" --username reader@example.invalid --password-stdin --apply
+chatglance runtime instance show --runtime-home "$CHATARCH_HOME/glance-reader"
+chatglance runtime instance render-launchd --runtime-home "$CHATARCH_HOME/glance-reader"
+```
+
+The password comes from secure standard input, a named environment variable or a hidden prompt, never a plaintext argument. Only a bcrypt hash and a new independent 64-byte session key enter that named ChatEnv profile. `runtime instance configure --page ... --account ... --apply` selects the complete page and enabled-account sets within that same named profile, so an operator can disable and later re-enable modules; ordinary `refresh` arguments cannot expand the saved sets. Instances retain native Glance's `server.proxied: true` HTTPS proxy login context. Operators provision the Go binary and launchd templates separately. Instance refresh still uses `chatglance refresh --runtime-home ...` to produce JSON snapshots and Glance YAML for native Go serving. Only allowed pages and accounts are collected; even scheduled calls never consume reset credits. `runtime controls`, `runtime maintain` and extra config pages are rejected. A runtime without an instance manifest keeps legacy behavior. See [deployment](docs/site/deployment.en.md) and [operations](docs/site/operations.en.md).
+
 ## Repository contents
 
 - `src/chatglance/`: helper code for project, server, and website-service card page generation, Glance YAML patching, runtime maintenance, and user-level systemd unit rendering/installation.

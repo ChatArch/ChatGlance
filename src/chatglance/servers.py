@@ -961,7 +961,7 @@ def _history_time(label: str, value: Any) -> str:
     return f'<span class="server-history-time"><span>{html.escape(label)}：</span>{timestamp}</span>'
 
 
-def _server_card(server: dict[str, Any], index: int = 0) -> str:
+def _server_card(server: dict[str, Any], index: int = 0, *, allow_controls: bool = True) -> str:
     cpu = cast(dict[str, Any], server.get("cpu")) if isinstance(server.get("cpu"), dict) else {}
     memory = cast(dict[str, Any], server.get("memory")) if isinstance(server.get("memory"), dict) else {}
     disks = cast(list[dict[str, Any]], server.get("disks")) if isinstance(server.get("disks"), list) else []
@@ -987,12 +987,12 @@ def _server_card(server: dict[str, Any], index: int = 0) -> str:
     popover_id = f"server-note-{index}"
     title = html_text(server.get('display_name') or alias)
     note_control = (f'<button type="button" class="server-title" popovertarget="{popover_id}" aria-label="编辑 {title} 的备注">{title}</button>'
-                    if alias else f'<div class="server-title">{title}</div>')
+                    if alias and allow_controls else f'<div class="server-title">{title}</div>')
     note_popover = (f'<div id="{popover_id}" class="server-note-popover" popover>'
                     f'<div class="server-note-popover-head"><strong>{title} · 备注</strong>'
                     f'<button type="button" popovertarget="{popover_id}" popovertargetaction="hide">关闭</button></div>'
                     f'<iframe title="编辑 {title} 的备注" loading="lazy" src="/_chatglance/reset-policy/pages/?page=servers&amp;view=note&amp;alias={html.escape(quote(alias, safe=""), quote=True)}"></iframe></div>'
-                    if alias else "")
+                    if alias and allow_controls else "")
     return f"""
 <div class="server-card status-{html_text(server.get('status'), 'unknown')}">
   <div class="server-card-head">
@@ -1024,11 +1024,11 @@ def _server_card(server: dict[str, Any], index: int = 0) -> str:
 """
 
 
-def render_servers_html(data: dict[str, Any]) -> str:
+def render_servers_html(data: dict[str, Any], *, allow_controls: bool = True) -> str:
     servers = [item for item in data.get("servers", []) if isinstance(item, dict)]
     generated_at = html_text(data.get("generated_at"))
     online = sum(1 for item in servers if item.get("status") == "online")
-    cards = "\n".join(_server_card(item, index) for index, item in enumerate(servers))
+    cards = "\n".join(_server_card(item, index, allow_controls=allow_controls) for index, item in enumerate(servers))
     return f"""
 <style>
 .server-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }}
@@ -1068,7 +1068,7 @@ button.server-title:hover, button.server-title:focus-visible {{ color: var(--col
 .detail-section table {{ width: 100%; border-collapse: collapse; font-size: 0.82rem; }}
 .detail-section th, .detail-section td {{ border-bottom: 1px solid var(--color-separator); padding: 0.28rem 0.35rem; text-align: left; vertical-align: top; }}
 </style>
-<div class="server-summary"><span>最新采集：{generated_at} · 服务器 {len(servers)} 台 · 在线 {online} 台 · 数据来自静态 JSON 快照</span><span class="server-refresh-control"><iframe title="服务器手动刷新" loading="lazy" src="/_chatglance/reset-policy/pages/?page=servers&amp;view=icon"></iframe></span></div>
+<div class="server-summary"><span>最新采集：{generated_at} · 服务器 {len(servers)} 台 · 在线 {online} 台 · 数据来自静态 JSON 快照</span>{'<span class="server-refresh-control"><iframe title="服务器手动刷新" loading="lazy" src="/_chatglance/reset-policy/pages/?page=servers&amp;view=icon"></iframe></span>' if allow_controls else ''}</div>
 <div class="server-grid">
 {cards or '<p>暂无服务器状态数据。</p>'}
 </div>
@@ -1081,6 +1081,7 @@ def build_servers_page(
     page_name: str = SERVER_PAGE_NAME,
     page_slug: str = "servers",
     widget_title: str = "服务器状态",
+    allow_controls: bool = True,
 ) -> dict[str, Any]:
     return {
         "name": page_name,
@@ -1093,7 +1094,7 @@ def build_servers_page(
                     {
                         "type": "html",
                         "title": widget_title,
-                        "source": render_servers_html(data),
+                        "source": render_servers_html(data, allow_controls=allow_controls),
                     }
                 ],
             }

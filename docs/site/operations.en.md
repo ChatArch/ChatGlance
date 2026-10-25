@@ -29,6 +29,14 @@ user notes are overlaid only while rendering.
 
 Manual calls without `--scheduled` never redeem reset cards; account pages only display snapshots. Existing scheduling must use explicit `--scheduled` with per-account policy, not infer authority from a rendered toggle. When refreshing projects in optional-login mode, guest columns are rebuilt from the Public allowlist and authenticated columns retain full rows. A broken layout is rejected rather than overwritten with private guest content.
 
+## Fixed pages and read-only instance boundary
+
+`runtime instance init` stores an explicit named ChatGlance profile, page allowlist and enabled subscription labels in private `private/instance.json`. The owner can change the definition with `runtime instance configure --page ... --account ... --apply`, disabling or re-enabling modules and accounts in that same profile. `refresh --runtime-home <instance root>` resolves native collector settings from that profile, calls only saved selected modules and rebuilds Go YAML from the instance's own snapshots. Execution-time CLI `pages` and `--profiles` cannot add content outside the manifest. Account JSON, resources and the page contain only the selected labels. Empty tracking or disabled labels fail without reviving old cached accounts. `runtime serve` verifies the YAML page, native server and login definitions again.
+
+For a projects page, set its owner in the named profile or pass `--projects-owner`. Its GitHub token must also come from that profile; a missing token fails before ChatGH runs, without borrowing the main active profile, process or local Git credentials. Server and site inventories must belong to the instance runtime, not the main site.
+
+Even `refresh --scheduled` cannot consume cards or write policy/ledger state for an instance. Cards keep the existing quota/calendar presentation but render no control entry. `runtime controls`, legacy `account-limits control-serve` and `runtime maintain` reject the instance. Native Go login reads the bcrypt hash and independent 64-byte session key from exactly its named profile; missing fields fail without active, main or process login fallback. The main runtime without an instance manifest keeps its previous behavior.
+
 ## Multiple tracked accounts
 
 Tracking is separate from credentials: named ChatEnv `CRS` profiles own the service Base URL and scoped management Key. ChatGlance's `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` stores explicit references only:

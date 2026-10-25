@@ -3,7 +3,7 @@
 ## 五层边界与兼容性
 
 1. Git 跟踪的源码负责公共模板、Python API 与文档。
-2. 安装的 **ChatGlance 0.3.4 wheel** 负责全部业务逻辑；服务入口不依赖 checkout。
+2. 安装的 **ChatGlance 0.5.0 wheel** 负责全部业务逻辑；服务入口不依赖 checkout。
 3. 单独维护的 **ChatArch/glance chatarch-v0.2.1** 负责网页、登录和会话；不需要新 Go 特性时兼容维护版 0.1.0。未修改上游不能作为登录后端的直接替代品。
 4. 标准 typed ChatEnv 保存敏感配置，home 下 `glance/` 保存私有运行配置、清单、快照与已校验二进制。
 5. 可选 Linux user-systemd 单元是薄入口；nginx 由操作者单独管理。
@@ -11,6 +11,24 @@
 项目「概览」旁的原生刷新图标需要维护版 Go `chatarch-v0.2.1` 或更新版本的 `header-controls-url` 支持；旧二进制不能显示这个入口。Python 与 Go 版本独立，升级时先部署已校验的新 Go 二进制，再重渲染页面。
 
 完整 managed installer 仍以 Linux user systemd 为默认；macOS 不复用 Linux ownership manifest，可由操作者提供仅调用已安装 `chatglance refresh` / `runtime maintain` 原生入口的薄 LaunchAgent，并显式传入页面与 scheduled policy。Mac web 使用既有产品标签 `chatarch-glance.service`（同名 `~/Library/LaunchAgents/chatarch-glance.service.plist`）；其 `ProgramArguments` 必须是已安装 Python 的 `-m chatglance.cli runtime serve --runtime-home <审核过的绝对路径>`。内容变化时先核对该 plist/运行目录，有限等待 bootout 完成后再对同一 job bootstrap，并要求稳定的新 launchd PID 与配置内 web host/port 的 guest 首页 HTTP 就绪；bootstrap/就绪失败时有限尝试恢复同一 job，仍如实报告初次失败。不发送 raw signal，也不提供通用 service manager 或安装 LaunchAgent。init/渲染不依赖 systemd。安装不自动发布、迁移生产、启动服务、发现 SSH 主机或消费重置卡。本指南不是已完成生产切换的声明。
+
+0.5.0 可为只读实例单独渲染 `chatarch-glance.<name>.service` web 与 `chatarch-glance.<name>.refresh` 两个 launchd 模板。所属标签、运行目录、解释器和精确 `runtime serve` 参数写在私有实例清单中；刷新后只重启该实例 web，仍执行上述 owner/mode/PID/就绪/恢复核查。主站标签保持 `chatarch-glance.service`。模板输出仅供审查，CLI 不安装 LaunchAgent；Linux managed installer 仍是原有主站路径。
+
+## 命名只读实例
+
+先在 ChatEnv 创建非默认命名 ChatGlance profile，把 `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` 明确设成受限 CRS 账号引用。一个实例的 account-limits 页面必须选择其中至少一个已启用标签；不选择 account-limits 时不能传账号标签。以下示例只使用合成名称与域名：
+
+```bash
+chatglance runtime instance init --runtime-home "$CHATARCH_HOME/glance-reader" --name reader --env-profile reader --page account-limits --account alpha --host 127.0.0.1 --port 11080 --origin https://reader.example.invalid --glance-bin "$HOME/.local/bin/glance"
+chatglance runtime instance init --runtime-home "$CHATARCH_HOME/glance-reader" --name reader --env-profile reader --page account-limits --account alpha --host 127.0.0.1 --port 11080 --origin https://reader.example.invalid --glance-bin "$HOME/.local/bin/glance" --apply
+chatglance runtime instance set-login --runtime-home "$CHATARCH_HOME/glance-reader" --username reader@example.invalid --password-stdin --apply
+chatglance runtime instance render-launchd --runtime-home "$CHATARCH_HOME/glance-reader"
+chatglance runtime instance show --runtime-home "$CHATARCH_HOME/glance-reader"
+```
+
+`init`、`configure`、`set-login` 和模板写入默认仅计划；`--apply` 才保存。清单绑定初始化时的 ChatEnv home 和可选共享 Go binary 绝对路径，因此独立服务不依赖启动进程的 active profile 或 `CHATARCH_HOME`。登录密码只能从标准输入、指定环境变量名或隐藏提示读取，不在 argv/输出中出现；EnvStore 保存 bcrypt hash 和独立随机会话密钥。实例配置从自身快照组装，不复制主站清单；只有启用页面进入 Go YAML，`server.proxied: true` 保留原生 HTTPS 代理登录语境。`configure --page ... --account ... --apply` 是所属操作者对清单的显式修改，可在同一命名 profile 内停用或重新启用模块、选择该 profile 中已启用的账号；不能原地切换实例身份或 profile。普通 `refresh` / `serve` 始终受已保存清单约束。另行审核并安装同一个已验证 Go binary 及渲染出的 LaunchAgents，再用原生 `refresh` / `runtime serve` 启动。实例刷新始终只读，`--scheduled` 也不消费卡片；controls、maintain 和配置外页面会拒绝。主站无实例清单时保持旧行为。
+
+`set-login` 仅在显式使用 `--password-stdin` 时读取管道；无密码来源时，隐藏提示只在可交互终端启用，并需二次确认。共享 `-i/-I` 选项和 `CHATARCH_AUTO_PROMPT=0` 控制交互提示。
 
 ## 完整通用目录
 
