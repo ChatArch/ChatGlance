@@ -28,6 +28,8 @@ chatglance runtime instance show --runtime-home "$CHATARCH_HOME/glance-reader"
 
 `init`、`configure`、`set-login` 和模板写入默认仅计划；`--apply` 才保存。清单绑定初始化时的 ChatEnv home 和可选共享 Go binary 绝对路径，因此独立服务不依赖启动进程的 active profile 或 `CHATARCH_HOME`。登录密码只能从标准输入、指定环境变量名或隐藏提示读取，不在 argv/输出中出现；EnvStore 保存 bcrypt hash 和独立随机会话密钥。实例配置从自身快照组装，不复制主站清单；只有启用页面进入 Go YAML，`server.proxied: true` 保留原生 HTTPS 代理登录语境。`configure --page ... --account ... --apply` 是所属操作者对清单的显式修改，可在同一命名 profile 内停用或重新启用模块、选择该 profile 中已启用的账号；不能原地切换实例身份或 profile。普通 `refresh` / `serve` 始终受已保存清单约束。另行审核并安装同一个已验证 Go binary 及渲染出的 LaunchAgents，再用原生 `refresh` / `runtime serve` 启动。实例刷新始终只读，`--scheduled` 也不消费卡片；controls、maintain 和配置外页面会拒绝。主站无实例清单时保持旧行为。
 
+`set-login` 仅在显式使用 `--password-stdin` 时读取管道；无密码来源时，隐藏提示只在可交互终端启用，并需二次确认。共享 `-i/-I` 选项和 `CHATARCH_AUTO_PROMPT=0` 控制交互提示。
+
 ## 完整通用目录
 
 ```text

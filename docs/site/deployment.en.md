@@ -28,6 +28,8 @@ chatglance runtime instance show --runtime-home "$CHATARCH_HOME/glance-reader"
 
 `init`, `configure`, `set-login` and template writes preview until `--apply`. The manifest binds the ChatEnv home used at initialization and an optional absolute shared Go binary path, so a separate job does not depend on its process active profile or `CHATARCH_HOME`. Passwords come only from standard input, a named environment variable or a hidden prompt; EnvStore saves a bcrypt hash and independently generated session key. An instance assembles YAML only from its own snapshots and enabled modules, retaining native `server.proxied: true` for HTTPS proxy login. `configure --page ... --account ... --apply` explicitly changes the owner's saved definition: modules can be disabled or re-enabled and accounts can be selected from enabled subscriptions in the same named profile. Instance identity and profile cannot change in place. Ordinary `refresh` and `serve` remain bound to the saved manifest. Operators separately review/install the same verified Go binary and rendered LaunchAgents, then use native `refresh` and `runtime serve`. Instance refresh remains read-only even with `--scheduled`; controls, maintenance and extra config pages are rejected. A main runtime without an instance manifest keeps its legacy behavior.
 
+`set-login` reads a pipe only with explicit `--password-stdin`. Without a password source, the hidden prompt requires an interactive terminal and confirms the entry. Shared `-i/-I` options and `CHATARCH_AUTO_PROMPT=0` control prompting.
+
 ## Generic source and runtime tree
 
 ```text

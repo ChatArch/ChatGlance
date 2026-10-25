@@ -157,7 +157,7 @@ def load_instance(root: str | Path, *, required: bool = True) -> InstanceSpec | 
             or not isinstance(service["python_bin"], str) or not Path(service["python_bin"]).is_absolute()
             or (spec.python_bin is not None and service["python_bin"] != spec.python_bin)):
         raise ValueError("instance ownership does not match runtime")
-    children = [root / name for name in ("config", "data", "staging", "logs", "bin")]
+    children = [root / name for name in ("config", "config/backups", "data", "staging", "logs", "bin")]
     children += [root / "config/glance.yml", root / "bin/glance"]
     if "servers" in spec.pages:
         children.append(root / "config/server-inventory.yml")
@@ -167,6 +167,9 @@ def load_instance(root: str | Path, *, required: bool = True) -> InstanceSpec | 
         children.extend((root / "data" / MODULES[key].snapshot, root / "data" / MODULES[key].page_file))
     if any(child.is_symlink() for child in children):
         raise ValueError("instance runtime contains an unsafe symlink")
+    backups = root / "config/backups"
+    if backups.exists() and not backups.is_dir():
+        raise ValueError("instance backup directory is unsafe")
     return spec
 
 

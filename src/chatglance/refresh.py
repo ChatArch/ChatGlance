@@ -186,6 +186,7 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
             timeout=collection.account_timeout, reset_timeout=collection.reset_timeout,
             no_public_reset=collection.no_public_reset, reset_base_url=collection.reset_base_url,
             execute_resets=scheduled and instance is None,
+            require_subscriptions=instance is not None,
             **({"home": bound_home} if instance else {}),
             **({"env_profile": instance.env_profile} if instance else {}),
         )
@@ -257,7 +258,7 @@ def _restart(service: str, runtime_home: Path) -> None:
     restart_user_service(service, runtime_home)
 
 
-def _publish(root: Path, stage: Path, payloads: dict[Path, str]) -> str | None:
+def _publish(root: Path, stage: Path, payloads: dict[Path, str], *, instance: bool = False) -> str | None:
     changed = {}
     for path, text in payloads.items():
         private_state = path == root / "private" or root / "private" in path.parents
@@ -266,6 +267,9 @@ def _publish(root: Path, stage: Path, payloads: dict[Path, str]) -> str | None:
             changed[path] = text
     if not changed:
         return None
+    if instance:
+        from .instances import load_instance
+        load_instance(root)  # Recheck backup ancestry immediately before creation.
     backup = root / "config/backups" / ("refresh-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ"))
     backup.mkdir(parents=True, mode=0o700)
     saved, prepared, replaced = {}, {}, []
@@ -507,7 +511,7 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
                     journal_id, pages=rows, collection="completed", validation="passed",
                     publication="running", changed=None, published=None,
                 )
-                result["backup_dir"] = _publish(root, stage, payloads)
+                result["backup_dir"] = _publish(root, stage, payloads, **({"instance": True} if instance is not None else {}))
                 result["changed"] = result["backup_dir"] is not None
                 result["published"] = result["changed"]
                 publication_status = "published" if result["changed"] else "unchanged"

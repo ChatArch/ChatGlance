@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import bcrypt
 import pytest
@@ -12,7 +13,7 @@ from click.testing import CliRunner
 from chatenv import EnvStore, get_paths
 from chatglance.config import ChatGlanceConfig, collection_settings
 from chatglance.cli import main
-from chatglance import refresh
+from chatglance import codex_collector, codex_resets, refresh
 from test_subscriptions import install_clients
 from test_codex_resets import NOW
 
@@ -469,6 +470,101 @@ def test_login_cli_uses_named_env_value_without_echo(tmp_path):
     assert password not in result.output
     values=EnvStore(get_paths().envs_dir).load_profile(ChatGlanceConfig,"teacher")
     assert bcrypt.checkpw(password.encode(),values["CHATGLANCE_LOGIN_PASSWORD_HASH"].encode())
+
+
+@pytest.mark.parametrize("bad_registry", [None, "", "{}",
+    '{"alpha":{"crs_profile":"reader-a","account_id":"account-a","enabled":true}}',
+    '{"alpha":{"crs_profile":"reader-a","account_id":"account-a","enabled":false}}',
+    '{"alpha":{"crs_profile":"reader-a","account_id":"account-a","enabled":false,"removed":true}}'])
+@pytest.mark.parametrize("changed_read", [1, 2])
+def test_instance_collector_rechecks_registry_before_legacy_resolvers(tmp_path, monkeypatch, bad_registry, changed_read):
+    root=initialized(tmp_path)
+    (root/"bin/glance").write_text("synthetic validator")
+    monkeypatch.setattr(refresh,"validate_glance_config",lambda *args:None)
+    original=codex_collector.collection_settings
+    reads=[];local=[]
+    def changed_settings(*args, **kwargs):
+        settings=original(*args, **kwargs)
+        reads.append(True)
+        if len(reads)==changed_read:
+            settings["subscriptions"]=bad_registry
+        return settings
+    def local_resolver(*args, **kwargs):
+        local.append(True)
+        raise RuntimeError("synthetic forbidden local resolver")
+    monkeypatch.setattr(codex_collector,"collection_settings",changed_settings)
+    monkeypatch.setattr(codex_resets.CodexClient,"from_profile",local_resolver)
+    result=refresh.refresh_runtime(root,restart=False,
+        collection=refresh.CollectionOptions(no_public_reset=True))
+    assert result["ok"] is False
+    assert not local
+    assert not (root/"config/backups").exists()
+
+
+def test_instance_refresh_rejects_symlinked_backups_before_publication(tmp_path, monkeypatch):
+    root=initialized(tmp_path)
+    (root/"bin/glance").write_text("synthetic validator")
+    monkeypatch.setattr(refresh,"validate_glance_config",lambda *args:None)
+    outside=tmp_path/"outside";outside.mkdir()
+    (root/"config/backups").symlink_to(outside,target_is_directory=True)
+    install_clients(monkeypatch)
+    with pytest.raises(ValueError):
+        refresh.refresh_runtime(root,restart=False,
+            collection=refresh.CollectionOptions(no_public_reset=True))
+    assert not list(outside.iterdir())
+
+
+def test_instance_rechecks_backup_path_at_publication(tmp_path, monkeypatch):
+    root=initialized(tmp_path)
+    (root/"bin/glance").write_text("synthetic validator")
+    outside=tmp_path/"outside";outside.mkdir()
+    install_clients(monkeypatch)
+    def switched_validator(*args):
+        (root/"config/backups").symlink_to(outside,target_is_directory=True)
+    monkeypatch.setattr(refresh,"validate_glance_config",switched_validator)
+    with pytest.raises(ValueError):
+        refresh.refresh_runtime(root,restart=False,
+            collection=refresh.CollectionOptions(no_public_reset=True))
+    assert not list(outside.iterdir())
+
+
+def test_set_login_does_not_prompt_from_pipe_when_auto_prompt_disabled(tmp_path, monkeypatch):
+    root=initialized(tmp_path)
+    monkeypatch.setenv("CHATARCH_AUTO_PROMPT","0")
+    store=EnvStore(get_paths().envs_dir)
+    before=store.load_profile(ChatGlanceConfig,"teacher")
+    args=["runtime","instance","set-login","--runtime-home",str(root),
+          "--username","reader@example.invalid","--apply"]
+    for extra in ([],["-I"],["-i"]):
+        result=CliRunner().invoke(main,args+extra,input="synthetic-pipe-password\nsynthetic-pipe-password\n")
+        assert result.exit_code!=0
+        assert "synthetic-pipe-password" not in result.output
+        assert store.load_profile(ChatGlanceConfig,"teacher")==before
+    result=CliRunner().invoke(main,args+["--password-stdin"],input="synthetic-pipe-password\n")
+    assert result.exit_code==0,result.output
+    assert "synthetic-pipe-password" not in result.output
+    assert bcrypt.checkpw(b"synthetic-pipe-password",
+                          store.load_profile(ChatGlanceConfig,"teacher")["CHATGLANCE_LOGIN_PASSWORD_HASH"].encode())
+
+
+def test_set_login_prompt_requires_matching_hidden_entries(tmp_path, monkeypatch):
+    from chatglance import instance_cli
+    root=initialized(tmp_path)
+    store=EnvStore(get_paths().envs_dir)
+    before=store.load_profile(ChatGlanceConfig,"teacher")
+    monkeypatch.setattr(instance_cli,"resolve_interactive_mode",lambda *a,**kw:
+        SimpleNamespace(force_interactive=False,can_prompt=True,need_prompt=True))
+    labels=[];answers=iter(("synthetic-first","synthetic-second"))
+    def prompt(label,current_value):
+        labels.append(label)
+        return next(answers)
+    monkeypatch.setattr(instance_cli,"prompt_sensitive_value",prompt)
+    result=CliRunner().invoke(main,["runtime","instance","set-login","--runtime-home",str(root),
+        "--username","reader@example.invalid","--apply"])
+    assert result.exit_code!=0
+    assert labels==["Password","Confirm password"]
+    assert "synthetic-first" not in result.output and "synthetic-second" not in result.output
+    assert store.load_profile(ChatGlanceConfig,"teacher")==before
 
 
 def test_configure_rolls_back_on_second_replace_failure(tmp_path,monkeypatch):

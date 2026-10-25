@@ -9,6 +9,8 @@ import re
 import sys
 
 import click
+from chatstyle import (abort_if_force_without_tty, add_interactive_option,
+                       prompt_sensitive_value, resolve_interactive_mode)
 
 from .instances import (InstanceSpec, configure_instance, initialize_instance,
                         load_instance, render_launchd_instance, set_instance_login)
@@ -93,7 +95,8 @@ def register(runtime):
     @click.option("--password-env", help="Name of an environment variable containing the password; never its value.")
     @click.option("--password-stdin", is_flag=True, help="Read password from standard input.")
     @click.option("--apply", is_flag=True, help="Save bcrypt hash and new session key to the named ChatEnv profile.")
-    def set_login(runtime_home, username, password_env, password_stdin, apply):
+    @add_interactive_option
+    def set_login(runtime_home, username, password_env, password_stdin, apply, interactive):
         """Provision native Go login without accepting a plaintext password argument."""
         if password_env and password_stdin:
             raise click.ClickException("choose one password input")
@@ -104,7 +107,16 @@ def register(runtime):
         elif password_stdin:
             password = sys.stdin.readline().rstrip("\r\n")
         else:
-            password = click.prompt("Password", hide_input=True, confirmation_prompt=True)
+            resolution = resolve_interactive_mode(interactive, auto_prompt_condition=True,
+                                                  respect_auto_prompt_env=True)
+            abort_if_force_without_tty(resolution.force_interactive, resolution.can_prompt,
+                                       "Pass --password-env or --password-stdin in non-interactive mode.")
+            if not resolution.need_prompt or not resolution.can_prompt:
+                raise click.ClickException("password source required; use --password-env or --password-stdin")
+            password = prompt_sensitive_value("Password", None)
+            confirmation = prompt_sensitive_value("Confirm password", None)
+            if password != confirmation:
+                raise click.ClickException("password confirmation does not match")
         _emit(set_instance_login, runtime_home, username=username, password=password, apply=apply)
 
     @instance.command("render-launchd")
