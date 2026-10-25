@@ -283,6 +283,68 @@ def test_managed_auth_ignores_stale_inherited_login_and_indexed_keys(tmp_path, m
     assert "parent-stale-fixture" not in json.dumps(managed.runtime_status(root))
 
 
+def _primary_auth_fixture(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHATARCH_HOME", str(tmp_path / "home"))
+    root = tmp_path / "runtime"
+    (root / "config").mkdir(parents=True)
+    (root / "bin").mkdir()
+    (root / "bin/glance").write_text("synthetic executable")
+    (root / "config/glance.yml").write_text(
+        "auth:\n  secret-key: ${CHATGLANCE_LOGIN_SECRET}\n  users:\n"
+        "    ${CHATGLANCE_LOGIN_USER}:\n      password-hash: ${CHATGLANCE_LOGIN_PASSWORD_HASH}\n")
+    values = {"CHATGLANCE_LOGIN_USER": "reader", "CHATGLANCE_LOGIN_SECRET": base64.b64encode(b"X" * 64).decode(),
+              "CHATGLANCE_WEB_PORT": "18085", "CHATGLANCE_LOGIN_PASSWORD_HASH": "$2b$12$" + "A" * 53,
+              "CHATGLANCE_LOGIN_PASSWORD": "synthetic-profile-password"}
+    EnvStore(get_paths().envs_dir).save_active(ChatGlanceConfig, values)
+    return root, values
+
+
+def test_managed_primary_hash_template_ignores_extra_raw(tmp_path, monkeypatch):
+    root, values = _primary_auth_fixture(tmp_path, monkeypatch)
+    environment = managed.runtime_environment(root, auth=True)
+    assert environment["CHATGLANCE_LOGIN_PASSWORD_HASH"] == values["CHATGLANCE_LOGIN_PASSWORD_HASH"]
+    assert "CHATGLANCE_LOGIN_PASSWORD" not in environment
+    assert "CHATGLANCE_LOGIN_PASSWORD_YAML" not in environment
+
+
+def test_managed_go_candidate_uses_its_own_credential_template(tmp_path, monkeypatch):
+    root, values = _primary_auth_fixture(tmp_path, monkeypatch)
+    raw_config = root / "config/raw-candidate.yml"
+    raw_config.write_text("auth:\n  secret-key: ${CHATGLANCE_LOGIN_SECRET}\n  users:\n"
+                          "    ${CHATGLANCE_LOGIN_USER}:\n      password: ${CHATGLANCE_LOGIN_PASSWORD_YAML}\n")
+    captured = []
+    monkeypatch.setattr(managed.subprocess, "run", lambda args, **kwargs: captured.append(kwargs["env"]))
+    environment = managed.runtime_environment(root)
+    managed.validate_candidate(root / "bin/glance", root / "config/glance.yml", environment)
+    managed.validate_candidate(root / "bin/glance", raw_config, environment)
+    assert captured[0]["CHATGLANCE_LOGIN_PASSWORD_HASH"] == values["CHATGLANCE_LOGIN_PASSWORD_HASH"]
+    assert "CHATGLANCE_LOGIN_PASSWORD" not in captured[0]
+    assert json.loads(captured[1]["CHATGLANCE_LOGIN_PASSWORD_YAML"]) == values["CHATGLANCE_LOGIN_PASSWORD"]
+    assert "CHATGLANCE_LOGIN_PASSWORD_HASH" not in captured[1]
+    resolved = managed.runtime_environment(root, auth=True, auth_config=raw_config)
+    managed.validate_candidate(root / "bin/glance", raw_config, resolved)
+    assert json.loads(captured[2]["CHATGLANCE_LOGIN_PASSWORD_YAML"]) == values["CHATGLANCE_LOGIN_PASSWORD"]
+
+
+def test_managed_serve_and_go_validator_use_selected_profile(tmp_path, monkeypatch):
+    from chatglance import portable, runtime
+    root, values = _primary_auth_fixture(tmp_path, monkeypatch)
+    (root / "private").mkdir()
+    (root / "private/managed.json").write_text("synthetic marker")
+    monkeypatch.setattr(managed, "load_manifest", lambda root, required=False: {"chatenv_home": str(tmp_path / "home")})
+    monkeypatch.setenv("CHATGLANCE_LOGIN_PASSWORD", "poison-process-password")
+    served, validated = [], []
+    monkeypatch.setattr(portable.os, "execve", lambda binary, args, environment: served.append(environment))
+    monkeypatch.setattr(runtime.subprocess, "run", lambda args, **kwargs: validated.append(kwargs["env"]))
+    portable.serve(root)
+    assert served[0]["CHATGLANCE_LOGIN_PASSWORD_HASH"] == values["CHATGLANCE_LOGIN_PASSWORD_HASH"]
+    raw_config = root / "config/raw-candidate.yml"
+    raw_config.write_text("auth:\n  secret-key: ${CHATGLANCE_LOGIN_SECRET}\n  users:\n"
+                          "    ${CHATGLANCE_LOGIN_USER}:\n      password: ${CHATGLANCE_LOGIN_PASSWORD_YAML}\n")
+    runtime.validate_glance_config(root / "bin/glance", raw_config)
+    assert json.loads(validated[0]["CHATGLANCE_LOGIN_PASSWORD_YAML"]) == values["CHATGLANCE_LOGIN_PASSWORD"]
+
+
 def test_selected_dropin_requires_explicit_retirement_and_restores_on_rollback(tmp_path, monkeypatch):
     root, _ = synthetic_runtime(tmp_path, monkeypatch)
     directory = tmp_path / "units"

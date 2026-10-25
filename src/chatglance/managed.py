@@ -22,7 +22,7 @@ from chatenv import EnvStore, get_paths
 
 from . import __version__
 from .config import ChatGlanceConfig
-from .portable import BRIDGE_KEYS, _safe_directory, authenticated_environment, bridge_environment, install_verified_binary, runtime_home
+from .portable import BRIDGE_KEYS, _safe_directory, auth_credential_mode, authenticated_environment, bridge_environment, install_verified_binary, runtime_home
 from .systemd import _portable_arg, systemctl_user, user_systemd_dir, verify_user_units
 
 
@@ -131,7 +131,8 @@ def effective_home(root: str | Path):
             os.environ["CHATARCH_HOME"] = previous
 
 
-def runtime_environment(root: str | Path, *, auth: bool = False, values: dict | None = None) -> dict[str, str]:
+def runtime_environment(root: str | Path, *, auth: bool = False, values: dict | None = None,
+                        auth_config: str | Path | None = None) -> dict[str, str]:
     root = runtime_home(root)
     from .instances import load_instance, instance_environment
     if load_instance(root, required=False):
@@ -165,11 +166,23 @@ def runtime_environment(root: str | Path, *, auth: bool = False, values: dict | 
         environment[f"CHATGLANCE_AUTH_USER_{index}"] = checked["CHATGLANCE_LOGIN_USER"]
         environment[f"CHATGLANCE_AUTH_HASH_{index}"] = checked["CHATGLANCE_LOGIN_PASSWORD_HASH"]
     if auth and not accounts:
-        environment = authenticated_environment(home=home, environ=environment, strict=True)
+        config_bytes = _bytes(Path(auth_config) if auth_config is not None else root / "config/glance.yml")
+        mode = auth_credential_mode(config_bytes.decode("utf-8")) if config_bytes is not None else None
+        environment = authenticated_environment(home=home, environ=environment, strict=True, credential_mode=mode)
     return environment
 
 
 def validate_candidate(binary: Path, config: Path, environment: dict[str, str]) -> None:
+    mode = auth_credential_mode(config.read_text(encoding="utf-8"))
+    if mode is not None:
+        if (mode == "raw" and "CHATGLANCE_LOGIN_PASSWORD" not in environment
+                and "CHATGLANCE_LOGIN_PASSWORD_YAML" in environment):
+            try:
+                password = json.loads(environment["CHATGLANCE_LOGIN_PASSWORD_YAML"])
+            except (TypeError, ValueError):
+                raise ValueError("invalid native raw login scalar") from None
+            environment = {**environment, "CHATGLANCE_LOGIN_PASSWORD": password}
+        environment = authenticated_environment(environ=environment, strict=True, credential_mode=mode)
     try:
         subprocess.run([str(binary), "-config", str(config), "config:validate"], env=environment,
                        check=True, capture_output=True, text=True, timeout=60)
