@@ -18,6 +18,12 @@ PACKAGE = {"InstanceId": "flowpack-example-1", "CommodityCode": "flowpack", "Pac
 NOW = "2026-11-17T09:00:00Z"
 
 
+def test_distribution_requires_explicit_profile_load_api():
+    from pathlib import Path
+    metadata = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
+    assert '"chatenv>=0.2.15,<0.3.0"' in metadata
+
+
 def test_config_validates_entire_batch_before_collection(tmp_path):
     path = tmp_path / "resource-subscriptions.yml"
     path.write_text("sources:\n  - id: shared-traffic\n    type: aliyun-shared-traffic\n    enabled: true\n    profile: example\n")
