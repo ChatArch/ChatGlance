@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add a runtime-scoped, read-only Aliyun shared-traffic resource card to the existing subscriptions page. Preserve independent Codex controls, distinguish permission errors and stale observations, and keep named instances free of the main runtime's cloud data.
+- Reconcile the complete Aliyun resource-pack pagination using documented string counts, reject business errors and incomplete pages, and bind revalidated stale quantities to the selected source profile while preserving legacy Codex resource metadata.
+
 ## 0.5.1 - 2026-10-25
 
 - Store new instance login passwords as sensitive real ChatEnv values with independent session keys. Pass an escaped YAML scalar through the private Go child environment and let native Go hash the password internally; generated config and CLI output retain references only.

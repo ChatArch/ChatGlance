@@ -9,6 +9,7 @@ import html
 import hashlib
 import json
 import calendar
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -519,6 +520,7 @@ def normalize_account_limits_data(data: dict[str, Any]) -> dict[str, Any]:
         "generated_at": generated_at,
         "accounts": accounts,
         "codex": codex_profiles,
+        "resources": [item for item in safe.get("resources", []) if isinstance(item, dict)],
         "codex_reset": codex_reset,
         "reset_control_path": _control_path(safe.get("reset_control_path")),
         "refresh_status": _refresh_status(safe, codex_profiles),
@@ -646,6 +648,7 @@ def _render_quota_windows(profile: dict[str, Any]) -> str:
 
 
 def render_account_limits_html(data: dict[str, Any], *, allow_controls: bool = True) -> str:
+    from .resource_subscriptions import SOURCE_URL
     normalized = normalize_account_limits_data(data)
     counts = normalized["counts"]
 
@@ -684,6 +687,53 @@ def render_account_limits_html(data: dict[str, Any], *, allow_controls: bool = T
     {error_html}
   </div>
 </article>"""
+        )
+
+    resource_cards = []
+    resource_status = {
+        "ok": "已更新", "empty": "未查询到有效共享流量包（不代表未购买）",
+        "permission_denied": "权限不足，当前用量未知", "auth_error": "凭据错误，当前用量未知",
+        "network_error": "网络错误，当前用量未知", "invalid_data": "数据异常，当前用量未知",
+    }
+    for resource in normalized["resources"]:
+        if resource.get("type") != "aliyun-shared-traffic":
+            continue
+        status = text_value(resource.get("status"))
+        checked = html_text(_fmt_beijing_iso(resource.get("checked_at")))
+        success = html_text(_fmt_beijing_iso(resource.get("last_successful_at")))
+        stale = bool(resource.get("stale"))
+        metrics = []
+        for record in resource.get("records", []):
+            if not isinstance(record, dict):
+                continue
+            total, remaining, used, progress = (record.get(key) for key in ("total", "remaining", "used", "progress_percent"))
+            numbers = [_safe_number(value) for value in (total, remaining, used)]
+            if (any(value is None or not math.isfinite(value) or value < 0 for value in numbers)
+                    or numbers[1] > numbers[0]):
+                continue
+            percent = _safe_number(progress) if progress is not None else None
+            progress_html = (
+                f'<div class="limit-progress" aria-label="已用 {percent:.1f}%"><span style="width: {percent:.1f}%"></span></div>'
+                if percent is not None and math.isfinite(percent) and 0 <= percent <= 100 and numbers[0] > 0 else ''
+            )
+            unit = html_text(record.get("unit"))
+            metrics.append(
+                f'<div class="resource-package"><p class="limit-muted">{html_text(record.get("label"))} · {html_text(record.get("id"))}</p>'
+                f'<div class="usage-row"><span>总量</span><strong>{html_text(total)} {unit}</strong></div>'
+                f'<div class="usage-row"><span>已用</span><strong>{html_text(used)} {unit}</strong></div>'
+                f'<div class="usage-row"><span>剩余</span><strong>{html_text(remaining)} {unit}</strong></div>'
+                f'{progress_html}'
+                f'<p class="limit-muted">覆盖区域：{html_text(record.get("region"))} · 生效：{html_text(_fmt_reset(record.get("effective_at")))}'
+                f' · 到期：{html_text(_fmt_reset(record.get("expires_at")))}</p></div>'
+            )
+        resource_cards.append(
+            '<article class="codex-account-card site-style-card resource-card"><div class="codex-account-card-body">'
+            '<div class="codex-account-card-head"><h3>阿里云公网共享流量</h3></div>'
+            f'<p class="limit-muted">账号级 · 仅展示有效资源包 · <a href="{html_text(SOURCE_URL)}">阿里云资源包 API</a></p>'
+            f'<p class="limit-status-line">{resource_status.get(status, "当前用量未知")}{" · 显示过期缓存" if stale else ""}</p>'
+            f'{"".join(metrics)}'
+            f'<p class="limit-muted">上次检查：{checked}</p><p class="limit-muted">上次成功：{success}</p>'
+            '</div></article>'
         )
 
     codex_reset = normalized["codex_reset"]
@@ -789,6 +839,8 @@ def render_account_limits_html(data: dict[str, Any], *, allow_controls: bool = T
 .codex-account-card-body {{ padding: 0.82rem; display: flex; flex-direction: column; flex: 1; }}
 .codex-account-card-head {{ display: flex; justify-content: space-between; gap: 0.6rem; align-items: flex-start; }}
 .codex-account-card h3 {{ margin: 0 0 0.7rem; font-size: 1.05rem; }}
+.resource-package + .resource-package {{ margin-top:12px; padding-top:12px; border-top:1px solid var(--color-separator); }}
+.resource-card .limit-muted {{ overflow-wrap:anywhere; }}
 .usage-row, .reset-row {{ display: flex; justify-content: space-between; gap: 0.8rem; align-items: baseline; }}
 .usage-row span, .reset-row span {{ color: var(--color-text-subdue); font-size: 0.78rem; }}
 .limit-progress {{ height: 0.56rem; border-radius: 999px; overflow: hidden; margin: 0.5rem 0 0.65rem; background: color-mix(in srgb, var(--color-text-subdue) 18%, transparent); }}
@@ -799,7 +851,7 @@ def render_account_limits_html(data: dict[str, Any], *, allow_controls: bool = T
 {status_banner}
 <div class="account-limits-resource-layout">
   <section class="codex-reset-panel"><h2>Codex 官方重置日历</h2><p class="limit-muted">{reset_intro}</p>{reset_calendar}</section>
-  <section class="codex-accounts-panel"><h2>账号使用额度</h2><div class="codex-account-card-grid">{''.join(codex_cards) or '<p>暂无 Codex 账号数据。</p>'}</div></section>
+  <section class="codex-accounts-panel"><h2>账号使用额度</h2><div class="codex-account-card-grid">{''.join(codex_cards + resource_cards) or '<p>暂无 Codex 账号数据。</p>'}</div></section>
 </div>
 """
 

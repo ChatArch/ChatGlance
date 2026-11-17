@@ -44,6 +44,22 @@ chatglance account-limits subscriptions remove work --execute
 
 typed `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` 是显式选择层，不自动扫描 Env 或收编全部远程账号。未配置时兼容旧映射；首次管理写入会迁移旧记录，保留原策略。明确 `{}` 表示停止全部跟踪，不回退旧快照。移除保留身份引用、策略和台账，不撤销 Key；同名不得换绑账号。`subscriptions --env-profile NAME` 可编辑指定 ChatGlance profile 而不全局激活。配置与权限边界见 [运行与验收](docs/site/operations.md#多账号跟踪订阅)。
 
+## 账号级资源订阅卡（未发布）
+
+主站 runtime 可选 `config/resource-subscriptions.yml`，缺席时沿用原订阅详情行为。此配置只选择只读数据源，不包含密钥；安装 `ChatGlance[aliyun]`，并确保运行环境已注册 ChatEnv 的 `Aliyun` typed schema 及对应命名 profile。示例配置：
+
+```yaml
+sources:
+  - id: shared-traffic
+    type: aliyun-shared-traffic
+    enabled: true
+    profile: example
+```
+
+原生 `chatglance refresh account-limits --no-restart` 会在既有页面和发布锁内查询账号级阿里云公网共享流量包；资源单独配置时无需 CRS 凭据，也不会抓取 Codex 重置日历。命名实例不会继承主站资源卡。资源卡只读，不提供重置或兑换操作。查询使用 HTTPS `business.aliyuncs.com` 的 BssOpenApi 2017-12-14 `QueryResourcePackageInstances`，分页至多 300 条；只识别 `flowpack-` 资源包 ID，不把 CDN/存储包混合计量。空有效包列表不等同未购买。所需 RAM 读取动作是 `bss:DescribeInstances`（`Resource: *`），不是 ECS 权限；[官方 API 文档](https://help.aliyun.com/zh/user-center/developer-reference/api-bssopenapi-2017-12-14-queryresourcepackageinstances)。缺权时当前用量显示未知，若有上次成功快照会同时标明原观测时间和过期缓存。
+
+分页核对完整有效资源包列表后再筛选共享流量包；API 的 `TotalCount`、`PageNum`、`PageSize` 可为数字字符串。失败后的旧用量仅在来源类型及命名 profile 仍相同时保留，且旧记录会重新校验；切换来源或 profile 不会继承另一个账号的用量。
+
 ## 可选页面的只读实例（0.5.1）
 
 同一安装版 Python 和 Glance Go 二进制可服务多个独立 runtime。先在 ChatEnv 创建显式命名的 ChatGlance profile，其中订阅表绑定已有的逐账号 CRS profile；实例清单只保存 profile 名、启用页面、固定账号标签、监听地址、ChatEnv home、共享二进制路径与所属服务身份，不保存 Key。以下命令默认预览，`--apply` 才写入：
