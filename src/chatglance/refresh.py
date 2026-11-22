@@ -116,6 +116,9 @@ def _configured_pages(config: dict[str, Any], root: Path, collection: Collection
 
 
 def _replace_page(config: dict[str, Any], page: dict[str, Any], *, inventory: dict[str, Any] | None = None) -> None:
+    if page.get("slug") == "account-limits":
+        from .account_limits import add_home_subscription_link
+        config["pages"] = add_home_subscription_link(config)["pages"]
     if page.get("name") == "项目":
         from .optional_login import optional_login_enabled
         if optional_login_enabled(config):

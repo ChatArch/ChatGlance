@@ -44,13 +44,14 @@ def register_subscriptions_cli(parent):
     @click.option("--crs-profile", required=True, help="Existing CRS profile with its scoped management Key.")
     @click.option("--account-id", required=True, help="Exact CRS account ID; not an OAuth identity.")
     @click.option("--enabled/--disabled", default=True, help="Tracking only; new automatic-use policy stays disabled.")
+    @click.option("--tag", default=None, help="Optional safe display tag, such as Plus or Pro.")
     @click.option("--execute", is_flag=True, help="Persist the tracking change; otherwise plan only.")
     @click.option("--json-output", is_flag=True)
     @click.pass_context
-    def add(ctx, name, crs_profile, account_id, enabled, execute, json_output):
+    def add(ctx, name, crs_profile, account_id, enabled, tag, execute, json_output):
         """Register an account through an existing profile; never rewrite its Key."""
         emit(change_subscription, json_output, action="add", name=name, crs_profile=crs_profile,
-             account_id=account_id, enabled=enabled, execute=execute, **ctx.obj["subscription_config"])
+             account_id=account_id, enabled=enabled, tag=tag, execute=execute, **ctx.obj["subscription_config"])
 
     for action, description in (
         ("enable", "Resume tracking without enabling automatic card use."),

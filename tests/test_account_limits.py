@@ -10,6 +10,7 @@ from chatglance.account_limits import (
     ACCOUNT_LIMITS_PAGE_NAME,
     BEIJING_TIMEZONE,
     _render_reset_calendar,
+    add_home_subscription_link,
     build_account_limits_page,
     normalize_account_limits_data,
     render_account_limits_html,
@@ -151,29 +152,64 @@ def test_render_account_limits_html_shows_current_usage_and_reset_dates_without_
     assert "session-secret" not in html
 
 
-def test_render_account_limits_html_uses_newest_reset_event_over_stale_latest_field() -> None:
+def test_render_account_limits_html_escapes_subscription_tag() -> None:
+    data = sample_account_limits_data()
+    data["codex"][0]["subscription_tag"] = "Pro & <safe>"
+
+    html = render_account_limits_html(data)
+
+    assert 'class="account-plan-tag">Pro &amp; &lt;safe&gt;</span>' in html
+    assert "Pro & <safe>" not in html
+
+
+def test_render_account_limits_html_prioritizes_accounts_over_reset_calendar() -> None:
+    html = render_account_limits_html(sample_account_limits_data())
+
+    assert "账号使用额度" in html
+    assert "Codex 官方重置日历" not in html
+    assert '<section class="codex-reset-panel"' not in html
+    assert "codex-account-card-grid" in html
+    assert "暂无 reset 记录" not in html
+
+
+def test_add_home_subscription_link_sits_after_calendar_without_private_counts() -> None:
+    config = {
+        "pages": [{"name": "ChatArch", "columns": [{"size": "full", "widgets": [
+            {"type": "calendar", "title": "CALENDAR"},
+            {"type": "bookmarks", "title": "公开入口"},
+        ]}]}]
+    }
+
+    updated = add_home_subscription_link(config)
+    widgets = updated["pages"][0]["columns"][0]["widgets"]
+    assert [widget["type"] for widget in widgets] == ["calendar", "bookmarks", "bookmarks"]
+    assert widgets[1]["title"] == "订阅概览"
+    assert widgets[1]["groups"][0]["links"][0]["url"] == "/account-limits"
+    assert "6" not in yaml.safe_dump(widgets[1], allow_unicode=True)
+    assert config["pages"][0]["columns"][0]["widgets"][1]["title"] == "公开入口"
+
+
+def test_render_account_limits_html_hides_public_reset_event_details() -> None:
     data = sample_account_limits_data()
     data["codex_reset"]["latest"] = {
         "time_utc": "2026-08-11T00:28:16Z",
         "time_bjt": "2026-08-11 08:28:16 +0800",
         "date_bjt": "2026-08-11",
     }
-    data["codex_reset"]["events"].insert(
-        0,
-        {
-            "event_id": "2091400000000000000",
-            "time_utc": "2026-08-24T00:46:51Z",
-            "time_bjt": "2026-08-24 08:46:51 +0800",
-            "date_bjt": "2026-08-24",
-            "scope": "Paid Codex users",
-            "source_url": "https://x.com/thsottiaux/status/2091400000000000000",
-        },
-    )
+    data["codex_reset"]["events"].insert(0, {
+        "event_id": "2091400000000000000",
+        "time_utc": "2026-08-24T00:46:51Z",
+        "time_bjt": "2026-08-24 08:46:51 +0800",
+        "date_bjt": "2026-08-24",
+        "scope": "Paid Codex users",
+        "source_url": "https://x.com/thsottiaux/status/2091400000000000000",
+    })
 
     html = render_account_limits_html(data)
 
-    assert "最新：2026-08-24 08:46:51 +0800" in html
-    assert "最新：2026-08-11 08:28:16 +0800" not in html
+    assert "Codex 官方重置日历" not in html
+    assert "2026-08-24 08:46:51 +0800" not in html
+    assert "2091400000000000000" not in html
 
 
 def test_build_account_limits_page_creates_wide_html_page() -> None:
@@ -403,71 +439,43 @@ def test_render_account_limits_html_uses_single_month_calendar_card_and_account_
     html = render_account_limits_html(data)
 
     assert 'class="account-limits-resource-layout"' in html
-    assert 'class="codex-reset-panel"' in html
+    assert 'class="codex-reset-panel"' not in html
     assert 'class="codex-accounts-panel"' in html
-    assert 'class="codex-calendar-card"' in html
-    assert 'class="codex-calendar-month-switcher"' in html
-    assert 'class="codex-calendar-option is-active"' not in html
-    assert '#codex-reset-month-0:checked ~ .codex-calendar-month-switcher label { background: transparent; color: var(--color-text-subdue); border-color: var(--color-separator); }' in html
-    assert '#codex-reset-month-0:checked ~ .codex-calendar-month-switcher label[for=\'codex-reset-month-0\']' in html
-    assert '#codex-reset-month-1:checked ~ .codex-calendar-panels .codex-calendar-month { display: none; }' in html
-    assert '#codex-reset-month-1:checked ~ .codex-calendar-panels .codex-reset-month-panel-1 { display: block; }' in html
-    assert '#codex-reset-month-1:checked ~ .codex-calendar-month-switcher label { background: transparent; color: var(--color-text-subdue); border-color: var(--color-separator); }' in html
-    assert '#codex-reset-month-1:checked ~ .codex-calendar-month-switcher label[for=\'codex-reset-month-1\']' in html
+    assert 'class="codex-calendar-card"' not in html
     assert 'class="codex-account-card-grid"' in html
     assert 'class="codex-account-card site-style-card"' in html
     assert 'class="codex-reset-carousel"' not in html
     assert 'class="codex-account-list"' not in html
     assert 'class="limit-progress"' in html
-    assert html.index('class="codex-reset-panel"') < html.index('class="codex-accounts-panel"')
     assert "使用额度" in html
     assert "重置时间" in html
-    assert "Primary" not in html
-    assert "Secondary" not in html
-    assert "2026-08-18 09:00" not in html
+    assert "Previous reset" not in html
 
 
-def test_render_account_limits_html_uses_recent_public_reset_months() -> None:
+def test_render_account_limits_html_ignores_recent_public_reset_months() -> None:
     data = sample_account_limits_data()
-    data["codex_reset"]["events"] = []
-    for month in range(4, 9):
-        data["codex_reset"]["events"].append(
-            {
-                "event_id": f"month-{month}",
-                "time_bjt": f"2026-{month:02d}-02 10:00:00 +0800",
-                "date_bjt": f"2026-{month:02d}-02",
-                "scope": "Recent reset",
-                "source_url": f"https://x.com/example/status/month-{month}",
-            }
-        )
+    data["codex_reset"]["events"] = [{
+        "event_id": f"month-{month}",
+        "time_bjt": f"2026-{month:02d}-02 10:00:00 +0800",
+        "date_bjt": f"2026-{month:02d}-02",
+        "scope": "Recent reset",
+        "source_url": f"https://x.com/example/status/month-{month}",
+    } for month in range(4, 9)]
 
     html = render_account_limits_html(data)
 
+    assert "Codex 官方重置日历" not in html
+    assert "2026 年 04 月" not in html
+    assert "2026 年 08 月" not in html
+    assert "Recent reset" not in html
+
+
+def test_render_account_limits_html_does_not_render_current_reset_month() -> None:
+    html = render_account_limits_html(sample_account_limits_data())
     now = datetime.now(BEIJING_TIMEZONE)
-    current = (now.year, now.month)
-    event_months = [(2026, month) for month in range(8, 3, -1)]
-    expected = [current] + [month for month in event_months if month != current]
-    expected = expected[:4]
-    for year, month in expected:
-        assert f"{year} 年 {month:02d} 月" in html
-    for month in range(4, 9):
-        if (2026, month) not in expected:
-            assert f"2026 年 {month:02d} 月" not in html
 
-
-def test_render_account_limits_html_auto_includes_current_month() -> None:
-    data = sample_account_limits_data()
-
-    html = render_account_limits_html(data)
-
-    # The current Beijing month appears as a calendar option even though the
-    # sample reset events only contain August resets.
-    now = datetime.now(BEIJING_TIMEZONE)
-    assert f"{now.year} 年 {now.month:02d} 月" in html
-    assert "0 次 reset" in html
-    assert "is-today" in html
-    assert ".codex-reset-day.is-today .day-number" in html
-    assert "border: 2px solid #ef4444" in html
+    assert f"{now.year} 年 {now.month:02d} 月" not in html
+    assert "codex-calendar" not in html
 
 
 def test_reset_calendar_puts_reference_month_first_even_without_events() -> None:
@@ -573,80 +581,21 @@ def test_render_account_limits_html_omits_probe_diagnostics_from_cards() -> None
     assert "refresh_attempted=no" not in html
 
 
-def test_render_account_limits_html_shows_global_codex_reset_calendar_from_public_tracker() -> None:
-    data = sample_account_limits_data()
-    data["codex"][0]["reset_history"] = [
-        {
-            "label": "Primary",
-            "reset_at": "2026-08-18T09:00:00+08:00",
-            "observed_at": "2026-08-12T13:30:00+08:00",
-            "used_percent": 3,
-        },
-    ]
-    # Public tracker timestamps must be rendered by their Beijing date, not by
-    # UTC or the server's local timezone. These two samples cross the UTC day
-    # boundary so the circled calendar days prove the BJT date was used.
-    data["codex_reset"]["latest"] = {
-        "event_id": "cross-bjt-1",
-        "time_utc": "2026-08-11T18:28:16Z",
-        "time_bjt": "2026-08-12 02:28:16 +0800",
-        "date_bjt": "2026-08-12",
-        "source_url": "https://x.com/example/status/cross-bjt-1",
-    }
-    data["codex_reset"]["events"] = [
-        {
-            "event_id": "cross-bjt-1",
-            "time_utc": "2026-08-11T18:28:16Z",
-            "time_bjt": "2026-08-12 02:28:16 +0800",
-            "date_bjt": "2026-08-12",
-            "scope": "All paid ChatGPT Work and Codex users",
-            "source_url": "https://x.com/example/status/cross-bjt-1",
-        },
-        {
-            "event_id": "cross-bjt-2",
-            "time_utc": "2026-08-01T18:32:00Z",
-            "time_bjt": "2026-08-02 02:32:00 +0800",
-            "date_bjt": "2026-08-02",
-            "scope": "All paid ChatGPT Work and Codex users",
-            "source_url": "https://x.com/example/status/cross-bjt-2",
-        },
-    ]
-
-    normalized = normalize_account_limits_data(data)
-    html = render_account_limits_html(data)
-
-    assert normalized["counts"]["codex_reset_events"] == 2
-    assert "Codex 官方重置日历" in html
-    assert "codexreset.org" in html
-    assert "example/status/cross-bjt-1" not in html
-    assert "All paid ChatGPT Work and Codex users" in html
-    assert "2026 年 08 月" in html
-    assert "codex-reset-day is-reset" in html
-    assert 'title="All paid ChatGPT Work and Codex users"><span class="day-number">12</span>' in html
-    assert 'title="All paid ChatGPT Work and Codex users"><span class="day-number">2</span>' in html
-    assert 'title="All paid ChatGPT Work and Codex users"><span class="day-number">11</span>' not in html
-    assert 'title="All paid ChatGPT Work and Codex users"><span class="day-number">1</span>' not in html
-    assert 'title="Primary"' not in html
-    assert "default Primary" not in html
-
-
-def test_render_account_limits_html_keeps_official_calendar_empty_without_public_records() -> None:
+def test_render_account_limits_html_keeps_reset_data_out_of_account_page() -> None:
     data = sample_account_limits_data()
     data.pop("codex_reset")
-    data["codex"][0]["reset_history"] = [
-        {
-            "label": "Primary",
-            "reset_at": "2026-08-18T09:00:00+08:00",
-            "observed_at": "2026-08-12T13:30:00+08:00",
-            "used_percent": 3,
-        },
-    ]
+    data["codex"][0]["reset_history"] = [{
+        "label": "Primary",
+        "reset_at": "2026-08-18T09:00:00+08:00",
+        "observed_at": "2026-08-12T13:30:00+08:00",
+        "used_percent": 3,
+    }]
 
     normalized = normalize_account_limits_data(data)
     html = render_account_limits_html(data)
 
     assert normalized["counts"]["codex_reset_events"] == 0
-    assert "Codex 官方重置日历" in html
-    assert "官方重置记录暂不可用" in html
+    assert "Codex 官方重置日历" not in html
+    assert "官方重置记录暂不可用" not in html
     assert "账号窗口采样" not in html
     assert "<span class=\"day-number\">18</span>" not in html

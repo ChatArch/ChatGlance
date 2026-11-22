@@ -4,6 +4,7 @@
 
 - Add a runtime-scoped, read-only Aliyun shared-traffic resource card to the existing subscriptions page. Preserve independent Codex controls, distinguish permission errors and stale observations, and keep named instances free of the main runtime's cloud data.
 - Reconcile the complete Aliyun resource-pack pagination using documented string counts, reject business errors and incomplete pages, and bind revalidated stale quantities to the selected source profile while preserving legacy Codex resource metadata.
+- Simplify the subscriptions page around account quota cards: remove the large official reset-calendar panel and add a compact subscription-details link next to the home calendar while preserving reset data, account policies, and resource-card unknown states.
 
 ## 0.5.1 - 2026-10-25
 

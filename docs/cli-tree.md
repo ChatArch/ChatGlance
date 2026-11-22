@@ -21,7 +21,7 @@ chatglance
 │   ├── json [--data DATA-PATH] [--output OUTPUT-PATH]  # Write normalized, redacted account/quota JSON.
 │   ├── render-page [--data DATA-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME] [--page-slug PAGE-SLUG] [--widget-title WIDGET-TITLE]  # Write the `订阅详情` page YAML from account-limits JSON.
 │   ├── subscriptions [--env-profile ENV-PROFILE] [--home HOME]  # Manage explicit CRS account tracking; not credential or reset permissions.
-│   │   ├── add <NAME> [--crs-profile CRS-PROFILE] [--account-id ACCOUNT-ID] [--enabled] [--execute] [--json-output]  # Register an account through an existing profile; never rewrite its Key.
+│   │   ├── add <NAME> [--crs-profile CRS-PROFILE] [--account-id ACCOUNT-ID] [--enabled] [--tag TAG] [--execute] [--json-output]  # Register an account through an existing profile; never rewrite its Key.
 │   │   ├── disable <NAME> [--execute] [--json-output]  # Pause tracking and deny stale account controls.
 │   │   ├── enable <NAME> [--execute] [--json-output]  # Resume tracking without enabling automatic card use.
 │   │   ├── list [--all] [--json-output]  # List tracked account/profile references without reading credentials.
@@ -79,6 +79,7 @@ chatglance
     ├── export-covers [--data DATA-PATH] [--output-dir OUTPUT-DIR] [--public-base-url PUBLIC-BASE-URL] [--updated-data UPDATED-DATA]  # Write SVG covers and an optional updated inventory JSON.
     ├── render-page [--data DATA-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME] [--page-slug PAGE-SLUG] [--widget-title WIDGET-TITLE]  # Write the `网站服务` page YAML from site-services JSON.
     └── update-config [--data DATA-PATH] [--config CONFIG-PATH] [--output OUTPUT-PATH] [--page-name PAGE-NAME] [--page-slug PAGE-SLUG] [--widget-title WIDGET-TITLE]  # Write a config copy with the generated website-services page replaced.
+
 ```
 
 ## 简洁树
@@ -158,6 +159,7 @@ chatglance
     ├── export-covers  # Write SVG covers and an optional updated inventory JSON.
     ├── render-page  # Write the `网站服务` page YAML from site-services JSON.
     └── update-config  # Write a config copy with the generated website-services page replaced.
+
 ```
 
 ## 边界
