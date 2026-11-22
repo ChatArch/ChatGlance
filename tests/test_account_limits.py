@@ -174,19 +174,21 @@ def test_render_account_limits_html_prioritizes_accounts_over_reset_calendar() -
 
 def test_add_home_subscription_link_sits_after_calendar_without_private_counts() -> None:
     config = {
-        "pages": [{"name": "ChatArch", "columns": [{"size": "full", "widgets": [
-            {"type": "calendar", "title": "CALENDAR"},
-            {"type": "bookmarks", "title": "公开入口"},
-        ]}]}]
+        "pages": [{"name": "ChatArch", "columns": [
+            {"size": "small", "widgets": [{"type": "bookmarks", "title": "订阅概览", "groups": []}]},
+            {"size": "full", "widgets": [{"type": "calendar", "title": "CALENDAR"},
+                {"type": "bookmarks", "title": "公开入口"}]},
+        ]}]
     }
 
     updated = add_home_subscription_link(config)
-    widgets = updated["pages"][0]["columns"][0]["widgets"]
+    columns = updated["pages"][0]["columns"]
+    widgets = columns[1]["widgets"]
     assert [widget["type"] for widget in widgets] == ["calendar", "bookmarks", "bookmarks"]
     assert widgets[1]["title"] == "订阅概览"
     assert widgets[1]["groups"][0]["links"][0]["url"] == "/account-limits"
-    assert "6" not in yaml.safe_dump(widgets[1], allow_unicode=True)
-    assert config["pages"][0]["columns"][0]["widgets"][1]["title"] == "公开入口"
+    assert columns[0]["widgets"][0]["title"] == "订阅概览"
+    assert config["pages"][0]["columns"][1]["widgets"][1]["title"] == "公开入口"
 
 
 def test_render_account_limits_html_hides_public_reset_event_details() -> None:

@@ -862,17 +862,40 @@ def add_home_subscription_link(config: dict[str, Any]) -> dict[str, Any]:
         columns = page.get("columns")
         if not isinstance(columns, list):
             return updated
-        for column in columns:
+        candidates = []
+        calendar_target = None
+        for column_index, column in enumerate(columns):
             if not isinstance(column, dict) or not isinstance(column.get("widgets"), list):
                 continue
-            widgets = [widget for widget in column["widgets"]
-                       if not (isinstance(widget, dict) and widget.get("title") == "订阅概览")]
-            calendar_index = next((index for index, widget in enumerate(widgets)
-                                   if isinstance(widget, dict) and widget.get("type") == "calendar"), None)
-            insert_at = (calendar_index + 1) if calendar_index is not None else len(widgets)
-            widgets.insert(insert_at, summary)
+            widgets = []
+            for widget in column["widgets"]:
+                owned = (
+                    isinstance(widget, dict)
+                    and widget.get("type") == "bookmarks"
+                    and widget.get("title") == "订阅概览"
+                    and any(
+                        isinstance(link, dict) and link.get("url") == "/account-limits"
+                        for group in widget.get("groups", []) if isinstance(group, dict)
+                        for link in group.get("links", []) if isinstance(group.get("links"), list)
+                    )
+                )
+                if not owned:
+                    widgets.append(widget)
             column["widgets"] = widgets
+            candidates.append(column_index)
+            if calendar_target is None:
+                calendar_index = next((index for index, widget in enumerate(widgets)
+                                       if isinstance(widget, dict) and widget.get("type") == "calendar"), None)
+                if calendar_index is not None:
+                    calendar_target = (column_index, calendar_index)
+        if not candidates:
             return updated
+        if calendar_target is None:
+            column_index, insert_at = candidates[0], len(columns[candidates[0]]["widgets"])
+        else:
+            column_index, calendar_index = calendar_target
+            insert_at = calendar_index + 1
+        columns[column_index]["widgets"].insert(insert_at, summary)
         return updated
     return updated
 
