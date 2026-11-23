@@ -599,7 +599,7 @@ def _render_policy_control(profile: dict[str, Any], path: str) -> str:
     identifier = "reset-policy-" + hashlib.sha256(name.encode()).hexdigest()[:12]
     url = path + "?" + urlencode({"profile": name})
     return (
-        f'<button type="button" class="reset-policy-trigger" popovertarget="{identifier}">自动用卡设置</button>'
+        f'<button type="button" class="reset-policy-trigger" popovertarget="{identifier}">重置详情与设置</button>'
         f'<div id="{identifier}" popover class="reset-policy-popover">'
         f'<div class="reset-policy-heading"><strong>自动用卡</strong><button type="button" aria-label="关闭小窗" popovertarget="{identifier}" popovertargetaction="hide">×</button></div>'
         f'<iframe loading="lazy" title="{html_text(name)} 的重置卡判据与设置" src="{html_text(url)}"></iframe></div>'
@@ -684,8 +684,8 @@ def render_account_limits_html(data: dict[str, Any], *, allow_controls: bool = T
     {_render_quota_windows(profile)}
     <details class="reset-card-panel"><summary>重置卡 <span>展开 / 收起</span></summary>
     {_render_reset_policy(profile)}
-    {_render_policy_control(profile, normalized['reset_control_path']) if allow_controls else ''}
     </details>
+    {_render_policy_control(profile, normalized['reset_control_path']) if allow_controls else ''}
     {error_html}
   </div>
 </article>"""
@@ -860,6 +860,15 @@ def add_home_subscription_link(config: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(page, dict) or page.get("name") != "ChatArch":
             continue
         columns = page.get("columns")
+        if page.get("public") is True and isinstance(page.get("authenticated-columns"), list):
+            # A previous release inserted our widget into the reviewed guest
+            # projection. Remove only that exact widget, not custom content.
+            if not isinstance(columns, list):
+                return updated
+            for column in columns:
+                if isinstance(column, dict) and isinstance(column.get("widgets"), list):
+                    column["widgets"] = [widget for widget in column["widgets"] if widget != summary]
+            columns = page["authenticated-columns"]
         if not isinstance(columns, list):
             return updated
         candidates = []

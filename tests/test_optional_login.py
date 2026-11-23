@@ -94,6 +94,33 @@ def reviewed_four_bookmarks(private_config, inventory):
     return config
 
 
+def test_subscription_entry_stays_authenticated_and_repairs_owned_guest_widget(reviewed_four_bookmarks, inventory):
+    from copy import deepcopy
+    from chatglance.account_limits import add_home_subscription_link
+
+    config = deepcopy(reviewed_four_bookmarks)
+    original_guest = deepcopy(config["pages"][0]["columns"])
+    updated = add_home_subscription_link(config)
+    home = updated["pages"][0]
+    assert home["columns"] == original_guest
+    assert "订阅概览" in json.dumps(home["authenticated-columns"], ensure_ascii=False)
+    assert optional_login_enabled(updated)
+
+    # Prior deployments put this exact widget on the reviewed guest home.
+    polluted = deepcopy(config)
+    polluted["pages"][0]["columns"][0]["widgets"].append(
+        deepcopy(updated["pages"][0]["authenticated-columns"][0]["widgets"][-1])
+    )
+    with pytest.raises(ValueError, match="guest home"):
+        optional_login_enabled(polluted)
+    repaired = add_home_subscription_link(polluted)
+    assert repaired["pages"][0]["columns"] == original_guest
+    assert optional_login_enabled(repaired)
+    _replace_page(repaired, build_projects_page(inventory), inventory=inventory)
+    assert optional_login_enabled(repaired)
+    assert polluted["pages"][0]["columns"] != original_guest
+
+
 def test_reviewed_four_bookmarks_survive_detection_project_refresh_and_maintenance(reviewed_four_bookmarks, inventory):
     from copy import deepcopy
     original = deepcopy(reviewed_four_bookmarks)

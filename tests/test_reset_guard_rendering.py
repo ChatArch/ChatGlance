@@ -148,6 +148,17 @@ def test_reset_information_is_collapsed_in_an_account_card():
     assert 'reset-credit-details' in output and 'popovertarget=' in output
 
 
+def test_reset_detail_button_is_visible_without_expanding_credit_summary():
+    output = render_account_limits_html(
+        {"codex": [profile()], "reset_control_path": "/_controls/"}
+    )
+    panel = output.split('<details class="reset-card-panel">', 1)[1].split('</details>', 1)[0]
+    assert 'reset-policy-trigger' not in panel
+    assert '<button type="button" class="reset-policy-trigger"' in output
+    assert '重置详情与设置' in output
+    assert 'src="/_controls/?profile=example"' in output
+
+
 def test_policy_popover_is_explicitly_centered_despite_page_css_resets():
     output = render_account_limits_html({'codex': [profile()]})
     rules = output.split('.reset-policy-popover {', 1)[1].split('}', 1)[0]
@@ -162,7 +173,7 @@ def test_policy_popover_has_same_origin_frame_and_native_close():
     assert "popovertarget=" in output and "popover" in output
     assert 'popovertargetaction="hide"' in output
     assert "<iframe" in output and "/_controls/?profile=example" in output
-    assert "自动用卡设置" in output
+    assert "重置详情与设置" in output
 
 
 @pytest.mark.parametrize(
