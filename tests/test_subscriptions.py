@@ -61,6 +61,21 @@ def install_clients(monkeypatch, failing=()):
     return calls, clients
 
 
+def test_subscription_tag_is_preserved_as_safe_metadata():
+    from chatglance.subscriptions import parse_subscriptions
+
+    parsed = parse_subscriptions(json.dumps({"lookeng": {**entry("reader", "id-lookeng"), "tag": "Plus"}}))
+
+    assert parsed["lookeng"]["tag"] == "Plus"
+
+
+def test_subscription_tag_rejects_control_text():
+    from chatglance.subscriptions import parse_subscriptions
+
+    with pytest.raises(ValueError):
+        parse_subscriptions(json.dumps({"lookeng": {**entry(), "tag": "Pro\nsecret"}}))
+
+
 def test_four_accounts_use_three_explicit_profiles(monkeypatch, tmp_path):
     values = {"alpha": entry("shared", "id-a"), "beta": entry("shared", "id-b"),
               "gamma": entry("reader-c", "id-c"), "delta": entry("reader-d", "id-d")}

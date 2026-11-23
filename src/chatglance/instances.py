@@ -216,11 +216,12 @@ def scope_account_data(data: dict, accounts: tuple[str, ...]) -> dict:
     result["accounts"] = [deepcopy(row) for row in data.get("accounts", []) if isinstance(row, dict)
                           and (row.get("profile") or row.get("account_name")) in selected]
     result["reset_control_path"] = ""
-    resources = []
-    for resource in data.get("resources", []):
-        if isinstance(resource, dict):
-            resources.append({**deepcopy(resource), "profiles": [label for label in resource.get("profiles", []) if label in selected]})
-    result["resources"] = resources
+    # Preserve legacy account-scoped Codex resources, while account-level
+    # cloud observations belong only to their owning runtime.
+    result["resources"] = [
+        {**deepcopy(row), "profiles": [label for label in row.get("profiles", []) if label in selected]}
+        for row in data.get("resources", []) if isinstance(row, dict) and row.get("kind") == "codex"
+    ]
     status = data.get("refresh_status")
     if isinstance(status, dict):
         result["refresh_status"] = {**deepcopy(status),

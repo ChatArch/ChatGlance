@@ -55,10 +55,9 @@ def test_failed_public_refresh_preserves_calendar_history(offline_collection, mo
     assert cached["confirmed_reset_count"] == len(EVENTS)
     assert json.loads(path.read_text())["codex_reset"] == cached
     rendered = render_account_limits_html(result)
-    assert "更新失败，显示缓存" in rendered
-    assert OLD_TIME in rendered
-    for month in ("09", "08", "07", "06"):
-        assert f"2026 年 {month} 月" in rendered
+    assert "Codex 官方重置日历" not in rendered
+    assert "更新失败，显示缓存" not in rendered
+    assert OLD_TIME not in rendered
 
 
 def test_repeated_failures_do_not_refresh_cache_age(offline_collection, monkeypatch):
@@ -107,7 +106,8 @@ def test_account_window_samples_never_replace_official_calendar():
     assert reset["events"] == []
     assert reset["used_fallback"] is False
     rendered = render_account_limits_html(data)
-    assert "官方重置记录暂不可用" in rendered
+    assert "Codex 官方重置日历" not in rendered
+    assert "官方重置记录暂不可用" not in rendered
     assert "账号窗口采样" not in rendered
     assert "is-reset\"" not in rendered
 

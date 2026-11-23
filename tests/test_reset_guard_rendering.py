@@ -145,7 +145,11 @@ def test_reset_information_is_collapsed_in_an_account_card():
     assert '<details class="reset-card-panel">' in output
     assert '<summary>重置卡' in output
     assert '<details class="reset-card-panel" open' not in output
-    assert 'reset-credit-details' in output and 'popovertarget=' in output
+    panel = output.split('<details class="reset-card-panel">', 1)[1].split('</details>', 1)[0]
+    assert 'reset-credit-details' in panel
+    assert '<button type="button" class="reset-policy-trigger"' in panel
+    assert '自动用卡设置' in panel
+    assert '重置详情与设置' not in output
 
 
 def test_policy_popover_is_explicitly_centered_despite_page_css_resets():

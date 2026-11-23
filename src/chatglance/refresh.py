@@ -115,7 +115,10 @@ def _configured_pages(config: dict[str, Any], root: Path, collection: Collection
     return selected
 
 
-def _replace_page(config: dict[str, Any], page: dict[str, Any], *, inventory: dict[str, Any] | None = None) -> None:
+def _replace_page(config: dict[str, Any], page: dict[str, Any], *, inventory: dict[str, Any] | None = None, account_data: dict[str, Any] | None = None) -> None:
+    if page.get("slug") == "account-limits" and account_data is not None:
+        from .account_limits import update_home_reset_calendar
+        config["pages"] = update_home_reset_calendar(config, account_data)["pages"]
     if page.get("name") == "项目":
         from .optional_login import optional_login_enabled
         if optional_login_enabled(config):
@@ -174,26 +177,43 @@ def _collect_page(key: str, root: Path, stage: Path, *, profiles: Sequence[str] 
         from .account_limits import build_account_limits_page
         from .subscriptions import parse_subscriptions, selected_profiles
         from .instances import instance_home
+        from .resource_subscriptions import load_resource_config, collect_resources, fetch_aliyun_shared_traffic
+        # This file belongs to one runtime. Named instances never inherit the
+        # main runtime's cloud source or any default ChatGlance profile flag.
+        resource_sources = [] if instance else load_resource_config(root / "config/resource-subscriptions.yml")
         bound_home = instance_home(root) if instance else None
         settings = collection_settings(home=bound_home, env_profile=instance.env_profile if instance else None)
         selected = selected_profiles(settings, explicit=instance.accounts if instance else profiles,
                                      fallback=[] if instance else [item["profile"] for item in previous.get("codex", []) if item.get("profile")])
-        if not selected and parse_subscriptions(settings.get("subscriptions")) is None:
+        if not selected and parse_subscriptions(settings.get("subscriptions")) is None and not any(s["enabled"] for s in resource_sources):
             raise RefreshError("no configured account profiles")
-        data = collect_account_limits(
-            profiles=selected, output_path=stage / "account-limits.json",
-            history_path=previous_path if previous_path.exists() else None,
-            timeout=collection.account_timeout, reset_timeout=collection.reset_timeout,
-            no_public_reset=collection.no_public_reset, reset_base_url=collection.reset_base_url,
-            execute_resets=scheduled and instance is None,
-            require_subscriptions=instance is not None,
-            **({"home": bound_home} if instance else {}),
-            **({"env_profile": instance.env_profile} if instance else {}),
-        )
+        if selected or not any(s["enabled"] for s in resource_sources):
+            data = collect_account_limits(
+                profiles=selected, output_path=stage / "account-limits.json",
+                history_path=previous_path if previous_path.exists() else None,
+                timeout=collection.account_timeout, reset_timeout=collection.reset_timeout,
+                no_public_reset=collection.no_public_reset, reset_base_url=collection.reset_base_url,
+                execute_resets=scheduled and instance is None,
+                require_subscriptions=instance is not None,
+                **({"home": bound_home} if instance else {}),
+                **({"env_profile": instance.env_profile} if instance else {}),
+            )
+        else:
+            data = {"generated_at": datetime.now(timezone.utc).isoformat(), "accounts": [], "codex": [],
+                    "codex_reset": {"status": "skipped", "events": []}}
         if instance:
             from .instances import scope_account_data
             data = scope_account_data(data, instance.accounts)
+        else:
+            legacy = [row for row in data.get("resources", previous.get("resources", []))
+                      if isinstance(row, dict) and row.get("kind") == "codex"]
+            cloud = collect_resources(resource_sources, previous.get("resources", []),
+                                      fetch_aliyun_shared_traffic,
+                                      now=datetime.now(timezone.utc).isoformat())
+            data["resources"] = legacy + cloud
         partial = bool(data.get("refresh_status", {}).get("failed_count")) or data.get("codex_reset", {}).get("status") not in {"ok", "skipped"}
+        partial = partial or any(row.get("status") not in {"ok", "empty"}
+                                 for row in data.get("resources", []) if row.get("type") == "aliyun-shared-traffic")
         return PageUpdate(key, data, render_page(key, data, allow_controls=instance is None), partial=partial)
     if key == "sites":
         from .sites import load_sites_inventory, apply_gatus_status, build_sites_page
@@ -455,6 +475,8 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
                             counts = {"servers": update.data.get("count", 0), "online": update.data.get("online", 0)}
                         elif key == "account-limits":
                             status = update.data.get("refresh_status", {})
+                            if not update.data.get("codex"):
+                                result["reset_execution"] = False
                             counts = {"profiles": len(update.data.get("codex", [])), "ok": status.get("ok_count", 0), "failed": status.get("failed_count", 0)}
                             details = {"failed_profiles": status.get("failed_profiles", []), "calendar_status": update.data.get("codex_reset", {}).get("status"), "calendar_cached": bool(update.data.get("codex_reset", {}).get("using_last_known_values"))}
                         rows.append({"page": key, "status": "partial" if update.partial else "ok", "generated_at": update.data.get("generated_at"), "counts": counts, **details})
@@ -478,7 +500,9 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
                     verify_config_pages(root, instance)
                 payloads = {}
                 for update in updates:
-                    _replace_page(config, update.page, inventory=update.data if update.key == "projects" else None)
+                    _replace_page(config, update.page,
+                                  inventory=update.data if update.key == "projects" else None,
+                                  account_data=update.data if update.key == "account-limits" else None)
                     _, data_name, page_name = PAGE_SPECS[update.key]
                     payloads[root / "data" / data_name] = json.dumps(update.data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
                     payloads[root / "data" / page_name] = yaml.safe_dump(update.page, allow_unicode=True, sort_keys=False)

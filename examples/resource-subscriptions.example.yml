@@ -1,0 +1,8 @@
+# Source selection for the main ChatGlance runtime.
+# A named Aliyun profile belongs to the installed ChatEnv provider (ChatTool),
+# not this file. Never put access keys in a runtime inventory.
+sources:
+  - id: shared-traffic
+    type: aliyun-shared-traffic
+    enabled: true
+    profile: example

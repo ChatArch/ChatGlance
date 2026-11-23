@@ -10,7 +10,8 @@
     {"path": "scripts/refresh-sites-page.sh", "role": "legacy development wrapper"},
     {"path": "scripts/refresh-account-limits-page.sh", "role": "legacy development wrapper"},
     {"path": "examples/server-inventory.example.yml", "role": "generic source-only SSH inventory example"},
-    {"path": "examples/site-services.example.yml", "role": "generic source-only site example"}
+    {"path": "examples/site-services.example.yml", "role": "generic source-only site example"},
+    {"path": "examples/resource-subscriptions.example.yml", "role": "generic source-only shared traffic example"}
   ],
   "assets": [
     {"path": "glance.yml", "role": "loopback config", "runtime": "config/glance.yml"},

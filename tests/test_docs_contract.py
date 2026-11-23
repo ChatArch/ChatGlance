@@ -38,7 +38,7 @@ def test_readmes_and_development_guide_record_shared_cli_contract():
         assert "chatglance --tree-brief" in content
     develop = _read("DEVELOP.md")
     assert "chatstyle>=0.2.0,<0.3.0" in develop
-    assert "chatenv>=0.2.10,<0.3.0" in develop
+    assert "chatenv>=0.2.15,<0.3.0" in develop
     assert "add_tree_option()" in develop
     assert "python -m twine check dist/*" in develop
     assert "include docs/cli-tree.md" in _read("MANIFEST.in")

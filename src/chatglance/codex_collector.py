@@ -602,6 +602,12 @@ def collect_account_limits(*, profiles=None, output_path: str | Path, history_pa
     payloads = [profile_payload(profile, timeout, policy=policies.get(profile, ResetPolicy()),
                 execute=execute_resets, reset_base_url=reset_base_url or None, home=home,
                 forecast=public_reset.get('forecast'), **client_options) for profile in profiles]
+    registry = parse_subscriptions(settings.get("subscriptions"))
+    if registry is not None:
+        for payload in payloads:
+            tag = registry.get(payload.get("profile"), {}).get("tag")
+            if tag:
+                payload["subscription_tag"] = tag
     apply_last_known_values(payloads, previous_profiles)
     merged_history = merge_history([event for item in payloads for event in item.get('reset_history', [])], load_history(history))
     for payload in payloads:

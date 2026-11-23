@@ -46,6 +46,15 @@ def _profile(value):
     return value
 
 
+def _tag(value):
+    if value is None:
+        return None
+    if (not isinstance(value, str) or not value.strip() or len(value) > 32
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)):
+        raise ValueError("Invalid subscription tag")
+    return value.strip()
+
+
 def parse_subscriptions(text: str | None) -> dict[str, dict[str, Any]] | None:
     """Validate the complete registry before any credential or network operation.
 
@@ -60,10 +69,11 @@ def parse_subscriptions(text: str | None) -> dict[str, dict[str, Any]] | None:
         result, identities = {}, set()
         for name, row in raw.items():
             _identifier(name)
-            if (not isinstance(row, dict) or set(row) - {"crs_profile", "account_id", "enabled", "removed"}
+            if (not isinstance(row, dict) or set(row) - {"crs_profile", "account_id", "enabled", "removed", "tag"}
                     or not {"crs_profile", "account_id"} <= row.keys()):
                 raise ValueError
             profile, account = _profile(row["crs_profile"]), _identifier(row["account_id"])
+            tag = _tag(row.get("tag"))
             enabled, removed = row.get("enabled", True), row.get("removed", False)
             if type(enabled) is not bool or type(removed) is not bool or (removed and enabled):
                 raise ValueError
@@ -72,6 +82,8 @@ def parse_subscriptions(text: str | None) -> dict[str, dict[str, Any]] | None:
                 raise ValueError
             identities.add(identity)
             result[name] = {"crs_profile": profile, "account_id": account, "enabled": enabled}
+            if tag is not None:
+                result[name]["tag"] = tag
             if removed:
                 result[name]["removed"] = True
         return result
@@ -145,7 +157,7 @@ def list_subscriptions(*, home=None, env_profile=None, include_removed=False) ->
             "subscriptions": rows, "count": len(rows)}
 
 
-def _plan(values, action, name, crs_profile, account_id, enabled):
+def _plan(values, action, name, crs_profile, account_id, enabled, tag=None):
     _identifier(name)
     if action not in {"add", "enable", "disable", "remove"}:
         raise ValueError("Unknown subscription operation")
@@ -154,6 +166,10 @@ def _plan(values, action, name, crs_profile, account_id, enabled):
     old = registry.get(name)
     if action == "add":
         row = {"crs_profile": _profile(crs_profile), "account_id": _identifier(account_id), "enabled": enabled}
+        if tag is not None:
+            row["tag"] = _tag(tag)
+        elif old and old.get("tag"):
+            row["tag"] = old["tag"]
         if type(enabled) is not bool:
             raise ValueError("Tracking enabled must be a boolean")
         if old and (old["crs_profile"], old["account_id"]) != (row["crs_profile"], row["account_id"]):
@@ -180,13 +196,13 @@ def _plan(values, action, name, crs_profile, account_id, enabled):
 
 
 def change_subscription(action: str, name: str, *, crs_profile=None, account_id=None,
-                        enabled=True, execute=False, home=None, env_profile=None) -> dict:
+                        enabled=True, tag=None, execute=False, home=None, env_profile=None) -> dict:
     """Plan or persist one tracking change; never issue/revoke/consume credentials."""
     if type(execute) is not bool:
         raise ValueError("execute must be a boolean")
     store = EnvStore(get_paths(home).envs_dir)
     values = _load(store, env_profile)
-    updated, receipt = _plan(values, action, name, crs_profile, account_id, enabled)
+    updated, receipt = _plan(values, action, name, crs_profile, account_id, enabled, tag=tag)
     if not execute:
         return receipt
     if env_profile is None and any(key in os.environ for key in (
@@ -196,7 +212,7 @@ def change_subscription(action: str, name: str, *, crs_profile=None, account_id=
     # Reload under the configuration owner, independently of runtime placement.
     with subscription_lock(home):
         values = _load(store, env_profile)
-        updated, receipt = _plan(values, action, name, crs_profile, account_id, enabled)
+        updated, receipt = _plan(values, action, name, crs_profile, account_id, enabled, tag=tag)
         if env_profile is None:
             store.save_active(ChatGlanceConfig, updated)
         else:
