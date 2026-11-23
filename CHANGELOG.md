@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.5.3 - 2026-11-23
+
+- Restore the original authenticated home Glance Calendar in place, including its previous/next month arrows, six-week grid and current-day styling. Overlay confirmed reset dates and visually distinct account-window forecasts on native date cells instead of replacing the calendar with static month tabs. Keep marker data authenticated-only and a narrowly reviewed data-free script shared with guests; no reset-card controls or subscription-page layout change.
+
 ## 0.5.2 - 2026-11-23
 
 - Add the optional, runtime-scoped Aliyun shared-traffic resource card, native collector, ChatEnv-backed profile ownership, reusable inventory example and infra instructions; reject incomplete provider data and keep stale/unknown results honest.

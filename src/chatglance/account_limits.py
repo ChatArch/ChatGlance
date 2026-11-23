@@ -17,6 +17,8 @@ from urllib.parse import urlencode
 
 import yaml
 
+from .native_calendar import CALENDAR_HEAD, CALENDAR_STYLES
+
 ACCOUNT_LIMITS_PAGE_NAME = "订阅详情"
 LEGACY_ACCOUNT_LIMITS_PAGE_NAMES = {"Account Limits", "账号额度", "账号用量", "额度", "Codex 额度"}
 DEFAULT_PAGE_SLUG = "account-limits"
@@ -852,9 +854,13 @@ def build_account_limits_page(
 
 def _home_reset_calendar_html(data: dict[str, Any]) -> str:
     reset = _normalize_codex_reset(_strip_secrets(data))
-    events = reset["events"]
-    projected = []
-    seen = set()
+    days: dict[str, dict[str, list[str]]] = defaultdict(lambda: {"official": [], "forecast": []})
+    for event in reset["events"]:
+        dt = _parse_datetime(event.get("reset_at"))
+        if dt is not None:
+            days[dt.date().isoformat()]["official"].append(text_value(event.get("label"), "Reset")[:100])
+    seen: set[tuple[str, str]] = set()
+    now = datetime.now(BEIJING_TIMEZONE)
     for account in data.get("codex", []):
         if not isinstance(account, dict):
             continue
@@ -865,40 +871,30 @@ def _home_reset_calendar_html(data: dict[str, Any]) -> str:
             if not isinstance(window, dict) or window.get("window_seconds") != 604800:
                 continue
             dt = _parse_datetime(window.get("reset_at"))
-            if dt is None or dt <= datetime.now(BEIJING_TIMEZONE):
+            if dt is None or dt <= now:
                 continue
             key = (name, dt.isoformat())
             if key in seen:
                 continue
             seen.add(key)
-            projected.append({"kind": "forecast", "label": f"{name} · 7天窗口预计重置",
-                              "reset_at": dt.isoformat()})
-    events = events + projected
+            days[dt.date().isoformat()]["forecast"].append(name[:80] + " · 7天窗口")
+    projected = any(row["forecast"] for row in days.values())
     status = ("账号窗口预计重置（非官方确认）" if projected and not reset["events"]
               else "已确认记录与账号预计重置" if projected else
-              "已确认重置记录" if reset["status"] == "ok" and events else "官方重置记录暂不可用")
+              "已确认重置记录" if reset["status"] == "ok" and reset["events"] else "官方重置记录暂不可用")
     if reset["using_last_known_values"] and reset["events"]:
         status = "官方记录为缓存 · " + _fmt_reset(reset["last_successful_at"]) + ("；账号窗口为预计" if projected else "")
-    source = (" · 官方来源：codexreset.org" if reset["events"] else " · 官方记录不可用")
-    return f'''<div class="home-reset-calendar">
-<style>
-.home-reset-calendar .codex-calendar-card {{ padding:0.4rem 0; }}
-.home-reset-calendar .codex-calendar-radio {{ position:absolute; width:1px; height:1px; opacity:0; }}
-.home-reset-calendar .codex-calendar-month-switcher {{ display:flex; gap:0.3rem; overflow-x:auto; margin:0.4rem 0; }}
-.home-reset-calendar .codex-calendar-month-switcher label {{ flex:none; border:1px solid var(--color-separator); border-radius:99px; padding:0.2rem 0.4rem; cursor:pointer; }}
-.home-reset-calendar .codex-calendar-month {{ display:none; }}
-.home-reset-calendar .codex-calendar-month:first-child {{ display:block; }}
-.home-reset-calendar .codex-calendar-heading {{ display:flex; justify-content:space-between; gap:0.3rem; margin:0.4rem 0; }}
-.home-reset-calendar .codex-calendar-heading h3 {{ margin:0; font-size:1rem; }}
-.home-reset-calendar .codex-reset-weekdays,.home-reset-calendar .codex-reset-grid {{ display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:0.15rem; }}
-.home-reset-calendar .codex-reset-weekdays span,.home-reset-calendar .codex-reset-day {{ text-align:center; color:var(--color-text-subdue); }}
-.home-reset-calendar .codex-reset-day {{ min-height:1.8rem; display:grid; place-items:center; border-radius:6px; }}
-.home-reset-calendar .codex-reset-day.is-empty {{ visibility:hidden; }}
-.home-reset-calendar .codex-reset-day.is-reset {{ color:var(--color-text-base); border:1px solid var(--color-primary); background:color-mix(in srgb,var(--color-primary) 14%,transparent); }}
-.home-reset-calendar .codex-reset-day.is-forecast {{ border-style:dashed; background:transparent; }}
-.home-reset-calendar .codex-reset-day.is-today .day-number {{ border:2px solid #ef4444; border-radius:50%; width:1.6rem; height:1.6rem; display:grid; place-items:center; }}
-</style><p class="limit-muted">{html_text(status)}{source}</p>
-{_render_reset_calendar(events, show_empty=True)}</div>'''
+    payload = html.escape(json.dumps(days, ensure_ascii=True, separators=(",", ":")), quote=True)
+    legend = []
+    if reset["events"]:
+        legend.append("实线：官方记录" + ("（缓存）" if reset["using_last_known_values"] else ""))
+    if projected:
+        legend.append("虚线：预计自然重置（非官方确认）")
+    if not reset["events"] and not projected:
+        legend.append("官方重置记录暂不可用")
+    return (f'<div class="codex-reset-markers" hidden data-days="{payload}" '
+            f'data-status="{html_text(status)}"></div>{CALENDAR_STYLES}'
+            f'<p class="codex-reset-legend">{html_text(" · ".join(legend))}</p>')
 
 
 def update_home_reset_calendar(config: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
@@ -929,12 +925,33 @@ def update_home_reset_calendar(config: dict[str, Any], data: dict[str, Any]) -> 
                 owned_calendar = (isinstance(widget, dict) and widget.get("type") == "html"
                                   and widget.get("title") == "Codex 重置日历"
                                   and str(widget.get("source", "")).startswith('<div class="home-reset-calendar">'))
-                if isinstance(widget, dict) and (widget.get("type") == "calendar" or owned_calendar):
-                    if data.get("codex_reset", {}).get("status") == "skipped" and owned_calendar:
-                        return updated
-                    widgets[index] = {"type": "html", "title": "Codex 重置日历",
-                                      "source": _home_reset_calendar_html(data)}
+                native_calendar = isinstance(widget, dict) and widget.get("type") == "calendar"
+                if not (native_calendar or owned_calendar):
+                    continue
+                head = updated.get("document", {}).get("head") if isinstance(updated.get("document"), dict) else None
+                if head not in (None, "", CALENDAR_HEAD):
+                    raise ValueError("cannot replace unreviewed shared document head")
+                updated["document"] = {"head": CALENDAR_HEAD}
+                if owned_calendar:
+                    widgets[index] = {"type": "calendar", "first-day-of-week": "monday"}
+                css_classes = str(widgets[index].get("css-class", "")).split()
+                if "codex-reset-native-calendar" not in css_classes:
+                    css_classes.append("codex-reset-native-calendar")
+                widgets[index]["css-class"] = " ".join(css_classes)
+                marker_index = index + 1
+                existing = (widgets[marker_index] if marker_index < len(widgets) and
+                            isinstance(widgets[marker_index], dict) and
+                            widgets[marker_index].get("type") == "html" and
+                            str(widgets[marker_index].get("source", "")).startswith('<div class="codex-reset-markers"')
+                            else None)
+                if data.get("codex_reset", {}).get("status") == "skipped" and existing:
                     return updated
+                marker = {"type": "html", "source": _home_reset_calendar_html(data)}
+                if existing:
+                    widgets[marker_index] = marker
+                else:
+                    widgets.insert(marker_index, marker)
+                return updated
         return updated
     return updated
 

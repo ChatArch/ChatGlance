@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 from .access import CandidateWriteError, _absolute_path, _safe_output_directory, _regular_target_or_missing, _stage_bytes, _fsync_directory, build_public_home_page
 from .projects import PAGE_NAME, PAGE_SLUG, build_projects_page
+from .native_calendar import CALENDAR_HEAD
 
 
 def _pages(config: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -95,7 +96,7 @@ def optional_login_enabled(config: Mapping[str, Any]) -> bool:
         raise ValueError("incomplete optional-login page layout")
     if all(modes):
         _safe_shared_config(config)
-        if config.get("document") or config.get("branding") or config.get("theme"):
+        if config.get("branding") or config.get("theme") or (config.get("document") and config["document"] != {"head": CALENDAR_HEAD}):
             raise ValueError("optional-login shared global content is not reviewed")
         if any(page.get("head-widgets") for page in (home, projects)):
             raise ValueError("public page head-widgets cannot be retained safely")
@@ -113,7 +114,7 @@ def _safe_shared_config(config: Mapping[str, Any]) -> None:
     if not isinstance(config.get("auth"), dict) or not isinstance(config["auth"].get("users"), dict) or not config["auth"]["users"]:
         raise ValueError("single-origin optional login requires configured auth users")
     document = config.get("document") or {}
-    if not isinstance(document, dict) or document.get("head"):
+    if not isinstance(document, dict) or (document.get("head") and document != {"head": CALENDAR_HEAD}):
         raise ValueError("private document head cannot be shared with guests")
     server = config.get("server") or {}
     if not isinstance(server, dict) or server.get("assets-path"):
@@ -145,6 +146,8 @@ def build_single_origin_optional_login_config(config: Mapping[str, Any], invento
         raise ValueError("public page head-widgets cannot be retained safely")
     existing_mode = optional_login_enabled(config)
     updated = {key: deepcopy(config[key]) for key in ("auth", "server") if key in config}
+    if config.get("document", {}).get("head") == CALENDAR_HEAD:
+        updated["document"] = {"head": CALENDAR_HEAD}
     updated["pages"] = deepcopy(config["pages"])
     for page in updated["pages"]:
         if page["name"] == "ChatArch":
