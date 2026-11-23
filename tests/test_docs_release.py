@@ -77,7 +77,7 @@ def test_segmented_cli_pages_use_real_command_nodes():
 
 def test_docs_workflows_build_and_preserve_preview():
     ci = (ROOT / ".github/workflows/ci.yml").read_text()
-    assert ".[dev,docs]" in ci and "mkdocs build --strict" in ci
+    assert ".[dev,docs,aliyun]" in ci and "mkdocs build --strict" in ci
     assert ci.index("python -m build") < ci.index("--force-reinstall --no-deps dist/*.whl") < ci.index("chatglance --version")
     preview = (ROOT / ".github/workflows/preview-docs.yml").read_text()
     deploy = (ROOT / ".github/workflows/deploy-docs.yml").read_text()
