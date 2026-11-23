@@ -392,6 +392,21 @@ def test_invalid_page_is_rejected_before_runtime_creation(tmp_path):
     assert not (tmp_path / "absent").exists()
 
 
+def test_account_refresh_publishes_native_calendar_document_head() -> None:
+    from chatglance.native_calendar import CALENDAR_HEAD
+    m = importlib.import_module("chatglance.refresh")
+    config = {"pages": [
+        {"name": "ChatArch", "columns": [{"size": "small", "widgets": [{"type": "calendar"}]}]},
+        {"name": "订阅详情", "slug": "account-limits", "columns": []},
+    ]}
+    page = {"name": "订阅详情", "slug": "account-limits", "columns": []}
+    data = {"codex_reset": {"status": "error", "events": []}}
+    m._replace_page(config, page, account_data=data)
+    assert config["document"] == {"head": CALENDAR_HEAD}
+    assert config["pages"][0]["columns"][0]["widgets"][0]["type"] == "calendar"
+    assert "codex-reset-markers" in config["pages"][0]["columns"][0]["widgets"][1]["source"]
+
+
 def test_account_refresh_is_monitor_only_even_if_reset_is_enabled(runtime, monkeypatch):
     m = importlib.import_module("chatglance.refresh")
     from chatglance import codex_collector
