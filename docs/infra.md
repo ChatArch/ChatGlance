@@ -55,6 +55,34 @@ identity says that no historical data is available. Use
 legacy gate that keeps the whole prior server artifact. A removed inventory
 member is a membership change and is not re-added from cache.
 
+## Account-level shared traffic (optional)
+
+Install `ChatGlance[aliyun]` into the same Python environment that runs the
+main Glance service. The extra provides the Aliyun OpenAPI client and ChatTool's
+registered `Aliyun` ChatEnv schema. Keep the AccessKey only in that host's
+`~/.chatarch/envs/Aliyun/<profile>.env`, created/maintained through ChatEnv;
+never put it in a command, inventory, log, Git checkout or another host. Place a
+reviewed copy of `examples/resource-subscriptions.example.yml` at the main
+runtime's `config/resource-subscriptions.yml`, replacing only its nonsecret
+profile label. Independent instances do not inherit this source.
+
+```bash
+chatglance refresh account-limits --runtime-home "$HOME/.chatarch/glance" --no-public-reset --no-restart --json-output
+```
+
+This native installed CLI is the reusable collector, renderer, validator and
+publisher; a task-local probe is not a deployment script. Manual mode reads
+only and does not execute account reset policies. The existing web service
+reloads the changed Glance YAML; check the refresh journal's `published`
+field and `data/account-limits.json` resource status/`last_successful_at`, not
+just CLI exit zero. A partial exit can reflect a separate account failure even
+when the cloud card is fresh; when `permission_denied` or `invalid_data` is
+reported, do not manufacture zero traffic. The resource card displays one
+progress bar per pack with remaining balance and notes exhausted packs
+separately. For the official resource-package API, a nonzero unit mismatch is
+rejected; `0 Byte` for an exhausted GB pack is an exact zero and safe to show
+as exhausted. The BSS read permission is `bss:DescribeInstances` on `*`.
+
 ## Scheduled execution
 
 Point the existing user timer at the installed command, not `scripts/refresh-server-status.sh` or a source checkout:

@@ -46,7 +46,7 @@ typed `CHATGLANCE_ACCOUNT_LIMITS_SUBSCRIPTIONS` 是显式选择层，不自动�
 
 ## 账号级资源订阅卡
 
-主站 runtime 可选 `config/resource-subscriptions.yml`，缺席时沿用原订阅详情行为。此配置只选择只读数据源，不包含密钥；安装 `ChatGlance[aliyun]`，并确保运行环境已注册 ChatEnv 的 `Aliyun` typed schema 及对应命名 profile。示例配置：
+主站 runtime 可选 `config/resource-subscriptions.yml`，缺席时沿用原订阅详情行为。此配置只选择只读数据源，不包含密钥；安装 `ChatGlance[aliyun]` 会同时安装阿里云 SDK 和注册 `Aliyun` typed schema 的 ChatTool。Key 只保存在原机 ChatEnv 的命名 `Aliyun` profile，通过 `EnvStore` 读取，不从命令行、脚本或 YAML 中传递明文。示例配置见 [`examples/resource-subscriptions.example.yml`](examples/resource-subscriptions.example.yml)：
 
 ```yaml
 sources:
@@ -58,9 +58,9 @@ sources:
 
 原生 `chatglance refresh account-limits --no-restart` 会在既有页面和发布锁内查询账号级阿里云公网共享流量包；资源单独配置时无需 CRS 凭据，也不会抓取 Codex 重置日历。命名实例不会继承主站资源卡。资源卡只读，不提供重置或兑换操作。查询使用 HTTPS `business.aliyuncs.com` 的 BssOpenApi 2017-12-14 `QueryResourcePackageInstances`，分页至多 300 条；只识别 `flowpack-` 资源包 ID，不把 CDN/存储包混合计量。空有效包列表不等同未购买。所需 RAM 读取动作是 `bss:DescribeInstances`（`Resource: *`），不是 ECS 权限；[官方 API 文档](https://help.aliyun.com/zh/user-center/developer-reference/api-bssopenapi-2017-12-14-queryresourcepackageinstances)。缺权时当前用量显示未知，若有上次成功快照会同时标明原观测时间和过期缓存。
 
-分页核对完整有效资源包列表后再筛选共享流量包；API 的 `TotalCount`、`PageNum`、`PageSize` 可为数字字符串。失败后的旧用量仅在来源类型及命名 profile 仍相同时保留，且旧记录会重新校验；切换来源或 profile 不会继承另一个账号的用量。
+分页核对完整有效资源包列表后再筛选共享流量包；API 的 `TotalCount`、`PageNum`、`PageSize` 可为数字字符串。只对 `0 Byte` 余量允许与 GB 总量的单位差异（零在任何单位下都是零），非零混合单位仍拒绝，不盲目换算或合计。一个卡片展示各有余额包的独立进度条；API 仍列出的耗尽包只计数提示，不冒充第三个可用进度。失败后的旧用量仅在来源类型及命名 profile 仍相同时保留，且旧记录会重新校验；切换来源或 profile 不会继承另一个账号的用量。
 
-订阅详情页将账号额度卡作为主内容，不再渲染大块的 Codex 官方重置日历；主页日历附近只保留一个紧凑的“订阅概览 → 订阅详情”入口。重置日历数据仍可在快照中保留，便于后续重新启用，不参与当前页面布局。
+订阅详情页以账号额度卡为主内容，保留原重置卡折叠区、自动用卡设置弹窗及弹窗内的只读状态刷新，不再渲染占据半屏的官方重置日历。登录后的**主页原生日历所在位置**改为 Codex 重置日历：有官方已确认事件则标记确认；没有时仅标注账号 7 天额度窗口的**预计自然重置（非官方确认）**，并明确官方记录不可用，不把预测当事实。顶部原有订阅栏目已是入口，不额外插入“订阅概览”书签。
 
 ## 可选页面的只读实例（0.5.1）
 

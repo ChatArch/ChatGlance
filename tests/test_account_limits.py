@@ -10,7 +10,7 @@ from chatglance.account_limits import (
     ACCOUNT_LIMITS_PAGE_NAME,
     BEIJING_TIMEZONE,
     _render_reset_calendar,
-    add_home_subscription_link,
+    update_home_reset_calendar,
     build_account_limits_page,
     normalize_account_limits_data,
     render_account_limits_html,
@@ -172,23 +172,48 @@ def test_render_account_limits_html_prioritizes_accounts_over_reset_calendar() -
     assert "暂无 reset 记录" not in html
 
 
-def test_add_home_subscription_link_sits_after_calendar_without_private_counts() -> None:
-    config = {
-        "pages": [{"name": "ChatArch", "columns": [
-            {"size": "small", "widgets": [{"type": "bookmarks", "title": "订阅概览", "groups": []}]},
-            {"size": "full", "widgets": [{"type": "calendar", "title": "CALENDAR"},
-                {"type": "bookmarks", "title": "公开入口"}]},
-        ]}]
-    }
-
-    updated = add_home_subscription_link(config)
+def test_home_calendar_replaces_original_slot_and_removes_owned_bookmark() -> None:
+    owned = {"type": "bookmarks", "title": "订阅概览", "groups": [{"links": [{"url": "/account-limits"}]}]}
+    config = {"pages": [{"name": "ChatArch", "columns": [
+        {"size": "small", "widgets": [{"type": "bookmarks", "title": "订阅概览", "groups": []}]},
+        {"size": "full", "widgets": [{"type": "calendar", "first-day-of-week": "monday"}, owned,
+            {"type": "bookmarks", "title": "公开入口"}]},
+    ]}]}
+    data = {"codex_reset": {"status": "ok", "events": [{
+        "event_id": "confirmed-1", "time_bjt": "2026-11-22 10:30:00 +0800",
+        "date_bjt": "2026-11-22", "scope": "Confirmed Codex reset",
+    }]}}
+    updated = update_home_reset_calendar(config, data)
     columns = updated["pages"][0]["columns"]
     widgets = columns[1]["widgets"]
-    assert [widget["type"] for widget in widgets] == ["calendar", "bookmarks", "bookmarks"]
-    assert widgets[1]["title"] == "订阅概览"
-    assert widgets[1]["groups"][0]["links"][0]["url"] == "/account-limits"
+    assert [w["type"] for w in widgets] == ["html", "bookmarks"]
+    assert widgets[0]["title"] == "Codex 重置日历"
+    assert "2026 年 11 月" in widgets[0]["source"] and "Confirmed Codex reset" in widgets[0]["source"]
     assert columns[0]["widgets"][0]["title"] == "订阅概览"
-    assert config["pages"][0]["columns"][1]["widgets"][1]["title"] == "公开入口"
+    assert update_home_reset_calendar(updated, data) == updated
+    assert config["pages"][0]["columns"][1]["widgets"][0]["type"] == "calendar"
+
+
+def test_home_calendar_shows_current_month_without_inventing_events() -> None:
+    config = {"pages": [{"name": "ChatArch", "columns": [{"size": "small", "widgets": [{"type": "calendar"}]}]}]}
+    updated = update_home_reset_calendar(config, {"codex_reset": {"status": "error", "events": []}})
+    source = updated["pages"][0]["columns"][0]["widgets"][0]["source"]
+    assert "官方重置记录暂不可用" in source
+    assert "codex-reset-grid" in source and "预计" not in source
+
+
+def test_home_calendar_shows_account_window_predictions_not_official_confirmation() -> None:
+    config = {"pages": [{"name": "ChatArch", "columns": [{"size": "small", "widgets": [{"type": "calendar"}]}]}]}
+    data = {"codex_reset": {"status": "error", "events": []}, "codex": [{
+        "profile": "account-a", "windows": [{"name": "primary_window", "window_seconds": 604800,
+            "reset_at": "2026-11-29T03:00:00+08:00", "used_percent": 70}],
+    }]}
+    updated = update_home_reset_calendar(config, data)
+    source = updated["pages"][0]["columns"][0]["widgets"][0]["source"]
+    assert "账号窗口预计重置（非官方确认）" in source
+    assert "account-a" in source and "29" in source
+    assert 'is-forecast' in source
+    assert '已确认重置记录' not in source
 
 
 def test_render_account_limits_html_hides_public_reset_event_details() -> None:

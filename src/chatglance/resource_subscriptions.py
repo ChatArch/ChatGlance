@@ -110,9 +110,13 @@ def normalize_package(raw: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(raw, dict) or not isinstance(raw.get("InstanceId"), str) or not _PACK_ID.fullmatch(raw["InstanceId"]):
         raise ValueError("invalid shared traffic package ID")
     unit = raw.get("TotalAmountUnit")
-    if not isinstance(unit, str) or unit not in _UNITS or raw.get("RemainingAmountUnit") != unit:
-        raise ValueError("resource units are unknown or mixed")
     total, remaining = _amount(raw.get("TotalAmount")), _amount(raw.get("RemainingAmount"))
+    remaining_unit = raw.get("RemainingAmountUnit")
+    # BSS reports an exhausted GB pack as 0 Byte. Zero is unit-independent;
+    # nonzero mixed units remain untrusted and are never subtracted.
+    if (not isinstance(unit, str) or unit not in _UNITS
+            or (remaining_unit != unit and not (remaining == 0 and remaining_unit == "Byte"))):
+        raise ValueError("resource units are unknown or mixed")
     if remaining > total:
         raise ValueError("remaining exceeds total")
     used = total - remaining

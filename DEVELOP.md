@@ -10,7 +10,8 @@
 
 ## Environment and security contract
 
-- Use `chatenv>=0.2.10,<0.3.0`, the registered `chatglance.config` provider, and ChatEnv's typed storage path for the active `CHATGLANCE_GITHUB_TOKEN` profile.
+- Use `chatenv>=0.2.15,<0.3.0`, the registered `chatglance.config` provider, and ChatEnv's typed storage path for the active `CHATGLANCE_GITHUB_TOKEN` profile.
+- For optional Aliyun resource cards, depend on `ChatGlance[aliyun]`; the ChatTool provider registers the named `Aliyun` ChatEnv schema and keeps its Key on the owning host. The runtime inventory contains only a profile name, never credentials.
 - Preserve token lookup precedence: explicit process environment, repo-local GitHub credential, active ChatGlance profile, then ChatGH's shared profile.
 - Never print token values, git authorization headers, proxy credentials, account secrets, or unredacted quota data.
 - Commands that mutate runtime config or user-level systemd state must keep that side effect explicit in help and tree summaries.

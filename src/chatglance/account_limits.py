@@ -403,13 +403,14 @@ def _render_reset_calendar(
     reset_events: list[dict[str, Any]],
     reference_month: tuple[int, int] | None = None,
     current_date: date | None = None,
+    show_empty: bool = False,
 ) -> str:
     parsed_events: list[tuple[datetime, dict[str, Any]]] = []
     for event in reset_events:
         dt = _parse_datetime(event.get("reset_at"))
         if dt is not None:
             parsed_events.append((dt, event))
-    if not parsed_events:
+    if not parsed_events and not show_empty:
         return '<div class="codex-calendar-card"><p class="limit-muted">暂无 reset 记录。</p></div>'
 
     events_by_month_day: dict[tuple[int, int], dict[int, list[tuple[datetime, dict[str, Any]]]]] = defaultdict(lambda: defaultdict(list))
@@ -425,9 +426,7 @@ def _render_reset_calendar(
         current_date = datetime.now(BEIJING_TIMEZONE).date()
     if reference_month is None:
         reference_month = (current_date.year, current_date.month)
-    month_keys = sorted(events_by_month_day.keys(), reverse=True)
-    if reference_month not in month_keys:
-        month_keys.insert(0, reference_month)
+    month_keys = [reference_month] + [month for month in sorted(events_by_month_day.keys(), reverse=True) if month != reference_month]
     month_keys = month_keys[:4]
     radios: list[str] = []
     options: list[str] = []
@@ -460,6 +459,8 @@ def _render_reset_calendar(
             classes = ["codex-reset-day"]
             if events:
                 classes.append("is-reset")
+                if all(event.get("kind") == "forecast" for _, event in events):
+                    classes.append("is-forecast")
             if is_today:
                 classes.append("is-today")
             class_attr = " ".join(classes)
@@ -478,7 +479,7 @@ def _render_reset_calendar(
         month_panels.append(
             f"""
 <article class="codex-calendar-month {month_class}">
-  <div class="codex-calendar-heading"><h3>{html_text(label)}</h3><span>{sum(len(events) for events in days.values())} 次 reset</span></div>
+  <div class="codex-calendar-heading"><h3>{html_text(label)}</h3><span>{sum(len(events) for events in days.values())} {'条重置标记' if show_empty else '次 reset'}</span></div>
   <div class="codex-reset-weekdays"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
   <div class="codex-reset-grid">{''.join(cells)}</div>
 </article>"""
@@ -599,7 +600,7 @@ def _render_policy_control(profile: dict[str, Any], path: str) -> str:
     identifier = "reset-policy-" + hashlib.sha256(name.encode()).hexdigest()[:12]
     url = path + "?" + urlencode({"profile": name})
     return (
-        f'<button type="button" class="reset-policy-trigger" popovertarget="{identifier}">重置详情与设置</button>'
+        f'<button type="button" class="reset-policy-trigger" popovertarget="{identifier}">自动用卡设置</button>'
         f'<div id="{identifier}" popover class="reset-policy-popover">'
         f'<div class="reset-policy-heading"><strong>自动用卡</strong><button type="button" aria-label="关闭小窗" popovertarget="{identifier}" popovertargetaction="hide">×</button></div>'
         f'<iframe loading="lazy" title="{html_text(name)} 的重置卡判据与设置" src="{html_text(url)}"></iframe></div>'
@@ -684,8 +685,8 @@ def render_account_limits_html(data: dict[str, Any], *, allow_controls: bool = T
     {_render_quota_windows(profile)}
     <details class="reset-card-panel"><summary>重置卡 <span>展开 / 收起</span></summary>
     {_render_reset_policy(profile)}
-    </details>
     {_render_policy_control(profile, normalized['reset_control_path']) if allow_controls else ''}
+    </details>
     {error_html}
   </div>
 </article>"""
@@ -705,6 +706,7 @@ def render_account_limits_html(data: dict[str, Any], *, allow_controls: bool = T
         success = html_text(_fmt_beijing_iso(resource.get("last_successful_at")))
         stale = bool(resource.get("stale"))
         metrics = []
+        exhausted = 0
         for record in resource.get("records", []):
             if not isinstance(record, dict):
                 continue
@@ -712,6 +714,9 @@ def render_account_limits_html(data: dict[str, Any], *, allow_controls: bool = T
             numbers = [_safe_number(value) for value in (total, remaining, used)]
             if (any(value is None or not math.isfinite(value) or value < 0 for value in numbers)
                     or numbers[1] > numbers[0]):
+                continue
+            if numbers[0] > 0 and numbers[1] == 0:
+                exhausted += 1
                 continue
             percent = _safe_number(progress) if progress is not None else None
             progress_html = (
@@ -728,12 +733,15 @@ def render_account_limits_html(data: dict[str, Any], *, allow_controls: bool = T
                 f'<p class="limit-muted">覆盖区域：{html_text(record.get("region"))} · 生效：{html_text(_fmt_reset(record.get("effective_at")))}'
                 f' · 到期：{html_text(_fmt_reset(record.get("expires_at")))}</p></div>'
             )
+        exhausted_note = (f'<p class="limit-muted">另有 {exhausted} 个已耗尽资源包（不计入上方进度）</p>'
+                          if exhausted else '')
         resource_cards.append(
             '<article class="codex-account-card site-style-card resource-card"><div class="codex-account-card-body">'
             '<div class="codex-account-card-head"><h3>阿里云公网共享流量</h3></div>'
-            f'<p class="limit-muted">账号级 · 仅展示有效资源包 · <a href="{html_text(SOURCE_URL)}">阿里云资源包 API</a></p>'
+            f'<p class="limit-muted">账号级 · 有余额资源包 · <a href="{html_text(SOURCE_URL)}">阿里云资源包 API</a></p>'
             f'<p class="limit-status-line">{resource_status.get(status, "当前用量未知")}{" · 显示过期缓存" if stale else ""}</p>'
-            f'{"".join(metrics)}'
+            f'<div class="resource-pack-grid">{"".join(metrics)}</div>'
+            f'{exhausted_note}'
             f'<p class="limit-muted">上次检查：{checked}</p><p class="limit-muted">上次成功：{success}</p>'
             '</div></article>'
         )
@@ -786,7 +794,7 @@ def render_account_limits_html(data: dict[str, Any], *, allow_controls: bool = T
 .quota-window + .quota-window {{ margin-top:12px; padding-top:12px; border-top:1px solid var(--color-separator); }}
 .account-limits-resource-layout :is(.codex-accounts-panel h2) {{ font-size:var(--font-size-base,13px); color:var(--color-text-highlight); }}
 
-.limit-summary {{ margin-bottom: 0.8rem; color: var(--color-text-subdue); }}
+.limit-summary {{ margin-bottom:0.8rem; color:var(--color-text-subdue); }}
 .limit-muted {{ color: var(--color-text-subdue); font-size: 0.76rem; margin-top: 0.18rem; }}
 .limit-status-banner {{ display: flex; flex-direction: column; gap: 0.25rem; border: 1px solid var(--color-separator); border-radius: 14px; padding: 0.62rem 0.75rem; margin-bottom: 0.8rem; background: color-mix(in srgb, var(--color-negative) 9%, var(--color-widget-background)); }}
 .limit-status-banner strong {{ font-size: 0.86rem; }}
@@ -795,19 +803,21 @@ def render_account_limits_html(data: dict[str, Any], *, allow_controls: bool = T
 .account-limits-resource-layout {{ display: block; }}
 .codex-accounts-panel {{ border: 1px solid var(--color-separator); border-radius: 18px; padding: 0.85rem; background: var(--color-widget-background); box-shadow: 0 8px 28px rgba(15,23,42,0.08); }}
 .codex-accounts-panel h2 {{ margin: 0 0 0.65rem; font-size: 1rem; }}
-.codex-account-card-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 0.85rem; align-items: start; }}
-.codex-account-card.site-style-card {{ align-self: start; }}
+.codex-account-card-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 0.85rem; }}
+.codex-account-card.site-style-card {{ border: 1px solid var(--color-separator); border-radius: 18px; overflow: hidden; background: var(--color-widget-background); box-shadow: 0 8px 28px rgba(15,23,42,0.08); display: flex; flex-direction: column; }}
 .codex-account-card-body {{ padding: 0.82rem; display: flex; flex-direction: column; flex: 1; }}
 .codex-account-card-head {{ display: flex; justify-content: space-between; gap: 0.6rem; align-items: flex-start; }}
 .codex-account-card h3 {{ margin: 0 0 0.7rem; font-size: 1.05rem; }}
 .account-plan-tag {{ display:inline-block; margin-left:0.35rem; padding:0.08rem 0.38rem; border:1px solid var(--color-separator); border-radius:999px; color:var(--color-text-subdue); font-size:0.68rem; font-weight:500; vertical-align:middle; }}
-.resource-package + .resource-package {{ margin-top:12px; padding-top:12px; border-top:1px solid var(--color-separator); }}
+.resource-card {{ grid-column:span 2; }}
+.resource-pack-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:12px; }}
+.resource-package {{ min-width:0; padding:12px; border:1px solid var(--color-separator); border-radius:12px; }}
 .resource-card .limit-muted {{ overflow-wrap:anywhere; }}
 .usage-row, .reset-row {{ display: flex; justify-content: space-between; gap: 0.8rem; align-items: baseline; }}
 .usage-row span, .reset-row span {{ color: var(--color-text-subdue); font-size: 0.78rem; }}
 .limit-progress {{ height: 0.56rem; border-radius: 999px; overflow: hidden; margin: 0.5rem 0 0.65rem; background: color-mix(in srgb, var(--color-text-subdue) 18%, transparent); }}
 .limit-progress span {{ display: block; height: 100%; border-radius: inherit; background: var(--color-primary); }}
-@media (max-width: 720px) {{ .account-limits-resource-layout {{ grid-template-columns: 1fr; }} }}
+@media (max-width: 720px) {{ .account-limits-resource-layout {{ grid-template-columns: 1fr; }} .resource-card {{ grid-column:auto; }} .resource-pack-grid {{ grid-template-columns:1fr; }} }}
 </style>
 <div class="limit-summary">订阅详情 · 数据观测：{html_text(normalized.get('generated_at'))} · Codex 账号 {counts['codex_profiles']} 个</div>
 {status_banner}
@@ -840,71 +850,91 @@ def build_account_limits_page(
     }
 
 
-def add_home_subscription_link(config: dict[str, Any]) -> dict[str, Any]:
-    """Add one safe, compact subscription entry near the home calendar."""
+def _home_reset_calendar_html(data: dict[str, Any]) -> str:
+    reset = _normalize_codex_reset(_strip_secrets(data))
+    events = reset["events"]
+    projected = []
+    seen = set()
+    for account in data.get("codex", []):
+        if not isinstance(account, dict):
+            continue
+        name = text_value(account.get("profile"))
+        if not name:
+            continue
+        for window in account.get("windows", []):
+            if not isinstance(window, dict) or window.get("window_seconds") != 604800:
+                continue
+            dt = _parse_datetime(window.get("reset_at"))
+            if dt is None or dt <= datetime.now(BEIJING_TIMEZONE):
+                continue
+            key = (name, dt.isoformat())
+            if key in seen:
+                continue
+            seen.add(key)
+            projected.append({"kind": "forecast", "label": f"{name} · 7天窗口预计重置",
+                              "reset_at": dt.isoformat()})
+    events = events + projected
+    status = ("账号窗口预计重置（非官方确认）" if projected and not reset["events"]
+              else "已确认记录与账号预计重置" if projected else
+              "已确认重置记录" if reset["status"] == "ok" and events else "官方重置记录暂不可用")
+    if reset["using_last_known_values"] and reset["events"]:
+        status = "官方记录为缓存 · " + _fmt_reset(reset["last_successful_at"]) + ("；账号窗口为预计" if projected else "")
+    source = (" · 官方来源：codexreset.org" if reset["events"] else " · 官方记录不可用")
+    return f'''<div class="home-reset-calendar">
+<style>
+.home-reset-calendar .codex-calendar-card {{ padding:0.4rem 0; }}
+.home-reset-calendar .codex-calendar-radio {{ position:absolute; width:1px; height:1px; opacity:0; }}
+.home-reset-calendar .codex-calendar-month-switcher {{ display:flex; gap:0.3rem; overflow-x:auto; margin:0.4rem 0; }}
+.home-reset-calendar .codex-calendar-month-switcher label {{ flex:none; border:1px solid var(--color-separator); border-radius:99px; padding:0.2rem 0.4rem; cursor:pointer; }}
+.home-reset-calendar .codex-calendar-month {{ display:none; }}
+.home-reset-calendar .codex-calendar-month:first-child {{ display:block; }}
+.home-reset-calendar .codex-calendar-heading {{ display:flex; justify-content:space-between; gap:0.3rem; margin:0.4rem 0; }}
+.home-reset-calendar .codex-calendar-heading h3 {{ margin:0; font-size:1rem; }}
+.home-reset-calendar .codex-reset-weekdays,.home-reset-calendar .codex-reset-grid {{ display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:0.15rem; }}
+.home-reset-calendar .codex-reset-weekdays span,.home-reset-calendar .codex-reset-day {{ text-align:center; color:var(--color-text-subdue); }}
+.home-reset-calendar .codex-reset-day {{ min-height:1.8rem; display:grid; place-items:center; border-radius:6px; }}
+.home-reset-calendar .codex-reset-day.is-empty {{ visibility:hidden; }}
+.home-reset-calendar .codex-reset-day.is-reset {{ color:var(--color-text-base); border:1px solid var(--color-primary); background:color-mix(in srgb,var(--color-primary) 14%,transparent); }}
+.home-reset-calendar .codex-reset-day.is-forecast {{ border-style:dashed; background:transparent; }}
+.home-reset-calendar .codex-reset-day.is-today .day-number {{ border:2px solid #ef4444; border-radius:50%; width:1.6rem; height:1.6rem; display:grid; place-items:center; }}
+</style><p class="limit-muted">{html_text(status)}{source}</p>
+{_render_reset_calendar(events, show_empty=True)}</div>'''
+
+
+def update_home_reset_calendar(config: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    """Replace the existing private calendar slot; remove our redundant bookmark."""
     updated = deepcopy(config)
-    pages = updated.get("pages")
-    if not isinstance(pages, list):
-        return updated
-    summary = {
-        "type": "bookmarks",
-        "title": "订阅概览",
-        "groups": [{"title": "账号与订阅", "links": [{
-            "title": "订阅详情",
-            "url": "/account-limits",
-            "description": "查看账号额度与资源订阅",
-            "icon": "mdi:chart-donut",
-        }]}],
-    }
-    for page in pages:
+    for page in updated.get("pages", []):
         if not isinstance(page, dict) or page.get("name") != "ChatArch":
             continue
-        columns = page.get("columns")
-        if page.get("public") is True and isinstance(page.get("authenticated-columns"), list):
-            # A previous release inserted our widget into the reviewed guest
-            # projection. Remove only that exact widget, not custom content.
-            if not isinstance(columns, list):
-                return updated
-            for column in columns:
+        def owned_bookmark(widget):
+            return (isinstance(widget, dict) and widget.get("type") == "bookmarks"
+                    and widget.get("title") == "订阅概览"
+                    and any(isinstance(link, dict) and link.get("url") == "/account-limits"
+                            for group in widget.get("groups", []) if isinstance(group, dict)
+                            for link in group.get("links", []) if isinstance(group.get("links"), list)))
+        for key in ("columns", "authenticated-columns"):
+            for column in page.get(key, []):
                 if isinstance(column, dict) and isinstance(column.get("widgets"), list):
-                    column["widgets"] = [widget for widget in column["widgets"] if widget != summary]
-            columns = page["authenticated-columns"]
+                    column["widgets"] = [widget for widget in column["widgets"] if not owned_bookmark(widget)]
+        columns = (page.get("authenticated-columns") if page.get("public") is True
+                   else page.get("columns"))
         if not isinstance(columns, list):
             return updated
-        candidates = []
-        calendar_target = None
-        for column_index, column in enumerate(columns):
-            if not isinstance(column, dict) or not isinstance(column.get("widgets"), list):
+        for column in columns:
+            widgets = column.get("widgets") if isinstance(column, dict) else None
+            if not isinstance(widgets, list):
                 continue
-            widgets = []
-            for widget in column["widgets"]:
-                owned = (
-                    isinstance(widget, dict)
-                    and widget.get("type") == "bookmarks"
-                    and widget.get("title") == "订阅概览"
-                    and any(
-                        isinstance(link, dict) and link.get("url") == "/account-limits"
-                        for group in widget.get("groups", []) if isinstance(group, dict)
-                        for link in group.get("links", []) if isinstance(group.get("links"), list)
-                    )
-                )
-                if not owned:
-                    widgets.append(widget)
-            column["widgets"] = widgets
-            candidates.append(column_index)
-            if calendar_target is None:
-                calendar_index = next((index for index, widget in enumerate(widgets)
-                                       if isinstance(widget, dict) and widget.get("type") == "calendar"), None)
-                if calendar_index is not None:
-                    calendar_target = (column_index, calendar_index)
-        if not candidates:
-            return updated
-        if calendar_target is None:
-            column_index, insert_at = candidates[0], len(columns[candidates[0]]["widgets"])
-        else:
-            column_index, calendar_index = calendar_target
-            insert_at = calendar_index + 1
-        columns[column_index]["widgets"].insert(insert_at, summary)
+            for index, widget in enumerate(widgets):
+                owned_calendar = (isinstance(widget, dict) and widget.get("type") == "html"
+                                  and widget.get("title") == "Codex 重置日历"
+                                  and str(widget.get("source", "")).startswith('<div class="home-reset-calendar">'))
+                if isinstance(widget, dict) and (widget.get("type") == "calendar" or owned_calendar):
+                    if data.get("codex_reset", {}).get("status") == "skipped" and owned_calendar:
+                        return updated
+                    widgets[index] = {"type": "html", "title": "Codex 重置日历",
+                                      "source": _home_reset_calendar_html(data)}
+                    return updated
         return updated
     return updated
 
@@ -936,4 +966,4 @@ def replace_account_limits_page(
         pages.append(new_page)
     else:
         pages.insert(insert_after + 1, new_page)
-    return add_home_subscription_link(updated)
+    return update_home_reset_calendar(updated, data)

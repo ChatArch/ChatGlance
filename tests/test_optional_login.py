@@ -94,30 +94,30 @@ def reviewed_four_bookmarks(private_config, inventory):
     return config
 
 
-def test_subscription_entry_stays_authenticated_and_repairs_owned_guest_widget(reviewed_four_bookmarks, inventory):
+def test_reset_calendar_stays_authenticated_and_repairs_owned_guest_bookmark(reviewed_four_bookmarks, inventory):
     from copy import deepcopy
-    from chatglance.account_limits import add_home_subscription_link
+    from chatglance.account_limits import update_home_reset_calendar
 
     config = deepcopy(reviewed_four_bookmarks)
-    original_guest = deepcopy(config["pages"][0]["columns"])
-    updated = add_home_subscription_link(config)
-    home = updated["pages"][0]
-    assert home["columns"] == original_guest
-    assert "订阅概览" in json.dumps(home["authenticated-columns"], ensure_ascii=False)
-    assert optional_login_enabled(updated)
-
-    # Prior deployments put this exact widget on the reviewed guest home.
+    home = config["pages"][0]
+    home["authenticated-columns"][0]["widgets"].insert(0, {"type": "calendar"})
+    original_guest = deepcopy(home["columns"])
+    owned = {"type": "bookmarks", "title": "订阅概览", "groups": [
+        {"title": "账号与订阅", "links": [{"title": "订阅详情", "url": "/account-limits"}]}
+    ]}
+    home["authenticated-columns"][0]["widgets"].append(deepcopy(owned))
     polluted = deepcopy(config)
-    polluted["pages"][0]["columns"][0]["widgets"].append(
-        deepcopy(updated["pages"][0]["authenticated-columns"][0]["widgets"][-1])
-    )
+    polluted["pages"][0]["columns"][0]["widgets"].append(deepcopy(owned))
     with pytest.raises(ValueError, match="guest home"):
         optional_login_enabled(polluted)
-    repaired = add_home_subscription_link(polluted)
-    assert repaired["pages"][0]["columns"] == original_guest
-    assert optional_login_enabled(repaired)
-    _replace_page(repaired, build_projects_page(inventory), inventory=inventory)
-    assert optional_login_enabled(repaired)
+    fixed = update_home_reset_calendar(polluted, {"codex_reset": {"status": "error", "events": []}})
+    home = fixed["pages"][0]
+    assert home["columns"] == original_guest
+    assert home["authenticated-columns"][0]["widgets"][0]["title"] == "Codex 重置日历"
+    assert "订阅概览" not in json.dumps(home["authenticated-columns"], ensure_ascii=False)
+    assert optional_login_enabled(fixed)
+    _replace_page(fixed, build_projects_page(inventory), inventory=inventory)
+    assert optional_login_enabled(fixed)
     assert polluted["pages"][0]["columns"] != original_guest
 
 

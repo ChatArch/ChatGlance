@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-- Add a runtime-scoped, read-only Aliyun shared-traffic resource card to the existing subscriptions page. Preserve independent Codex controls, distinguish permission errors and stale observations, and keep named instances free of the main runtime's cloud data.
-- Reconcile the complete Aliyun resource-pack pagination using documented string counts, reject business errors and incomplete pages, and bind revalidated stale quantities to the selected source profile while preserving legacy Codex resource metadata.
-- Simplify the subscriptions page around account quota cards: remove the large official reset-calendar panel and add a compact subscription-details link next to the home calendar while preserving reset data, account policies, and resource-card unknown states.
+## 0.5.2 - 2026-11-23
+
+- Add the optional, runtime-scoped Aliyun shared-traffic resource card, native collector, ChatEnv-backed profile ownership, reusable inventory example and infra instructions; reject incomplete provider data and keep stale/unknown results honest.
+- Display one card with independent progress bars for packages with remaining traffic and a separate count for exhausted packages. Accept the provider's exact `0 Byte` remaining amount for a GB pack without permitting nonzero mixed units or merging package balances.
+- Keep the original per-account reset-credit disclosure, popover and read-only status refresh unchanged while removing the large official reset-calendar panel from the subscription page. Replace the original authenticated home calendar slot with a reset calendar that distinguishes confirmed official events from projected seven-day account windows; remove the redundant home bookmark. Restart the original controls supervisor after updating the installed Python package so the running process does not retain stale configuration behavior.
 
 ## 0.5.1 - 2026-10-25
 

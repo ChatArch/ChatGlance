@@ -115,10 +115,10 @@ def _configured_pages(config: dict[str, Any], root: Path, collection: Collection
     return selected
 
 
-def _replace_page(config: dict[str, Any], page: dict[str, Any], *, inventory: dict[str, Any] | None = None) -> None:
-    if page.get("slug") == "account-limits":
-        from .account_limits import add_home_subscription_link
-        config["pages"] = add_home_subscription_link(config)["pages"]
+def _replace_page(config: dict[str, Any], page: dict[str, Any], *, inventory: dict[str, Any] | None = None, account_data: dict[str, Any] | None = None) -> None:
+    if page.get("slug") == "account-limits" and account_data is not None:
+        from .account_limits import update_home_reset_calendar
+        config["pages"] = update_home_reset_calendar(config, account_data)["pages"]
     if page.get("name") == "项目":
         from .optional_login import optional_login_enabled
         if optional_login_enabled(config):
@@ -500,7 +500,9 @@ def refresh_runtime(runtime_home: str | Path | None = None, pages: Sequence[str]
                     verify_config_pages(root, instance)
                 payloads = {}
                 for update in updates:
-                    _replace_page(config, update.page, inventory=update.data if update.key == "projects" else None)
+                    _replace_page(config, update.page,
+                                  inventory=update.data if update.key == "projects" else None,
+                                  account_data=update.data if update.key == "account-limits" else None)
                     _, data_name, page_name = PAGE_SPECS[update.key]
                     payloads[root / "data" / data_name] = json.dumps(update.data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
                     payloads[root / "data" / page_name] = yaml.safe_dump(update.page, allow_unicode=True, sort_keys=False)

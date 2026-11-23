@@ -22,6 +22,8 @@ def test_distribution_requires_explicit_profile_load_api():
     from pathlib import Path
     metadata = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
     assert '"chatenv>=0.2.15,<0.3.0"' in metadata
+    assert '"ChatTool>=7.1.6,<8.0.0"' in metadata
+    assert '"alibabacloud-tea-openapi>=0.4.7,<0.5"' in metadata
 
 
 def test_config_validates_entire_batch_before_collection(tmp_path):
@@ -48,6 +50,30 @@ def test_disabled_source_never_fetches():
 def test_invalid_quantities_fail_truthfully(change):
     with pytest.raises(ValueError):
         normalize_package({**PACKAGE, **change})
+
+
+def test_depleted_package_reports_zero_bytes_in_gb_without_changing_amount():
+    depleted = {**PACKAGE, "RemainingAmount": "0", "RemainingAmountUnit": "Byte"}
+    result = normalize_package(depleted)
+    assert result["total"] == 100 and result["remaining"] == 0
+    assert result["used"] == 100 and result["unit"] == "GB"
+    assert result["progress_percent"] == 100
+    with pytest.raises(ValueError):
+        normalize_package({**depleted, "RemainingAmount": "1"})
+
+
+def test_one_resource_card_shows_two_balances_and_exhausted_count():
+    other = {**PACKAGE, "InstanceId": "flowpack-example-2", "RemainingAmount": "56.45708"}
+    exhausted = {**PACKAGE, "InstanceId": "flowpack-example-3",
+                 "RemainingAmount": "0", "RemainingAmountUnit": "Byte"}
+    resource = collect_resources([SOURCE], [], lambda _: [PACKAGE, other, exhausted], now=NOW)[0]
+    assert resource["status"] == "ok" and len(resource["records"]) == 3
+    html = render_account_limits_html({"generated_at": NOW, "resources": [resource], "codex": []})
+    assert html.count('resource-card"') == 1
+    assert html.count('class="limit-progress" aria-label="已用') == 2
+    assert "56.45708 GB" in html and "25 GB" in html
+    assert "另有 1 个已耗尽资源包" in html
+    assert "flowpack-example-3" not in html
 
 
 def test_pagination_reconciles_and_filters_shared_traffic():
