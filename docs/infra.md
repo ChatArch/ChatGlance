@@ -2,6 +2,10 @@
 
 ChatGlance owns collection, rendering, candidate validation, backups and publication in the installed package. The server page is generated from a reviewed inventory and read-only SSH probes; it does not require a source checkout or a machine-local business script.
 
+## Native home calendar markers
+
+Authenticated home keeps Glance's original `calendar` widget, month arrows, grid and current-day style. ChatGlance places hidden date markers immediately after that widget in authenticated columns only; the shared `document.head` contains only the package's exact, data-free marker script, allowlisted by optional-login validation. Guest columns contain no account markers. Solid outlines indicate confirmed public reset events; dashed outlines and tooltips identify account-window forecasts as non-official. Generate this through the installed `refresh account-limits` pipeline, not by copying static month HTML back into the dashboard.
+
 ## Inventory
 
 Keep the real inventory beside the runtime configuration, outside Git and distribution artifacts. For example:

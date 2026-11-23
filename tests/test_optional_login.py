@@ -113,9 +113,20 @@ def test_reset_calendar_stays_authenticated_and_repairs_owned_guest_bookmark(rev
     fixed = update_home_reset_calendar(polluted, {"codex_reset": {"status": "error", "events": []}})
     home = fixed["pages"][0]
     assert home["columns"] == original_guest
-    assert home["authenticated-columns"][0]["widgets"][0]["title"] == "Codex 重置日历"
+    assert home["authenticated-columns"][0]["widgets"][0]["type"] == "calendar"
+    assert home["authenticated-columns"][0]["widgets"][0]["css-class"] == "codex-reset-native-calendar"
+    assert home["authenticated-columns"][0]["widgets"][1]["type"] == "html"
+    assert fixed["document"]["head"]
     assert "订阅概览" not in json.dumps(home["authenticated-columns"], ensure_ascii=False)
     assert optional_login_enabled(fixed)
+    rebuilt = build_single_origin_optional_login_config(fixed, inventory)
+    assert rebuilt["document"] == fixed["document"]
+    assert build_maintained_config(fixed, inventory)["document"] == fixed["document"]
+    for head in (fixed["document"]["head"] + "<script>bad()</script>", "<script>bad()</script>"):
+        unsafe = deepcopy(fixed)
+        unsafe["document"]["head"] = head
+        with pytest.raises(ValueError):
+            optional_login_enabled(unsafe)
     _replace_page(fixed, build_projects_page(inventory), inventory=inventory)
     assert optional_login_enabled(fixed)
     assert polluted["pages"][0]["columns"] != original_guest

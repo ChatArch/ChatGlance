@@ -186,9 +186,12 @@ def test_home_calendar_replaces_original_slot_and_removes_owned_bookmark() -> No
     updated = update_home_reset_calendar(config, data)
     columns = updated["pages"][0]["columns"]
     widgets = columns[1]["widgets"]
-    assert [w["type"] for w in widgets] == ["html", "bookmarks"]
-    assert widgets[0]["title"] == "Codex 重置日历"
-    assert "2026 年 11 月" in widgets[0]["source"] and "Confirmed Codex reset" in widgets[0]["source"]
+    assert [w["type"] for w in widgets] == ["calendar", "html", "bookmarks"]
+    assert widgets[0]["first-day-of-week"] == "monday"
+    assert widgets[0]["css-class"] == "codex-reset-native-calendar"
+    assert 'class="codex-reset-markers"' in widgets[1]["source"]
+    assert '2026-11-22' in widgets[1]["source"] and "Confirmed Codex reset" in widgets[1]["source"]
+    assert "codex-calendar-month-switcher" not in widgets[1]["source"]
     assert columns[0]["widgets"][0]["title"] == "订阅概览"
     assert update_home_reset_calendar(updated, data) == updated
     assert config["pages"][0]["columns"][1]["widgets"][0]["type"] == "calendar"
@@ -197,9 +200,11 @@ def test_home_calendar_replaces_original_slot_and_removes_owned_bookmark() -> No
 def test_home_calendar_shows_current_month_without_inventing_events() -> None:
     config = {"pages": [{"name": "ChatArch", "columns": [{"size": "small", "widgets": [{"type": "calendar"}]}]}]}
     updated = update_home_reset_calendar(config, {"codex_reset": {"status": "error", "events": []}})
-    source = updated["pages"][0]["columns"][0]["widgets"][0]["source"]
-    assert "官方重置记录暂不可用" in source
-    assert "codex-reset-grid" in source and "预计" not in source
+    widgets = updated["pages"][0]["columns"][0]["widgets"]
+    assert [w["type"] for w in widgets] == ["calendar", "html"]
+    assert "官方重置记录暂不可用" in widgets[1]["source"]
+    assert "codex-calendar-month-switcher" not in widgets[1]["source"]
+    assert "预计" not in widgets[1]["source"]
 
 
 def test_home_calendar_shows_account_window_predictions_not_official_confirmation() -> None:
@@ -209,11 +214,37 @@ def test_home_calendar_shows_account_window_predictions_not_official_confirmatio
             "reset_at": "2026-11-29T03:00:00+08:00", "used_percent": 70}],
     }]}
     updated = update_home_reset_calendar(config, data)
-    source = updated["pages"][0]["columns"][0]["widgets"][0]["source"]
+    source = updated["pages"][0]["columns"][0]["widgets"][1]["source"]
     assert "账号窗口预计重置（非官方确认）" in source
-    assert "account-a" in source and "29" in source
-    assert 'is-forecast' in source
+    assert "account-a" in source and "2026-11-29" in source
+    assert 'codex-reset-forecast' in source
     assert '已确认重置记录' not in source
+
+
+def test_native_calendar_marker_data_is_private_and_escaped() -> None:
+    import html as html_module
+    import json
+    import re
+
+    config = {"pages": [{"name": "ChatArch", "public": True,
+                         "columns": [{"size": "small", "widgets": [{"type": "bookmarks", "groups": []}]}],
+                         "authenticated-columns": [{"size": "small", "widgets": [
+                             {"type": "calendar", "first-day-of-week": "monday"}]}]}]}
+    data = {"codex_reset": {"status": "ok", "events": [{
+        "time_bjt": "2026-11-29 08:30:00 +0800", "scope": "Confirmed <script>alert(1)</script>",
+    }]}, "codex": [{"profile": "a-account", "windows": [{
+        "window_seconds": 604800, "reset_at": "2099-12-01T09:00:00+08:00",
+    }]}]}
+    result = update_home_reset_calendar(config, data)
+    marker = result["pages"][0]["authenticated-columns"][0]["widgets"][1]["source"]
+    payload_match = re.search(r'data-days="([^"]+)"', marker)
+    assert payload_match is not None
+    days = json.loads(html_module.unescape(payload_match.group(1)))
+    assert days["2026-11-29"]["official"] == ["Confirmed <script>alert(1)</script>"]
+    assert days["2099-12-01"]["forecast"] == ["a-account · 7天窗口"]
+    assert "<script>alert(1)</script>" not in marker
+    assert "a-account" not in json.dumps(result["pages"][0]["columns"])
+    assert "a-account" not in result["document"]["head"]
 
 
 def test_render_account_limits_html_hides_public_reset_event_details() -> None:
