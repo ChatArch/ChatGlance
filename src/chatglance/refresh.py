@@ -118,7 +118,10 @@ def _configured_pages(config: dict[str, Any], root: Path, collection: Collection
 def _replace_page(config: dict[str, Any], page: dict[str, Any], *, inventory: dict[str, Any] | None = None, account_data: dict[str, Any] | None = None) -> None:
     if page.get("slug") == "account-limits" and account_data is not None:
         from .account_limits import update_home_reset_calendar
-        config["pages"] = update_home_reset_calendar(config, account_data)["pages"]
+        updated = update_home_reset_calendar(config, account_data)
+        config["pages"] = updated["pages"]
+        if "document" in updated:
+            config["document"] = updated["document"]
     if page.get("name") == "项目":
         from .optional_login import optional_login_enabled
         if optional_login_enabled(config):

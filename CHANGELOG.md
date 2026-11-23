@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.5.4 - 2026-11-23
+
+- Publish the reviewed, data-free native-calendar decorator alongside the page update during account refresh. v0.5.3 restored the calendar markup but the refresh pipeline dropped its document head, leaving date markers inactive; add a regression for the complete published config.
+
 ## 0.5.3 - 2026-11-23
 
 - Restore the original authenticated home Glance Calendar in place, including its previous/next month arrows, six-week grid and current-day styling. Overlay confirmed reset dates and visually distinct account-window forecasts on native date cells instead of replacing the calendar with static month tabs. Keep marker data authenticated-only and a narrowly reviewed data-free script shared with guests; no reset-card controls or subscription-page layout change.
